@@ -8,7 +8,7 @@ const Login = ({ onLogin }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (email === "admin@bootes.in" && password === "admin123") { // Changed password to BOOTES
+    if (email === "admin@bootes.in" && password === "Bootes@#78") { // Changed password to BOOTES
       onLogin('super_admin');
     } else {
       alert("Invalid ID or Password!");
