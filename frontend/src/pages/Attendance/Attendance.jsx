@@ -2,7 +2,7 @@
 // MASTER CONTROLLER (Modern UI with Analytics + Filters + CRUD + Tabs + Table Routing)
 
 import React, { useEffect, useState, useMemo } from "react";
-import axios from "axios";
+
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -26,6 +26,7 @@ import {
   Phone
 } from "lucide-react";
 
+import API from "../../api";
 // TABLE UI COMPONENTS
 import StaffTable from "./StaffTable";
 import GuardTable from "./GuardTable";
@@ -115,8 +116,8 @@ const Attendance = ({ selectedProject }) => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const res = await axios.get(
-        `http://localhost:4000/api/attendance/read/${selectedProject}`
+      const res = await API.get(
+        `/api/attendance/read/${selectedProject}`
       );
 
       // Staff Parsing Logic
@@ -370,8 +371,8 @@ const Attendance = ({ selectedProject }) => {
   ------------------------------------------------------------ */
   const updateRecord = async (sheet, rowIndex, payload) => {
     try {
-      await axios.patch(
-        `http://localhost:4000/api/attendance/update/${selectedProject}/${sheet}/${rowIndex}`,
+      await API.patch(
+        `/api/attendance/update/${selectedProject}/${sheet}/${rowIndex}`,
         payload
       );
       fetchData();
@@ -384,8 +385,8 @@ const Attendance = ({ selectedProject }) => {
     const confirmDelete = window.confirm("Are you sure you want to delete this record?");
     if (!confirmDelete) return;
     try {
-      await axios.delete(
-        `http://localhost:4000/api/attendance/delete/${selectedProject}/${sheet}/${rowIndex}`
+      await API.delete(
+        `/api/attendance/delete/${selectedProject}/${sheet}/${rowIndex}`
       );
       fetchData();
     } catch (err) {
@@ -395,8 +396,8 @@ const Attendance = ({ selectedProject }) => {
 
   const addStaffRecord = async (newRecord) => {
     try {
-      await axios.post(
-        `http://localhost:4000/api/attendance/add/${selectedProject}/Staff`,
+      await API.post(
+        `/api/attendance/add/${selectedProject}/Staff`,
         newRecord
       );
       fetchData();
@@ -410,8 +411,8 @@ const Attendance = ({ selectedProject }) => {
 
   const addGuardRecord = async (newRecord) => {
     try {
-      await axios.post(
-        `http://localhost:4000/api/attendance/add/${selectedProject}/Guard`,
+      await API.post(
+        `/api/attendance/add/${selectedProject}/Guard`,
         newRecord
       );
       fetchData();
@@ -425,8 +426,8 @@ const Attendance = ({ selectedProject }) => {
 
   const addContactRecord = async (newRecord) => {
     try {
-      await axios.post(
-        `http://localhost:4000/api/attendance/add/${selectedProject}/Contact`,
+      await API.post(
+        `/api/attendance/add/${selectedProject}/Contact`,
         newRecord
       );
       fetchData();

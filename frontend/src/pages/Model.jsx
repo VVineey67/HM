@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import API from "../api"; // Aapka Axios instance
 
 function Model({ project }) {
   const [modelUrl, setModelUrl] = useState(null);
@@ -8,13 +9,12 @@ function Model({ project }) {
   useEffect(() => {
     if (!project) return;
 
-    // Load model-viewer once
+    // 1. Load model-viewer script (sirf ek baar)
     if (!document.getElementById("model-viewer-script")) {
       const script = document.createElement("script");
       script.id = "model-viewer-script";
       script.type = "module";
-      script.src =
-        "https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js";
+      script.src = "https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js";
       document.head.appendChild(script);
     }
 
@@ -22,32 +22,36 @@ function Model({ project }) {
     setError(null);
     setModelUrl(null);
 
-    // 🔥 Fetch correct GLTF URL from backend
-    fetch(`http://localhost:4000/api/view/model/${project}`)
-      .then(res => {
-        if (!res.ok) throw new Error("Model API failed");
-        return res.json();
-      })
-      .then(data => {
-        console.log("MODEL API RESPONSE:", data);
-        setModelUrl(`http://localhost:4000${data.gltf}`);
+    // 2. Fetch GLTF Path from backend using our API instance
+    API.get(`/api/view/model/${project}`)
+      .then((res) => {
+        // .env se base URL uthayenge (localhost ya Railway link)
+        const baseUrl = import.meta.env.VITE_API_URL;
+        
+        // Backend se milne wala path (e.g., /uploads/model.gltf) joड़ rahe hain
+        const fullUrl = `${baseUrl}${res.data.gltf}`;
+        
+        console.log("3D Model URL:", fullUrl);
+        setModelUrl(fullUrl);
         setLoading(false);
       })
-      .catch(err => {
-        console.error(err);
-        setError("3D Model load nahi ho paaya");
+      .catch((err) => {
+        console.error("Model fetch error:", err);
+        setError("3D Model load nahi ho paaya. Check backend connection.");
         setLoading(false);
       });
   }, [project]);
 
+  // UI Handlers
   if (!project) {
-    return <div style={{ textAlign: "center" }}>Project select karo</div>;
+    return <div style={{ textAlign: "center", padding: "20px" }}>Project select karo</div>;
   }
 
   if (loading) {
     return (
       <div style={{ textAlign: "center", marginTop: "40px" }}>
-        Loading 3D Model…
+        <div className="spinner"></div> {/* Agar aapke paas CSS spinner hai */}
+        Loading 3D Model...
       </div>
     );
   }
@@ -61,7 +65,7 @@ function Model({ project }) {
   }
 
   return (
-    <div style={{ width: "100%", height: "100%", background: "#ffffff" }}>
+    <div style={{ width: "100%", height: "100%", background: "#ffffff", position: "relative" }}>
       {modelUrl && (
         <model-viewer
           src={modelUrl}
@@ -74,7 +78,9 @@ function Model({ project }) {
           shadow-intensity="1"
           environment-image="https://modelviewer.dev/shared-assets/environments/neutral.hdr"
           style={{ width: "100%", height: "100%" }}
-        />
+        >
+          {/* Optional: Add a poster/loading slot inside model-viewer */}
+        </model-viewer>
       )}
     </div>
   );
