@@ -1,0 +1,77 @@
+import React, { useState, useMemo } from "react";
+import ExportDropdown from "./ExportDropdown";
+import { isLate, isPresent } from "../utils";
+
+const PER_PAGE = 20;
+
+const AttendanceTable = ({ records, columns, filters, statusFilter, onEdit, onDelete, showActions = true, exportFilename = "Report" }) => {
+  const [search, setSearch] = useState("");
+  const [fv, setFv] = useState({});
+  const [page, setPage] = useState(1);
+
+          const filtered = useMemo(() => {
+            let r = [...records];
+            if (statusFilter && statusFilter !== "all") {
+              const lowerStatusFilter = statusFilter.toLowerCase();
+              if (lowerStatusFilter === "late") r = r.filter(x => isPresent(x.status) && isLate(x));
+              else if (lowerStatusFilter === "present") r = r.filter(x => isPresent(x.status) && !isLate(x));
+              else r = r.filter(x => (x.status || "").toLowerCase() === lowerStatusFilter);
+            }
+            if (search.trim()) { const q = search.toLowerCase(); r = r.filter(x => x.name?.toLowerCase().includes(q) || x.designation?.toLowerCase().includes(q) || x.department?.toLowerCase().includes(q)); }
+            Object.entries(fv).forEach(([k, v]) => { if (v && v !== "all") r = r.filter(x => (x[k]||"").toString().toLowerCase() === v.toLowerCase()); });
+            return r;
+          }, [records, statusFilter, search, fv]);  const tp = Math.ceil(filtered.length / PER_PAGE) || 1;
+  const cp = Math.min(page, tp);
+  const rows = filtered.slice((cp-1)*PER_PAGE, cp*PER_PAGE);
+
+  return (
+    <div className="table-section">
+      <div className="filters-row">
+        <input type="text" placeholder="Search name..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} className="filter-search" />
+        {filters?.map((f, i) => f.type === "date" ? (
+          <React.Fragment key={i}><input type="date" className="filter-date" /><input type="date" className="filter-date" /></React.Fragment>
+        ) : (
+          <select key={i} value={fv[f.key]||"all"} onChange={e => { setFv(p => ({...p,[f.key]:e.target.value})); setPage(1); }} className="filter-select">
+            <option value="all">{f.label}</option>
+            {f.options.map((o, j) => <option key={j} value={o}>{o}</option>)}
+          </select>
+        ))}
+        <div className="filter-spacer" />
+        <ExportDropdown data={filtered} filename={exportFilename} />
+      </div>
+      <div className="table-wrapper">
+        <table className="att-table">
+          <thead><tr>
+            {columns.map((c, i) => <th key={i} style={c.width ? {width:c.width} : {}}>{c.label}</th>)}
+            {showActions && <th style={{width:"80px"}}>Actions</th>}
+          </tr></thead>
+          <tbody>
+            {rows.length === 0 ? <tr><td colSpan={columns.length+(showActions?1:0)} className="table-empty">No records found</td></tr> :
+              rows.map((rec, i) => (
+                <tr key={rec.id ?? i}>
+                  {columns.map((c, j) => <td key={j} className={c.className||""} data-label={c.label}>{c.render ? c.render(rec) : rec[c.key] || "-"}</td>)}
+                  {showActions && <td data-label="Actions"><div className="action-cell">
+                    <button className="action-btn action-edit" title="Edit" onClick={e => { e.stopPropagation(); onEdit?.(rec); }}>
+                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M11.5 2.5l2 2L5 13H3v-2z" /></svg>
+                    </button>
+                    <button className="action-btn action-delete" title="Delete" onClick={e => { e.stopPropagation(); onDelete?.(rec); }}>
+                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M3 5h10M6 5V3h4v2M5 5v7a1 1 0 001 1h4a1 1 0 001-1V5" /></svg>
+                    </button>
+                  </div></td>}
+                </tr>
+              ))}
+          </tbody>
+        </table>
+        <div className="table-pagination">
+          <span>Showing {filtered.length===0?0:(cp-1)*PER_PAGE+1}–{Math.min(cp*PER_PAGE, filtered.length)} of {filtered.length}</span>
+          <div className="page-buttons">
+            {cp > 1 && <button className="page-btn" onClick={() => setPage(cp-1)}>‹</button>}
+            {Array.from({length:Math.min(tp,5)}, (_,i) => { let n; if(tp<=5)n=i+1; else if(cp<=3)n=i+1; else if(cp>=tp-2)n=tp-4+i; else n=cp-2+i; return <button key={n} className={`page-btn ${cp===n?"active":""}`} onClick={()=>setPage(n)}>{n}</button>; })}
+            {cp < tp && <button className="page-btn" onClick={() => setPage(cp+1)}>›</button>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+export default AttendanceTable;

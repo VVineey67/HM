@@ -1,25 +1,65 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  LayoutDashboard,
-  Users,
-  Store,
-  ShieldCheck,
-  Image as ImageIcon,
-  LogOut,
-  Briefcase,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  X,
-  Info,
-  Search,
-  Box,
-  CalendarCheck,
-  IndianRupee,
-  ClipboardList,
+  LayoutDashboard, Users, Store, ShieldCheck, Image as ImageIcon,
+  LogOut, Briefcase, ChevronDown, ChevronLeft, ChevronRight, X,
+  Info, Search, Box, CalendarCheck, IndianRupee, ClipboardList, FileSpreadsheet,
 } from "lucide-react";
- 
+
+// --- HELPERS & CONFIG ---
+const toSubId = (parentId, subLabel) => {
+  return `${parentId}__${subLabel.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "")}`;
+};
+
+const globalMenu = [
+  { id: "about", label: "Team Bootes", icon: Info },
+  { id: "boq_prepare", label: "BOQ Prepare", icon: FileSpreadsheet },
+];
+
+const projectMenu = [
+  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { id: "view_3d", label: "3D View", icon: Box },
+  { id: "confidential", label: "Confidential", icon: ShieldCheck, sub: ["LOA", "BOQ", "Drawings", "RA Bills"] },
+  { id: "finance", label: "Finance", icon: IndianRupee, sub: ["Payment Request", "Site Expense", "Petty Cash", "Bills Docs"] },
+  { id: "work", label: "Work Activity", icon: Briefcase, sub: ["Execution Plan", "MSP Plan"] },
+  { id: "staff", label: "Staff Attendance", icon: CalendarCheck },
+  { id: "manpower", label: "Manpower", icon: Users, sub: ["Daily Manpower", "All Record"] },
+  { id: "store", label: "Store", icon: Store, sub: ["Received Record", "Local Purchase", "Consumption Record", "Stock Available", "GRN Docs"] },
+  { id: "procurement", label: "Procurement", icon: ClipboardList, sub: ["Payment Request", "Purchase Request", "Purchase Order", "Order Record"] },
+  { id: "images", label: "Images", icon: ImageIcon, sub: ["All Images", "Compare Images"] },
+];
+
+const thinScrollbarStyle = `
+  .ultra-thin-scroll::-webkit-scrollbar { width: 3px !important; }
+  .ultra-thin-scroll::-webkit-scrollbar-track { background: transparent !important; }
+  .ultra-thin-scroll::-webkit-scrollbar-thumb { background-color: rgba(255, 255, 255, 0.1) !important; border-radius: 10px !important; }
+`;
+
+const SidebarTooltip = ({ label, children, show }) => {
+  const [pos, setPos] = React.useState(null);
+
+  const handleMouseEnter = (e) => {
+    if (!show) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    setPos({ top: rect.top + rect.height / 2, left: rect.right + 10 });
+  };
+
+  return (
+    <div onMouseEnter={handleMouseEnter} onMouseLeave={() => setPos(null)}>
+      {children}
+      {show && pos && (
+        <div
+          style={{ position: "fixed", top: pos.top, left: pos.left, transform: "translateY(-50%)", zIndex: 9999 }}
+          className="bg-[#1e2a45] text-white text-xs font-medium px-3 py-1.5 rounded-lg shadow-xl border border-white/10 whitespace-nowrap pointer-events-none"
+        >
+          {label}
+          <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-[#1e2a45]" />
+        </div>
+      )}
+    </div>
+  );
+};
+
 const Sidebar = ({
   activeTab = "dashboard",
   setActiveTab,
@@ -28,315 +68,177 @@ const Sidebar = ({
   isCollapsed,
   setIsCollapsed,
   onLogout,
-  onClose,           // ← Mobile close button ke liye
+  onClose,
   isMobile = false,
   userName = "Jitendar Goyal",
-  profileImage,
 }) => {
   const [openSub, setOpenSub] = useState(null);
   const [projectOpen, setProjectOpen] = useState(false);
   const [projectSearch, setProjectSearch] = useState("");
- 
-  const projects = [
-    "B-47","GDLV","BHA","SLH","HIH","RWH","JEX","SBGM","HKD","RSTF","VRI","JANPURAEXT",
-  ];
- 
-  const menuConfig = [
-    { id: "about", label: "Team Bootes", icon: Info },
-    { id: "view_3d", label: "3D View", icon: Box },
-    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-    {
-      id: "confidential",
-      label: "Confidential",
-      icon: ShieldCheck,
-      sub: ["LOA", "BOQ", "Drawings", "RA Bills"],
-    },
-    {
-      id: "finance",
-      label: "Finance",
-      icon: IndianRupee,
-      sub: ["Payment Request", "Site Expense", "Petty Cash", "Bills Docs"],
-    },
-    {
-      id: "work",
-      label: "Work Activity",
-      icon: Briefcase,
-      sub: ["Execution Plan", "MSP Plan"],
-    },
-    { id: "staff", label: "Staff Attendance", icon: CalendarCheck },
-    {
-      id: "manpower",
-      label: "Manpower",
-      icon: Users,
-      sub: ["Daily Manpower", "All Record"],
-    },
-    {
-      id: "store",
-      label: "Store",
-      icon: Store,
-      sub: ["Received Record","Local Purchase","Consumption Record","Stock Available","GRN Docs"],
-    },
-    {
-      id: "procurement",
-      label: "Procurement",
-      icon: ClipboardList,
-      sub: ["Payment Request","Purchase Request","Purchase Order","Order Record"],
-    },
-    {
-      id: "images",
-      label: "Images",
-      icon: ImageIcon,
-      sub: ["All Images", "Compare Images"],
-    },
-  ];
- 
-  // Mobile pe collapsed kabhi nahi hoga
+
+  const projects = ["All Project","B-47", "GDLV", "BHA", "SLH", "HIH", "RWH"];
   const collapsed = isMobile ? false : isCollapsed;
- 
-  const toggleSub = (id) => {
-    if (collapsed) return;
-    setOpenSub(openSub === id ? null : id);
-  };
- 
   const userInitial = userName.charAt(0).toUpperCase();
- 
-  return (
-    <motion.div
-      initial={false}
-      animate={{ width: collapsed ? "80px" : "260px" }}
-      transition={{ type: "spring", stiffness: 300, damping: 30 }}
-      className="h-screen bg-[#0b1022] text-white flex flex-col border-r border-white/10 overflow-hidden"
-    >
-      {/* ===== HEADER ===== */}
-      <div className="h-16 md:h-20 flex items-center px-4 shrink-0 relative border-b border-white/10">
-        <div className="flex items-center gap-3 w-full">
-          {/* Logo */}
-          <div className="h-9 w-9 md:h-10 md:w-10 bg-white rounded-xl flex items-center justify-center shrink-0 shadow-sm">
-            <img src="/logo.png" className="h-6 w-6 md:h-7 md:w-7 object-contain" />
-          </div>
- 
-          {!collapsed && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.2 }}
-              className="flex-1"
-            >
-              <p className="font-bold text-base md:text-lg leading-tight">BOOTES</p>
-              <p className="text-[10px] text-blue-400">Monitoring System</p>
+  const filteredProjects = projects.filter((p) => p.toLowerCase().includes(projectSearch.toLowerCase()));
+
+  const handleItemClick = (item, isGlobal = false) => {
+    if (item.sub) {
+      if (collapsed) {
+        setIsCollapsed(false);
+        setOpenSub(item.id);
+      } else {
+        setOpenSub(openSub === item.id ? null : item.id);
+      }
+    } else {
+      setActiveTab(item.id);
+      setOpenSub(null);
+      if (isGlobal) setSelectedProject("Select Project");
+    }
+  };
+
+  const renderMenuItem = (item, isGlobal = false) => {
+    const Icon = item.icon;
+    const active = activeTab === item.id || (item.sub && item.sub.some(s => toSubId(item.id, s) === activeTab));
+    
+    return (
+      <div key={item.id}>
+        <SidebarTooltip label={item.label} show={collapsed}>
+          <button
+            onClick={() => handleItemClick(item, isGlobal)}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-1 transition-all
+              ${active ? "bg-white text-black font-semibold shadow-sm" : "text-gray-400 hover:bg-white/10 hover:text-white"}
+              ${collapsed ? "justify-center" : "justify-between"}`}
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <Icon size={18} className="shrink-0" />
+              {!collapsed && <span className="truncate">{item.label}</span>}
+            </div>
+            {!collapsed && item.sub && <ChevronDown size={13} className={`transition-transform duration-200 ${openSub === item.id ? "rotate-180" : ""}`} />}
+          </button>
+        </SidebarTooltip>
+
+        <AnimatePresence>
+          {!collapsed && item.sub && openSub === item.id && (
+            <motion.div initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }} className="overflow-hidden ml-4 pl-3 border-l border-white/10 mb-2">
+              {item.sub.map((subLabel) => (
+                <button
+                  key={subLabel}
+                  onClick={() => setActiveTab(toSubId(item.id, subLabel))}
+                  className={`w-full text-left text-xs py-2 px-2 rounded-md transition-colors ${activeTab === toSubId(item.id, subLabel) ? "text-white bg-white/15" : "text-gray-500 hover:text-gray-300"}`}
+                >
+                  {subLabel}
+                </button>
+              ))}
             </motion.div>
           )}
-        </div>
- 
-        {/* ✅ MOBILE pe X button - sidebar band karne ke liye */}
-        {isMobile && (
-          <button
-            onClick={onClose}
-            className="ml-auto text-gray-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
-          >
-            <X size={20} />
-          </button>
-        )}
- 
-        {/* Desktop pe collapse button */}
-        {!isMobile && (
-          <button
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className="absolute -right-3 bg-[#0b1022] border border-white/10 rounded-full p-1 z-10"
-          >
-            {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
-          </button>
-        )}
+        </AnimatePresence>
       </div>
- 
-      {/* ===== SCROLLABLE CONTENT ===== */}
-      <div className="flex-1 px-2 py-3 overflow-y-auto overflow-x-hidden">
- 
-        {/* PROJECT SELECTOR */}
-        {!collapsed && (
-          <div className="mb-4">
-            <button
-              onClick={() => setProjectOpen(!projectOpen)}
-              className="w-full flex justify-between items-center px-3 py-2.5 bg-white/5 hover:bg-white/10 rounded-lg text-sm transition-colors"
-            >
-              <span className="truncate text-left">
-                {selectedProject || "Select Project"}
-              </span>
-              <ChevronDown
-                size={14}
-                className={`shrink-0 ml-2 transition-transform ${projectOpen ? "rotate-180" : ""}`}
-              />
-            </button>
- 
-            <AnimatePresence>
-              {projectOpen && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="mt-2 bg-black/30 p-2 rounded-lg overflow-hidden"
-                >
-                  <div className="flex items-center gap-2 bg-white/5 rounded px-2 mb-2">
-                    <Search size={12} className="text-gray-400 shrink-0" />
-                    <input
-                      placeholder="Search project..."
-                      className="w-full bg-transparent text-xs py-1.5 outline-none text-white placeholder-gray-500"
-                      onChange={(e) => setProjectSearch(e.target.value)}
-                      value={projectSearch}
-                    />
-                  </div>
- 
-                  <div className="max-h-40 overflow-y-auto space-y-0.5">
-                    {projects
-                      .filter((p) =>
-                        p.toLowerCase().includes(projectSearch.toLowerCase())
-                      )
-                      .map((p) => (
-                        <div
-                          key={p}
-                          onClick={() => {
-                            setSelectedProject(p);
-                            setProjectOpen(false);
-                            setProjectSearch("");
-                          }}
-                          className={`p-2 text-xs rounded cursor-pointer transition-colors
-                            ${selectedProject === p
-                              ? "bg-white text-black font-semibold"
-                              : "hover:bg-white/10 text-gray-300"
-                            }`}
-                        >
-                          {p}
-                        </div>
-                      ))}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        )}
- 
-        {/* Collapsed state mein project icon */}
-        {collapsed && (
-          <button
-            onClick={() => setIsCollapsed(false)}
-            title={selectedProject || "Select Project"}
-            className="w-full flex justify-center py-2 mb-3"
-          >
-            <div className="h-8 w-8 bg-white/10 rounded-lg flex items-center justify-center text-xs font-bold">
-              {selectedProject ? selectedProject.charAt(0) : "P"}
+    );
+  };
+
+  return (
+    <>
+      <style>{thinScrollbarStyle}</style>
+
+      <motion.div 
+        animate={{ width: collapsed ? "70px" : "260px" }} 
+        className="h-screen bg-[#0b1022] text-white flex flex-col border-r border-white/10 overflow-hidden"
+      >
+        
+        {/* HEADER SECTION */}
+        <div className={`flex items-center border-b border-white/10 shrink-0 p-4 relative ${collapsed ? "flex-col gap-4 justify-center" : "h-20"}`}>
+          <div className={`flex items-center gap-3 ${collapsed ? "justify-center" : "w-full"}`}>
+            <div className="h-10 w-10 bg-white rounded-xl flex items-center justify-center shrink-0 shadow-inner">
+              <img src="/logo.png" className="h-7 w-7" alt="logo" />
             </div>
-          </button>
-        )}
- 
-        {/* ===== MENU ITEMS ===== */}
-        <div className="space-y-0.5">
-          {menuConfig.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeTab === item.id || activeTab.startsWith(item.id + "_");
-            const isSubOpen = openSub === item.id;
- 
-            return (
-              <div key={item.id}>
-                <button
-                  onClick={() => {
-                    if (item.sub) {
-                      toggleSub(item.id);
-                    } else {
-                      setActiveTab(item.id);
-                    }
-                  }}
-                  title={collapsed ? item.label : ""}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all
-                    ${isActive
-                      ? "bg-white text-black font-semibold shadow-sm"
-                      : "text-gray-400 hover:bg-white/10 hover:text-white"
-                    }
-                    ${collapsed ? "justify-center" : "justify-between"}
-                  `}
-                >
-                  <div className="flex items-center gap-3">
-                    <Icon size={17} className="shrink-0" />
-                    {!collapsed && <span className="truncate">{item.label}</span>}
-                  </div>
-                  {!collapsed && item.sub && (
-                    <ChevronDown
-                      size={13}
-                      className={`shrink-0 transition-transform text-gray-500 ${isSubOpen ? "rotate-180" : ""}`}
-                    />
-                  )}
+            {!collapsed && (
+              <div className="flex-1 overflow-hidden">
+                <p className="font-bold text-lg leading-tight tracking-tight">BOOTES</p>
+                <p className="text-[10px] text-blue-400 uppercase tracking-widest font-bold">Monitoring System </p>
+              </div>
+            )}
+          </div>
+
+          {/* HIDE/SHOW BUTTON */}
+          {!isMobile && (
+            <button
+              onClick={() => setIsCollapsed(!isCollapsed)}
+              title={collapsed ? "Expand" : "Collapse"}
+              className={`${collapsed ? "relative" : "absolute right-3"} bg-white/5 border border-white/10 rounded-full p-1.5 hover:bg-white/10 transition-colors shadow-sm`}
+            >
+              {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+            </button>
+          )}
+        </div>
+
+        {/* MENU CONTENT */}
+        <div className="flex-1 px-2 py-4 overflow-y-auto ultra-thin-scroll">
+          <div className="mb-6">
+            {!collapsed && <p className="text-[10px] text-gray-500 font-bold px-3 mb-3 uppercase tracking-widest">Global</p>}
+            {globalMenu.map(item => renderMenuItem(item, true))}
+          </div>
+
+          <div className="h-px bg-white/5 my-4 mx-2" />
+
+          {/* PROJECT SELECTOR */}
+          <div className="mb-4">
+            {!collapsed ? (
+              <div className="px-1 mb-4">
+                <p className="text-[10px] text-gray-500 font-bold px-2 mb-3 uppercase tracking-widest">Project</p>
+                <button onClick={() => setProjectOpen(!projectOpen)} className="w-full flex justify-between items-center px-3 py-2.5 bg-white/5 hover:bg-white/10 rounded-lg text-sm border border-white/5">
+                  <span className="truncate font-medium">{selectedProject || "Select Project"}</span>
+                  <ChevronDown size={14} className={`${projectOpen ? "rotate-180" : ""} transition-transform`} />
                 </button>
- 
-                {/* SUB MENU */}
                 <AnimatePresence>
-                  {!collapsed && item.sub && isSubOpen && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="overflow-hidden"
-                    >
-                      <div className="ml-4 pl-3 border-l border-white/10 mt-1 mb-1 space-y-0.5">
-                        {item.sub.map((sub) => {
-                          const subId = `${item.id}_${sub.toLowerCase().replace(/ /g, "_")}`;
-                          const isSubActive = activeTab === subId;
-                          return (
-                            <button
-                              key={sub}
-                              onClick={() => setActiveTab(subId)}
-                              className={`w-full text-left text-xs py-2 px-2 rounded-md transition-colors
-                                ${isSubActive
-                                  ? "text-white bg-white/10 font-medium"
-                                  : "text-gray-500 hover:text-gray-300 hover:bg-white/5"
-                                }`}
-                            >
-                              {sub}
-                            </button>
-                          );
-                        })}
+                  {projectOpen && (
+                    <motion.div initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }} className="mt-2 bg-[#12182d] rounded-lg overflow-hidden border border-white/10 shadow-2xl">
+                       <div className="max-h-40 overflow-y-auto p-1 ultra-thin-scroll">
+                        {projects.map(p => (
+                          <div key={p} onClick={() => { setSelectedProject(p); setProjectOpen(false); }} className={`p-2 text-xs rounded cursor-pointer ${selectedProject === p ? "bg-white text-black font-bold" : "hover:bg-white/10 text-gray-300"}`}>{p}</div>
+                        ))}
                       </div>
                     </motion.div>
                   )}
                 </AnimatePresence>
               </div>
-            );
-          })}
+            ) : (
+               <div className="flex justify-center mb-6 cursor-pointer" onClick={() => setIsCollapsed(false)} title="Select Project">
+                  <div className="h-9 w-9 bg-white/5 rounded-lg flex items-center justify-center text-[10px] font-bold text-blue-400 border border-blue-400/20">PROJ</div>
+               </div>
+            )}
+
+            <div className="space-y-0.5">
+              {projectMenu.map(item => renderMenuItem(item, false))}
+            </div>
+          </div>
         </div>
-      </div>
- 
-      {/* ===== FOOTER ===== */}
-      <div className={`p-3 border-t border-white/10 shrink-0 ${collapsed ? "flex flex-col items-center gap-2" : ""}`}>
-        {!collapsed ? (
-          <>
-            <div className="flex items-center gap-2 mb-2 px-1">
-              <div className="h-8 w-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-sm font-bold shrink-0">
-                {userInitial}
+
+        {/* FOOTER */}
+        <div className={`p-4 border-t border-white/10 shrink-0 ${collapsed ? "flex flex-col items-center gap-4" : ""}`}>
+          {!collapsed ? (
+            <>
+              <div className="flex items-center gap-3 mb-3 px-1">
+                <div className="h-9 w-9 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-xs font-bold border border-white/10">
+                  {userInitial}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate">{userName}</p>
+                  <p className="text-[10px] text-green-500 font-bold">ONLINE</p>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-white truncate">{userName}</p>
-                <p className="text-[10px] text-gray-500">Active</p>
-              </div>
-            </div>
-            <button
-              onClick={onLogout}
-              className="w-full flex items-center gap-2 px-2 py-1.5 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-lg text-xs transition-colors"
-            >
-              <LogOut size={13} />
-              Logout
+              <button onClick={onLogout} className="w-full flex items-center gap-2 px-3 py-2 text-red-400 hover:bg-red-400/10 rounded-lg text-xs font-bold transition-colors">
+                <LogOut size={14} /> Logout
+              </button>
+            </>
+          ) : (
+            <button onClick={onLogout} title="Logout" className="text-red-400 hover:bg-red-400/10 p-2.5 rounded-lg">
+              <LogOut size={18} />
             </button>
-          </>
-        ) : (
-          <>
-            <div className="h-8 w-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-sm font-bold">
-              {userInitial}
-            </div>
-            <button onClick={onLogout} title="Logout" className="text-red-400 hover:text-red-300 p-1">
-              <LogOut size={16} />
-            </button>
-          </>
-        )}
-      </div>
-    </motion.div>
+          )}
+        </div>
+      </motion.div>
+    </>
   );
 };
- 
+
 export default Sidebar;

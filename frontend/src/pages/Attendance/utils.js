@@ -1,315 +1,371 @@
-// utils.js
-// Full PDF-based utilities: time, date, filters, excel, analytics, export
+// ═══════════════════════════════════════════════════════════
+// ATTENDANCE UTILITIES — v3 FIXED (COMPLETE FILE)
+// ═══════════════════════════════════════════════════════════
 
-import { utils, writeFile } from "xlsx";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
+const SHIFT = {
+  Day:   { start: 9.5/24, end: 18/24, grace: 15/(24*60) },
+  Night: { start: 20/24,  end: 8/24,  grace: 15/(24*60) },
+};
 
-/* =======================================================
-    DATE UTILITIES
-======================================================= */
-export const excelSerialToJSDate = (serial) => {
+export const ALL_STATUSES = ["Present","Absent","Annual Leave","Comp Off","Holiday","On Duty","Week Off"];
+const PRESENT_LIST = ["present","on duty"];
+const LEAVE_LIST = ["annual leave","comp off","holiday","week off"];
+export const isPresent = (s) => PRESENT_LIST.includes(s?.toLowerCase());
+const isAbsent = (s) => s?.toLowerCase() === "absent";
+const isLeaveStatus = (s) => LEAVE_LIST.includes(s?.toLowerCase());
+
+// ─── Excel Serial → "21-Dec-24" ─────────────────────────
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const MON_MAP = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+
+export const excelToJSDate = (serial) => {
   if (!serial) return "";
-  const utc_days = Math.floor(serial - 25569);
-  const utc_value = utc_days * 86400 * 1000;
-  return new Date(utc_value);
+  if (typeof serial === "string") return serial.trim();
+  const utcDays = Math.floor(serial - 25569);
+  const d = new Date(utcDays * 86400 * 1000);
+  return `${String(d.getUTCDate()).padStart(2,"0")}-${MONTHS[d.getUTCMonth()]}-${String(d.getUTCFullYear()).slice(-2)}`;
 };
 
-export const excelToJSDate = (value) => {
-  if (!value) return "";
-  if (typeof value === "string") {
-    const d = new Date(value);
-    if (!isNaN(d)) return d.toISOString().split("T")[0];
-    return "";
-  }
-  if (typeof value === "number") {
-    const date = excelSerialToJSDate(value);
-    return date.toISOString().split("T")[0];
-  }
-  return "";
+// ─── Parse "21-Dec-24" → Date ────────────────────────────
+const parseDateStr = (s) => {
+  if (!s) return null;
+  const p = s.split("-");
+  if (p.length !== 3) return null;
+  const day = parseInt(p[0]), mon = MON_MAP[p[1]], yr = parseInt(p[2]);
+  if (isNaN(day) || mon === undefined) return null;
+  return new Date(yr < 100 ? 2000+yr : yr, mon, day);
 };
 
-export const formatDate = (d) => {
-  if (!d) return "";
-  const date = new Date(d);
-  return `${date.getDate().toString().padStart(2, "0")}-${date.toLocaleString(
-    "en-GB",
-    { month: "short" }
-  )}-${date.getFullYear().toString().slice(-2)}`;
+export const formatDate = (s) => s || "-";
+
+// ─── Is Today ────────────────────────────────────────────
+export const isToday = (dateStr) => {
+  if (!dateStr) return false;
+  const t = new Date();
+  return dateStr.trim() === `${String(t.getDate()).padStart(2,"0")}-${MONTHS[t.getMonth()]}-${String(t.getFullYear()).slice(-2)}`;
 };
 
-/* =======================================================
-    TIME UTILITIES
-======================================================= */
-export const excelTimeToDisplay = (time) => {
-  if (!time || time === "Na") return "Na";
-  const num = Number(time);
-  if (isNaN(num)) return "Na";
-
-  const mins = Math.round(num * 1440); // convert excel fraction → minutes
-  let h = Math.floor(mins / 60);
-  const m = mins % 60;
-
-  const ap = h >= 12 ? "PM" : "AM";
+// ─── Excel Decimal → "9:30 AM" ───────────────────────────
+export const formatTime = (val) => {
+  if (val === null || val === undefined || val === "") return "-";
+  if (typeof val === "string") return val.includes("AM") || val.includes("PM") ? val : "-";
+  if (typeof val !== "number" || val === 0) return "-";
+  const totalMins = Math.round(val * 24 * 60);
+  let h = Math.floor(totalMins / 60);
+  const m = totalMins % 60;
+  const ampm = h >= 12 ? "PM" : "AM";
   h = h % 12 || 12;
-
-  return `${h}:${m.toString().padStart(2, "0")} ${ap}`;
+  return `${h}:${String(m).padStart(2,"0")} ${ampm}`;
 };
 
-export const parseHrsMinString = (str) => {
-  if (!str) return 0;
-  const [hPart, mPart] = str.split("Hrs");
-  const h = parseInt(hPart);
-  const m = parseInt(mPart.replace("Min", ""));
-  return h * 60 + m;
-};
-
-export const minsToHrsMin = (mins) => {
-  if (!mins || mins <= 0) return "0Hrs 0Min";
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return `${h}Hrs ${m}Min`;
-};
-
-/* =======================================================
-    ANALYTICS UTILITIES (PDF LOGIC)
-======================================================= */
-export const totalWorkingHrs = (rows) => {
-  let total = 0;
-  rows.forEach((r) => {
-    total += parseHrsMinString(r.workingHrs || "0Hrs 0Min");
-  });
-  return minsToHrsMin(total);
-};
-
-export const totalOTHrs = (rows) => {
-  let total = 0;
-  rows.forEach((r) => {
-    total += parseHrsMinString(r.otHrs || "0Hrs 0Min");
-  });
-  return minsToHrsMin(total);
-};
-
-/* =======================================================
-    FILTER ENGINE
-======================================================= */
-export const filterByName = (rows, name) => {
-  if (!name || name === "All") return rows;
-  return rows.filter((r) => r.name?.toLowerCase() === name.toLowerCase());
-};
-
-export const filterByDate = (rows, selectedDate) => {
-  if (!selectedDate) return rows;
-  return rows.filter((r) => r.date === selectedDate);
-};
-
-export const filterByDateRange = (rows, start, end) => {
-  if (!start || !end) return rows;
-  return rows.filter(
-    (r) => r.date >= start && r.date <= end
-  );
-};
-
-export const globalSearch = (rows, query) => {
-  if (!query) return rows;
-  const q = query.toLowerCase();
-  return rows.filter((r) =>
-    Object.values(r).some((v) => String(v).toLowerCase().includes(q))
-  );
-};
-
-/* =======================================================
-    EXPORT UTILITIES
-======================================================= */
-export const exportExcel = (rows, filename = "Export") => {
-  const ws = utils.json_to_sheet(rows);
-  const wb = utils.book_new();
-  utils.book_append_sheet(wb, ws, "Data");
-  writeFile(wb, `${filename}.xlsx`);
-};
-
-export const exportPDF = (rows, filename = "Export") => {
-  if (!rows || rows.length === 0) {
-    alert("No data to export!");
-    return;
+// ─── Decimal converter ───────────────────────────────────
+const toDecimal = (val) => {
+  if (typeof val === "number") return val;
+  if (typeof val === "string") {
+    const m = val.match(/(\d+):(\d+)\s*(AM|PM)/i);
+    if (!m) return null;
+    let h = parseInt(m[1]); const mn = parseInt(m[2]);
+    if (m[3].toUpperCase() === "PM" && h !== 12) h += 12;
+    if (m[3].toUpperCase() === "AM" && h === 12) h = 0;
+    return (h + mn/60) / 24;
   }
+  return null;
+};
 
-  // Create new PDF document
-  const doc = new jsPDF({
-    orientation: rows.length > 10 ? "landscape" : "portrait",
-    unit: "mm",
+// ─── Late Detection ──────────────────────────────────────
+export const isLate = (r) => {
+  if (!r.inTime || !isPresent(r.status)) return false;
+  const t = toDecimal(r.inTime);
+  if (t === null) return false;
+  const sh = SHIFT[r.shift] || SHIFT.Day;
+  return t > (sh.start + sh.grace);
+};
+
+export const getLateMinutes = (r) => {
+  if (!isLate(r)) return 0;
+  const t = toDecimal(r.inTime);
+  const sh = SHIFT[r.shift] || SHIFT.Day;
+  return Math.round((t - sh.start) * 24 * 60);
+};
+
+export const formatLateDuration = (r) => {
+  const m = getLateMinutes(r);
+  if (m <= 0) return "";
+  return Math.floor(m/60) > 0 ? `Late ${Math.floor(m/60)}h ${m%60}m` : `Late ${m}m`;
+};
+
+// ─── OT Detection ────────────────────────────────────────
+export const getOTMinutes = (r) => {
+  if (!r.outTime || !isPresent(r.status)) return 0;
+  const t = toDecimal(r.outTime);
+  if (t === null || t === 0) return 0;
+  const sh = SHIFT[r.shift] || SHIFT.Day;
+  if (r.shift === "Night") {
+    if (t < 0.5 && t > sh.end) return Math.round((t - sh.end) * 24 * 60);
+    return 0;
+  }
+  return t > sh.end ? Math.round((t - sh.end) * 24 * 60) : 0;
+};
+
+export const formatOTDuration = (r) => {
+  const m = getOTMinutes(r);
+  if (m <= 0) return "-";
+  return Math.floor(m/60) > 0 ? (m%60 > 0 ? `${Math.floor(m/60)}h ${m%60}m` : `${Math.floor(m/60)}h`) : `${m}m`;
+};
+
+// ─── Working Hours ───────────────────────────────────────
+export const getWorkingHours = (r) => {
+  if (r.workingHrs && typeof r.workingHrs === "string" && r.workingHrs !== "0Hrs 0Min" && r.workingHrs !== "") return r.workingHrs;
+  if (!r.inTime || !r.outTime || !isPresent(r.status)) return "-";
+  const inD = toDecimal(r.inTime), outD = toDecimal(r.outTime);
+  if (inD === null || outD === null || inD === 0 || outD === 0) return "-";
+  let diff = outD - inD;
+  if (diff < 0) diff += 1;
+  const mins = Math.round(diff * 24 * 60);
+  return `${Math.floor(mins/60)}h ${mins%60}m`;
+};
+
+// ─── Display Status ──────────────────────────────────────
+export const getDisplayStatus = (r) => {
+  if (isAbsent(r.status)) return "Absent";
+  if (isLeaveStatus(r.status)) return r.status;
+  if (isPresent(r.status)) return isLate(r) ? "Late" : r.status;
+  return r.status || "-";
+};
+
+export const getStatusBadgeClass = (ds) => {
+  const s = ds?.toLowerCase();
+  if (s === "present" || s === "on duty") return "badge-success";
+  if (s === "absent") return "badge-danger";
+  if (s === "late") return "badge-warning";
+  return "badge-info";
+};
+
+// ─── Statistics ──────────────────────────────────────────
+export const calcStats = (records) => {
+  const total = records.length;
+  const present = records.filter(r => isPresent(r.status) && !isLate(r)).length;
+  const absent = records.filter(r => isAbsent(r.status)).length;
+  const late = records.filter(r => isPresent(r.status) && isLate(r)).length;
+  const onLeave = records.filter(r => isLeaveStatus(r.status)).length;
+  const totalCame = present + late;
+  const attendancePct = total > 0 ? Math.round((totalCame / total) * 100) : 0;
+  return { total, present, absent, late, onLeave, attendancePct };
+};
+
+export const calcAvgWorkingHours = (records) => {
+  const recs = records.filter(r => r.inTime && r.outTime && isPresent(r.status));
+  if (!recs.length) return "0h 0m";
+  let tot = 0;
+  recs.forEach(r => {
+    const i = toDecimal(r.inTime), o = toDecimal(r.outTime);
+    if (i !== null && o !== null && i > 0 && o > 0) { let d = o - i; if (d < 0) d += 1; tot += d * 24 * 60; }
   });
+  const avg = Math.round(tot / recs.length);
+  return `${Math.floor(avg/60)}h ${avg%60}m`;
+};
 
-  // Add title - Centered
-  doc.setFontSize(18);
-  doc.setTextColor(33, 33, 33);
-  doc.setFont("helvetica", "bold");
-  const title = `${filename.replace(/_/g, " ")} Report`;
-  const titleWidth = doc.getTextWidth(title);
-  const pageWidth = doc.internal.pageSize.width;
-  doc.text(title, (pageWidth - titleWidth) / 2, 15);
-
-  // Add date - Centered
-  doc.setFontSize(10);
-  doc.setTextColor(128, 128, 128);
-  doc.setFont("helvetica", "normal");
-  const dateText = `Generated on: ${new Date().toLocaleString()}`;
-  const dateWidth = doc.getTextWidth(dateText);
-  doc.text(dateText, (pageWidth - dateWidth) / 2, 22);
-
-  // Define columns based on first row keys
-  const columns = Object.keys(rows[0]).map(key => ({
-    header: key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1'),
-    dataKey: key
-  }));
-
-  // Prepare data with proper time formatting
-  const tableData = rows.map(row => 
-    columns.map(col => {
-      let value = row[col.dataKey];
-      if (value === null || value === undefined) return "";
-      
-      // Format date fields
-      if (col.dataKey === "date" && value) {
-        return formatDate(value);
-      }
-      
-      // Format time fields (inTime, outTime)
-      if ((col.dataKey === "inTime" || col.dataKey === "outTime") && value) {
-        // Check if it's a decimal number (Excel time format)
-        if (typeof value === "number" && !isNaN(value)) {
-          return excelTimeToDisplay(value);
-        }
-        // If it's already a formatted time string, return as is
-        return String(value);
-      }
-      
-      // Format working hours and OT hours (keep as is)
-      if ((col.dataKey === "workingHrs" || col.dataKey === "otHrs") && value) {
-        return String(value);
-      }
-      
-      return String(value);
-    })
-  );
-
-  // Generate table with centered content
-  autoTable(doc, {
-    head: [columns.map(col => col.header)],
-    body: tableData,
-    startY: 30,
-    styles: {
-      fontSize: 8,
-      cellPadding: 2,
-      lineColor: [200, 200, 200],
-      lineWidth: 0.1,
-      halign: "center", // Center all cell content
-      valign: "middle", // Vertical center
-    },
-    headStyles: {
-      fillColor: [59, 130, 246],
-      textColor: [255, 255, 255],
-      fontStyle: "bold",
-      halign: "center",
-      valign: "middle",
-    },
-    bodyStyles: {
-      halign: "center",
-      valign: "middle",
-    },
-    alternateRowStyles: {
-      fillColor: [245, 247, 250],
-      halign: "center",
-      valign: "middle",
-    },
-    margin: { top: 30, left: 14, right: 14 },
-    didDrawPage: (data) => {
-      // Add footer on each page - Centered
-      doc.setFontSize(8);
-      doc.setTextColor(128, 128, 128);
-      const pageText = `Page ${data.pageNumber}`;
-      const pageTextWidth = doc.getTextWidth(pageText);
-      doc.text(
-        pageText,
-        (doc.internal.pageSize.width - pageTextWidth) / 2,
-        doc.internal.pageSize.height - 10
-      );
-    },
+// ─── Consecutive Absent (last 7 days only) ───────────────
+export const findConsecutiveAbsent = (records) => {
+  const now = new Date();
+  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const recentRecords = records.filter(r => {
+    const d = parseDateStr(r.date);
+    return d && d >= weekAgo && d <= now;
   });
+  const byName = {};
+  recentRecords.forEach(r => { if (!byName[r.name]) byName[r.name] = []; byName[r.name].push(r); });
+  const results = [];
+  Object.entries(byName).forEach(([name, recs]) => {
+    recs.sort((a, b) => (parseDateStr(b.date)||0) - (parseDateStr(a.date)||0));
+    let c = 0;
+    for (const r of recs) { if (isAbsent(r.status)) c++; else break; }
+    if (c >= 2) results.push({ name, designation: recs[0].designation, department: recs[0].department, days: c });
+  });
+  return results;
+};
 
-  // Add summary at the end - All Centered
-  const finalY = doc.lastAutoTable.finalY + 10;
-  
-  doc.setFontSize(12);
-  doc.setTextColor(33, 33, 33);
-  doc.setFont("helvetica", "bold");
-  const summaryTitle = "Summary";
-  const summaryTitleWidth = doc.getTextWidth(summaryTitle);
-  doc.text(summaryTitle, (pageWidth - summaryTitleWidth) / 2, finalY);
-  
-  doc.setFontSize(10);
-  doc.setTextColor(75, 85, 99);
-  doc.setFont("helvetica", "normal");
-  
-  let yPos = finalY + 7;
-  
-  // Total Records - Centered
-  const totalRecordsText = `Total Records: ${rows.length}`;
-  const totalRecordsWidth = doc.getTextWidth(totalRecordsText);
-  doc.text(totalRecordsText, (pageWidth - totalRecordsWidth) / 2, yPos);
-  yPos += 6;
-  
-  // Count by status if status field exists - All Centered
-  if (rows[0]?.status) {
-    const statusCount = rows.reduce((acc, row) => {
-      acc[row.status] = (acc[row.status] || 0) + 1;
-      return acc;
-    }, {});
-    
-    Object.entries(statusCount).forEach(([status, count]) => {
-      const statusText = `${status}: ${count}`;
-      const statusWidth = doc.getTextWidth(statusText);
-      doc.text(statusText, (pageWidth - statusWidth) / 2, yPos);
-      yPos += 6;
+// ─── Late Today (for Today tab) ──────────────────────────
+export const findLateToday = (todayRecords) => {
+  return todayRecords
+    .filter(r => isPresent(r.status) && isLate(r))
+    .map(r => ({
+      name: r.name,
+      designation: r.designation,
+      department: r.department,
+      lateBy: formatLateDuration(r),
+      inTime: formatTime(r.inTime),
+      type: r.type,
+    }));
+};
+
+// ─── Habitual Late (for Staff/Guard tabs — current month) ─
+export const findHabitualLate = (records, threshold = 5) => {
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+  const monthRecords = records.filter(r => {
+    const d = parseDateStr(r.date);
+    return d && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+  });
+  const byName = {};
+  monthRecords.forEach(r => {
+    if (isPresent(r.status) && isLate(r)) {
+      if (!byName[r.name]) byName[r.name] = { count: 0, designation: r.designation, department: r.department };
+      byName[r.name].count++;
+    }
+  });
+  return Object.entries(byName).filter(([,v]) => v.count >= threshold).map(([name, v]) => ({ name, ...v }));
+};
+
+// ─── OT Today ────────────────────────────────────────────
+export const calcOTToday = (recs) => {
+  return recs.filter(r => getOTMinutes(r) > 0).map(r => {
+    const m = getOTMinutes(r);
+    return { name: r.name, designation: r.designation, department: r.department, shift: r.shift, ot: `${Math.floor(m/60)}h ${m%60}m` };
+  });
+};
+
+// ─── Charts ──────────────────────────────────────────────
+export const calcWeeklyAttendance = (records) => {
+  const days = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+  const dm = {}; days.forEach(d => dm[d] = { total: 0, present: 0 });
+  records.forEach(r => {
+    const d = parseDateStr(r.date);
+    if (!d) return;
+    const dn = d.toLocaleDateString("en-US", { weekday: "short" }).slice(0,3);
+    if (dm[dn]) { dm[dn].total++; if (isPresent(r.status)) dm[dn].present++; }
+  });
+  return days.map(d => ({ day: d, pct: dm[d].total > 0 ? Math.round((dm[d].present / dm[d].total) * 100) : 0 }));
+};
+
+export const getTopPerformers = (records, limit = 5) => {
+  const byName = {};
+  records.forEach(r => {
+    if (!byName[r.name]) byName[r.name] = { total: 0, present: 0, designation: r.designation, department: r.department };
+    byName[r.name].total++; if (isPresent(r.status)) byName[r.name].present++;
+  });
+  return Object.entries(byName)
+    .map(([name, v]) => ({ name, designation: v.designation, department: v.department, pct: v.total > 0 ? Math.round((v.present/v.total)*100) : 0, initials: name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0,2) }))
+    .sort((a, b) => b.pct - a.pct).slice(0, limit);
+};
+
+export const getDepartmentSplit = (records) => {
+  const dm = {};
+  records.forEach(r => {
+    const dept = r.department || "Other";
+    if (!dm[dept]) dm[dept] = { present: 0, absent: 0, late: 0, leave: 0, total: 0 };
+    dm[dept].total++;
+    if (isAbsent(r.status)) dm[dept].absent++;
+    else if (isLeaveStatus(r.status)) dm[dept].leave++;
+    else if (isPresent(r.status)) { if (isLate(r)) dm[dept].late++; else dm[dept].present++; }
+  });
+  return Object.entries(dm).map(([dept, v]) => ({ dept: dept.length > 18 ? dept.slice(0,18)+"…" : dept, ...v }));
+};
+
+export const getShiftSplit = (records) => {
+  const s = { Day: { present: 0, total: 0 }, Night: { present: 0, total: 0 } };
+  records.forEach(r => {
+    const sh = r.shift || "Day";
+    if (!s[sh]) s[sh] = { present: 0, total: 0 };
+    s[sh].total++; if (isPresent(r.status)) s[sh].present++;
+  });
+  return Object.entries(s).filter(([,v]) => v.total > 0).map(([shift, v]) => ({ shift, ...v }));
+};
+
+// ─── Export CSV (Excel) ──────────────────────────────────
+export const exportToExcel = (data, filename) => {
+  if (!data?.length) { alert("No data to export"); return; }
+  const keys = Object.keys(data[0]).filter(k => !["id","type","_displayStatus","workingHrs","otHrs"].includes(k));
+  let csv = "\uFEFF" + keys.join(",") + "\n";
+  data.forEach(row => {
+    csv += keys.map(k => {
+      let v = row[k] ?? "";
+      if (typeof v === "number" && (k === "inTime" || k === "outTime")) v = formatTime(v);
+      if (typeof v === "string" && v.includes(",")) v = `"${v}"`;
+      return v;
+    }).join(",") + "\n";
+  });
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${filename}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+
+// ─── Export PDF (actual .pdf download using jsPDF) ───────
+export const exportToPDF = (data, filename) => {
+  if (!data?.length) { alert("No data to export"); return; }
+
+  import("jspdf").then(({ default: jsPDF }) => {
+    import("jspdf-autotable").then(({ default: autoTable }) => {
+      const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+
+      // Header
+      doc.setFontSize(18);
+      doc.setFont("helvetica", "bold");
+      doc.text(filename, 14, 18);
+
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(100);
+      doc.text("Attendance Report", 14, 24);
+      doc.text(`Generated: ${new Date().toLocaleString()}  |  Total Records: ${data.length}`, 14, 30);
+
+      // Blue line
+      doc.setDrawColor(37, 99, 235);
+      doc.setLineWidth(0.8);
+      doc.line(14, 33, 283, 33);
+
+      // Table
+      const keys = Object.keys(data[0]).filter(k => !["id","type","_displayStatus","workingHrs","otHrs"].includes(k));
+      const headers = keys.map(k => k.replace(/([A-Z])/g, " $1").trim().toUpperCase());
+
+      const rows = data.map(row => keys.map(k => {
+        let v = row[k];
+        if (v === null || v === undefined) return "-";
+        if (typeof v === "number" && (k === "inTime" || k === "outTime")) return formatTime(v);
+        return String(v) || "-";
+      }));
+
+      autoTable(doc, {
+        head: [headers],
+        body: rows,
+        startY: 37,
+        theme: "grid",
+        styles: {
+          fontSize: 8,
+          cellPadding: 3,
+          font: "helvetica",
+        },
+        headStyles: {
+          fillColor: [30, 41, 59],
+          textColor: [255, 255, 255],
+          fontStyle: "bold",
+          fontSize: 7,
+        },
+        alternateRowStyles: {
+          fillColor: [248, 250, 252],
+        },
+        margin: { left: 14, right: 14 },
+      });
+
+      // Footer on every page
+      const pageCount = doc.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(150);
+        doc.text("Generated by Bootes Monitoring System", 14, doc.internal.pageSize.height - 10);
+        doc.text(`Page ${i} of ${pageCount}`, doc.internal.pageSize.width - 35, doc.internal.pageSize.height - 10);
+      }
+
+      // Download as .pdf
+      doc.save(`${filename}.pdf`);
     });
-  }
-
-  // Calculate and add total working hours - Centered
-  if (rows[0]?.workingHrs) {
-    const totalMins = rows.reduce((acc, row) => {
-      return acc + parseHrsMinString(row.workingHrs || "0Hrs 0Min");
-    }, 0);
-    
-    const workingHoursText = `Total Working Hours: ${minsToHrsMin(totalMins)}`;
-    const workingHoursWidth = doc.getTextWidth(workingHoursText);
-    doc.text(workingHoursText, (pageWidth - workingHoursWidth) / 2, yPos);
-  }
-
-  // Save the PDF
-  doc.save(`${filename}.pdf`);
-};
-
-export const exportPDFWithTemplate = (rows, filename = "Export", template = "standard") => {
-  // Different templates for different tabs
-  if (template === "staff") {
-    // Staff-specific PDF formatting
-    exportPDF(rows, `Staff_${filename}`);
-  } else if (template === "guard") {
-    // Guard-specific PDF formatting
-    exportPDF(rows, `Guard_${filename}`);
-  } else {
-    exportPDF(rows, filename);
-  }
-};
-
-/* =======================================================
-    STATUS COLOR MAP
-======================================================= */
-export const statusColor = {
-  Present: "bg-green-100 text-green-800",
-  Absent: "bg-red-100 text-red-800",
-  Leave: "bg-yellow-100 text-yellow-800",
-  "Half Day": "bg-amber-100 text-amber-800",
-  Holiday: "bg-blue-100 text-blue-800",
-  "Week Off": "bg-blue-200 text-blue-800",
+  }).catch((err) => {
+    console.error("PDF export error:", err);
+    alert("PDF library not found. Please run:\nnpm install jspdf jspdf-autotable");
+  });
 };
