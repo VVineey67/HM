@@ -105,7 +105,28 @@ export const DeptSplit = ({ data }) => (
   </div>
 );
 
-// ─── Weekly Bar ──────────────────────────────────────────
+// ─── Vertical Bar (replaces WeeklyBar for Staff) ────────
+export const VerticalBar = ({ data }) => (
+  <div className="chart-card">
+    <div className="chart-title">Weekly attendance %</div>
+    <div className="vbar-wrap">
+      {data.map((d, i) => (
+        <div key={i} className="vbar-col">
+          <span className="vbar-label">{d.pct > 0 ? `${d.pct}%` : "—"}</span>
+          <div className="vbar-track">
+            <div
+              className={`vbar-fill ${d.pct < 80 ? "bg-warning" : "bg-success"}`}
+              style={{ height: `${d.pct}%` }}
+            />
+          </div>
+          <span className="vbar-day">{d.day}</span>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+// ─── Weekly Bar (kept for Guard tab) ────────────────────
 export const WeeklyBar = ({ data }) => (
   <div className="chart-card">
     <div className="chart-title">Weekly attendance %</div>

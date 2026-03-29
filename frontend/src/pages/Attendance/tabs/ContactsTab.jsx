@@ -3,19 +3,21 @@ import AttendanceTable from "../components/AttendanceTable";
 import BulkUpload from "../components/BulkUpload";
 import AddRecordModal from "../components/AddRecordModal";
 
-const ContactsTab = ({ data, onEdit, onDelete, onBulkUpload, onAddRecord }) => {
+const ContactsTab = ({ data, onDelete, onBulkUpload, onAddRecord, onEditRecord }) => {
   const [showUpload, setShowUpload] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [editRecord, setEditRecord] = useState(null);
   const designations = [...new Set(data.map(r => r.designation).filter(Boolean))];
 
   const columns = [
-    { key: "sNo", label: "S.No", width: "50px" },
-    { key: "empId", label: "Emp ID", className: "cell-muted" },
-    { key: "name", label: "Name", className: "cell-bold" },
-    { key: "designation", label: "Designation" },
-    { key: "email", label: "Email", className: "cell-link" },
-    { key: "manager", label: "Reporting mgr" },
-    { key: "contact", label: "Contact" },
+    { key: "sNo",          label: "S.No",          align: "center", width: "60px" },
+    { key: "empId",        label: "Emp ID",         align: "center" },
+    { key: "name",         label: "Name",           className: "cell-bold" },
+    { key: "designation",  label: "Designation" },
+    { key: "joiningDate",  label: "Joining Date",   align: "center" },
+    { key: "email",        label: "Email" },
+    { key: "manager",      label: "Reporting Mgr" },
+    { key: "contact",      label: "Contact",        align: "center" },
   ];
 
   const filters = [{ key: "designation", label: "All designation", options: designations }];
@@ -29,9 +31,10 @@ const ContactsTab = ({ data, onEdit, onDelete, onBulkUpload, onAddRecord }) => {
         </button>
         <button className="btn-add" onClick={() => setShowModal(true)}>+ Add contact</button>
       </div>
-      <BulkUpload visible={showUpload} onUpload={(file) => { onBulkUpload?.(file, "contact"); setShowUpload(false); }} columns="S.No, Site, Emp ID, Joining Date, Email, Name, Designation, Reporting Manager, Contact No" />
-      <AttendanceTable records={data} columns={columns} filters={filters} statusFilter="all" onEdit={onEdit} onDelete={onDelete} exportFilename="Contacts" />
+      <BulkUpload visible={showUpload} onUpload={(file) => { onBulkUpload?.(file, "contact"); setShowUpload(false); }} columns="S.No,Site,EmpID,JoiningDate,Email,Name,Designation,Manager,Contact" />
+      <AttendanceTable records={data} columns={columns} filters={filters} statusFilter="all" showRowNum={false} onEdit={(rec) => setEditRecord(rec)} onDelete={onDelete} exportFilename="Contacts" />
       <AddRecordModal visible={showModal} onClose={() => setShowModal(false)} onSave={onAddRecord} type="contact" />
+      <AddRecordModal visible={!!editRecord} initialData={editRecord} onClose={() => setEditRecord(null)} onSave={(d) => { onEditRecord?.({ ...editRecord, ...d }); setEditRecord(null); }} type="contact" />
     </div>
   );
 };

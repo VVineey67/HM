@@ -2,9 +2,15 @@
 // ATTENDANCE UTILITIES — v3 FIXED (COMPLETE FILE)
 // ═══════════════════════════════════════════════════════════
 
+// Staff shift: 9:30 AM - 6:00 PM
 const SHIFT = {
   Day:   { start: 9.5/24, end: 18/24, grace: 15/(24*60) },
   Night: { start: 20/24,  end: 8/24,  grace: 15/(24*60) },
+};
+// Guard shift: 8:00 AM - 8:00 PM (Day) / 8:00 PM - 8:00 AM (Night)
+const GUARD_SHIFT = {
+  Day:   { start: 8/24,  end: 20/24, grace: 15/(24*60) },
+  Night: { start: 20/24, end: 8/24,  grace: 15/(24*60) },
 };
 
 export const ALL_STATUSES = ["Present","Absent","Annual Leave","Comp Off","Holiday","On Duty","Week Off"];
@@ -73,18 +79,23 @@ const toDecimal = (val) => {
 };
 
 // ─── Late Detection ──────────────────────────────────────
+const getShiftDef = (r) => {
+  const map = r.type === "guard" ? GUARD_SHIFT : SHIFT;
+  return map[r.shift] || map.Day;
+};
+
 export const isLate = (r) => {
   if (!r.inTime || !isPresent(r.status)) return false;
   const t = toDecimal(r.inTime);
   if (t === null) return false;
-  const sh = SHIFT[r.shift] || SHIFT.Day;
+  const sh = getShiftDef(r);
   return t > (sh.start + sh.grace);
 };
 
 export const getLateMinutes = (r) => {
   if (!isLate(r)) return 0;
   const t = toDecimal(r.inTime);
-  const sh = SHIFT[r.shift] || SHIFT.Day;
+  const sh = getShiftDef(r);
   return Math.round((t - sh.start) * 24 * 60);
 };
 
@@ -99,9 +110,10 @@ export const getOTMinutes = (r) => {
   if (!r.outTime || !isPresent(r.status)) return 0;
   const t = toDecimal(r.outTime);
   if (t === null || t === 0) return 0;
-  const sh = SHIFT[r.shift] || SHIFT.Day;
+  const sh = getShiftDef(r);
   if (r.shift === "Night") {
-    if (t < 0.5 && t > sh.end) return Math.round((t - sh.end) * 24 * 60);
+    // Night shift ends early morning (e.g. 8 AM = 8/24)
+    if (t > 0 && t < 0.5 && t > sh.end) return Math.round((t - sh.end) * 24 * 60);
     return 0;
   }
   return t > sh.end ? Math.round((t - sh.end) * 24 * 60) : 0;

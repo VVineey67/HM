@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(find /d/BMS/frontend/src/pages -type f -name \"*.jsx\" -exec wc -l {})"
+      "Bash(find /d/BMS/frontend/src/pages -type f -name \"*.jsx\" -exec wc -l {})",
+      "Bash(node -e \":*)"
     ]
   }
 }

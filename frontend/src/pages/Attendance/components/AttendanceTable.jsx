@@ -4,10 +4,11 @@ import { isLate, isPresent } from "../utils";
 
 const PER_PAGE = 20;
 
-const AttendanceTable = ({ records, columns, filters, statusFilter, onEdit, onDelete, showActions = true, exportFilename = "Report" }) => {
+const AttendanceTable = ({ records, columns, filters, statusFilter, onEdit, onDelete, showActions = true, showRowNum = true, exportFilename = "Report" }) => {
   const [search, setSearch] = useState("");
   const [fv, setFv] = useState({});
   const [page, setPage] = useState(1);
+  const [jumpInput, setJumpInput] = useState("");
 
           const filtered = useMemo(() => {
             let r = [...records];
@@ -23,6 +24,8 @@ const AttendanceTable = ({ records, columns, filters, statusFilter, onEdit, onDe
           }, [records, statusFilter, search, fv]);  const tp = Math.ceil(filtered.length / PER_PAGE) || 1;
   const cp = Math.min(page, tp);
   const rows = filtered.slice((cp-1)*PER_PAGE, cp*PER_PAGE);
+
+  const alignClass = (align) => align === "center" ? "col-center" : align === "right" ? "col-right" : "";
 
   return (
     <div className="table-section">
@@ -42,14 +45,16 @@ const AttendanceTable = ({ records, columns, filters, statusFilter, onEdit, onDe
       <div className="table-wrapper">
         <table className="att-table">
           <thead><tr>
-            {columns.map((c, i) => <th key={i} style={c.width ? {width:c.width} : {}}>{c.label}</th>)}
-            {showActions && <th style={{width:"80px"}}>Actions</th>}
+            {showRowNum && <th className="col-num">#</th>}
+            {columns.map((c, i) => <th key={i} className={alignClass(c.align)} style={c.width ? {width:c.width} : {}}>{c.label}</th>)}
+            {showActions && <th className="col-center" style={{width:"90px"}}>Actions</th>}
           </tr></thead>
           <tbody>
-            {rows.length === 0 ? <tr><td colSpan={columns.length+(showActions?1:0)} className="table-empty">No records found</td></tr> :
+            {rows.length === 0 ? <tr><td colSpan={columns.length+(showActions?1:0)+(showRowNum?1:0)} className="table-empty">No records found</td></tr> :
               rows.map((rec, i) => (
                 <tr key={rec.id ?? i}>
-                  {columns.map((c, j) => <td key={j} className={c.className||""} data-label={c.label}>{c.render ? c.render(rec) : rec[c.key] || "-"}</td>)}
+                  {showRowNum && <td className="col-num">{(cp-1)*PER_PAGE + i + 1}</td>}
+                  {columns.map((c, j) => <td key={j} className={`${c.className||""} ${alignClass(c.align)}`} data-label={c.label}>{c.render ? c.render(rec) : rec[c.key] || "-"}</td>)}
                   {showActions && <td data-label="Actions"><div className="action-cell">
                     <button className="action-btn action-edit" title="Edit" onClick={e => { e.stopPropagation(); onEdit?.(rec); }}>
                       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M11.5 2.5l2 2L5 13H3v-2z" /></svg>
@@ -63,11 +68,27 @@ const AttendanceTable = ({ records, columns, filters, statusFilter, onEdit, onDe
           </tbody>
         </table>
         <div className="table-pagination">
-          <span>Showing {filtered.length===0?0:(cp-1)*PER_PAGE+1}–{Math.min(cp*PER_PAGE, filtered.length)} of {filtered.length}</span>
-          <div className="page-buttons">
-            {cp > 1 && <button className="page-btn" onClick={() => setPage(cp-1)}>‹</button>}
-            {Array.from({length:Math.min(tp,5)}, (_,i) => { let n; if(tp<=5)n=i+1; else if(cp<=3)n=i+1; else if(cp>=tp-2)n=tp-4+i; else n=cp-2+i; return <button key={n} className={`page-btn ${cp===n?"active":""}`} onClick={()=>setPage(n)}>{n}</button>; })}
-            {cp < tp && <button className="page-btn" onClick={() => setPage(cp+1)}>›</button>}
+          <span>Showing {filtered.length===0?0:(cp-1)*PER_PAGE+1}–{Math.min(cp*PER_PAGE, filtered.length)} of {filtered.length} records</span>
+          <div className="page-controls">
+            <div className="page-buttons">
+              {cp > 1 && <button className="page-btn" onClick={() => setPage(cp-1)}>‹</button>}
+              {Array.from({length:Math.min(tp,5)}, (_,i) => { let n; if(tp<=5)n=i+1; else if(cp<=3)n=i+1; else if(cp>=tp-2)n=tp-4+i; else n=cp-2+i; return <button key={n} className={`page-btn ${cp===n?"active":""}`} onClick={()=>setPage(n)}>{n}</button>; })}
+              {cp < tp && <button className="page-btn" onClick={() => setPage(cp+1)}>›</button>}
+            </div>
+            {tp > 5 && (
+              <div className="page-jump-wrap">
+                <span>Go to</span>
+                <input
+                  type="number" min="1" max={tp}
+                  className="page-jump-input"
+                  placeholder={cp}
+                  value={jumpInput}
+                  onChange={e => setJumpInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") { const n = Math.min(Math.max(1, parseInt(jumpInput)||1), tp); setPage(n); setJumpInput(""); } }}
+                />
+                <button className="page-btn page-go" onClick={() => { const n = Math.min(Math.max(1, parseInt(jumpInput)||1), tp); setPage(n); setJumpInput(""); }}>Go</button>
+              </div>
+            )}
           </div>
         </div>
       </div>

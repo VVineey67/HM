@@ -119,17 +119,17 @@ const TodayTab = ({ staffData, guardData, onEdit, onDelete }) => {
   const deptSplit = useMemo(() => getDepartmentSplit(todayRecords), [todayRecords]);
 
   const columns = [
-    { key: "name", label: "Name", className: "cell-bold" },
-    { key: "type", label: "Type", render: r => <span className={`badge-type ${r.type === "guard" ? "badge-guard" : "badge-staff"}`}>{r.type === "guard" ? "Guard" : "Staff"}</span> },
-    { key: "department", label: "Department" },
+    { key: "name",        label: "Name",        className: "cell-bold" },
+    { key: "type",        label: "Type",        align: "center", render: r => <span className={`badge-type ${r.type === "guard" ? "badge-guard" : "badge-staff"}`}>{r.type === "guard" ? "Guard" : "Staff"}</span> },
+    { key: "department",  label: "Department" },
     { key: "designation", label: "Designation" },
-    { key: "status", label: "Status", render: r => { const ds = getDisplayStatus(r); return <span className={`badge ${getStatusBadgeClass(ds)}`}>{ds}</span>; } },
-    { key: "shift", label: "Shift" },
-    { key: "inTime", label: "In", render: r => isPresent(r.status) ? formatTime(r.inTime) : "-" },
-    { key: "outTime", label: "Out", render: r => isPresent(r.status) ? formatTime(r.outTime) : "-" },
-    { key: "working", label: "Working", render: r => getWorkingHours(r) },
-    { key: "ot", label: "OT", render: r => formatOTDuration(r) },
-    { key: "remarks", label: "Remarks", render: r => formatLateDuration(r) || r.remarks || "-" },
+    { key: "status",      label: "Status",      align: "center", render: r => { const ds = getDisplayStatus(r); return <span className={`badge ${getStatusBadgeClass(ds)}`}>{ds}</span>; } },
+    { key: "shift",       label: "Shift",       align: "center" },
+    { key: "inTime",      label: "In Time",     align: "center", render: r => isPresent(r.status) ? formatTime(r.inTime) : "-" },
+    { key: "outTime",     label: "Out Time",    align: "center", render: r => isPresent(r.status) ? formatTime(r.outTime) : "-" },
+    { key: "working",     label: "Working Hrs", align: "right",  render: r => getWorkingHours(r) },
+    { key: "ot",          label: "OT",          align: "right",  render: r => formatOTDuration(r) },
+    { key: "remarks",     label: "Remarks",                      render: r => formatLateDuration(r) || r.remarks || "-" },
   ];
 
   // Helper for column render

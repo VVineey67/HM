@@ -48,22 +48,24 @@ import CompareImages from "./pages/Images/CompareImages";
 import Attendance from "./pages/Attendance/Attendance";
  
 function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userRole, setUserRole] = useState(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(() => !!localStorage.getItem("bms_role"));
+  const [userRole, setUserRole] = useState(() => localStorage.getItem("bms_role") || null);
   const [activeTab, setActiveTab] = useState("about");
   const [selectedProject, setSelectedProject] = useState(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
- 
+
   const [isMobile, setIsMobile] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
- 
+
   const handleLogin = (role) => {
+    localStorage.setItem("bms_role", role);
     setUserRole(role);
     setIsLoggedIn(true);
     setActiveTab("about");
   };
- 
+
   const handleLogout = () => {
+    localStorage.removeItem("bms_role");
     setIsLoggedIn(false);
     setUserRole(null);
     setSelectedProject(null);

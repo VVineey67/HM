@@ -23,6 +23,33 @@ const graphHelper = {
     },
 
     /* ----------------------------------------------------
+       1b. Get first table name in a sheet (auto-discover)
+    -----------------------------------------------------*/
+    getFirstTableName: async (filePath, sheetName) => {
+        const token = await getAccessToken();
+        const encodedPath = encodeURIComponent(filePath);
+        const url = `https://graph.microsoft.com/v1.0/users/${USER_ID}/drive/root:${encodedPath}:/workbook/worksheets('${sheetName}')/tables`;
+        const res = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } });
+        const tables = res.data.value || [];
+        if (!tables.length) throw new Error(`No tables found in sheet '${sheetName}'`);
+        console.log(`Tables in '${sheetName}':`, tables.map(t => t.name));
+        return tables[0].name;
+    },
+
+    /* ----------------------------------------------------
+       1c. Get table column names (for payload alignment)
+    -----------------------------------------------------*/
+    getTableColumnNames: async (filePath, sheetName, tableName) => {
+        const token = await getAccessToken();
+        const encodedPath = encodeURIComponent(filePath);
+        const url = `https://graph.microsoft.com/v1.0/users/${USER_ID}/drive/root:${encodedPath}:/workbook/worksheets('${sheetName}')/tables('${tableName}')/columns`;
+        const res = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } });
+        const cols = (res.data.value || []).map(c => c.name);
+        console.log(`Columns in '${sheetName}' / '${tableName}' (${cols.length}):`, cols);
+        return cols;
+    },
+
+    /* ----------------------------------------------------
        2. Add New Rows to Excel Table
     -----------------------------------------------------*/
     addRows: async (filePath, sheetName, tableName, values) => {
