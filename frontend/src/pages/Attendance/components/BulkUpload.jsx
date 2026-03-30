@@ -37,7 +37,7 @@ const BulkUpload = ({ onUpload, columns, visible }) => {
         <>
           <p className="upload-text">Drop your CSV file here</p>
           <span className="upload-hint">Required columns: <strong>{colHint}</strong></span>
-          <span className="upload-hint" style={{ marginTop: "4px", fontSize: "11px" }}>Date format: YYYY-MM-DD &nbsp;|&nbsp; Time format: HH:MM (24hr)</span>
+          <span className="upload-hint" style={{ marginTop: "4px", fontSize: "11px" }}>Date: DD-MM-YYYY or YYYY-MM-DD &nbsp;|&nbsp; Time: HH:MM (24hr) &nbsp;|&nbsp; Shift: Day / Night</span>
           <div className="upload-btns-row">
             <label className="upload-browse-btn">
               Browse files

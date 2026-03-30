@@ -138,12 +138,7 @@ export const getWorkingHours = (r) => {
 };
 
 // ─── Display Status ──────────────────────────────────────
-export const getDisplayStatus = (r) => {
-  if (isAbsent(r.status)) return "Absent";
-  if (isLeaveStatus(r.status)) return r.status;
-  if (isPresent(r.status)) return isLate(r) ? "Late" : r.status;
-  return r.status || "-";
-};
+export const getDisplayStatus = (r) => r.status || "-";
 
 export const getStatusBadgeClass = (ds) => {
   const s = ds?.toLowerCase();

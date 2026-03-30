@@ -19,7 +19,22 @@ const AttendanceTable = ({ records, columns, filters, statusFilter, onEdit, onDe
               else r = r.filter(x => (x.status || "").toLowerCase() === lowerStatusFilter);
             }
             if (search.trim()) { const q = search.toLowerCase(); r = r.filter(x => x.name?.toLowerCase().includes(q) || x.designation?.toLowerCase().includes(q) || x.department?.toLowerCase().includes(q)); }
-            Object.entries(fv).forEach(([k, v]) => { if (v && v !== "all") r = r.filter(x => (x[k]||"").toString().toLowerCase() === v.toLowerCase()); });
+            Object.entries(fv).forEach(([k, v]) => {
+              if (!v || v === "all") return;
+              if (k === "status" && v.toLowerCase() === "late") r = r.filter(x => isPresent(x.status) && isLate(x));
+              else r = r.filter(x => (x[k]||"").toString().toLowerCase() === v.toLowerCase());
+            });
+            // Sort by date ascending
+            r.sort((a, b) => {
+              const parse = (s) => {
+                if (!s) return 0;
+                const p = s.split("-");
+                if (p.length !== 3) return 0;
+                const MON = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+                return new Date(2000 + parseInt(p[2]), MON[p[1]] ?? 0, parseInt(p[0])).getTime();
+              };
+              return parse(a.date) - parse(b.date);
+            });
             return r;
           }, [records, statusFilter, search, fv]);  const tp = Math.ceil(filtered.length / PER_PAGE) || 1;
   const cp = Math.min(page, tp);
@@ -45,7 +60,7 @@ const AttendanceTable = ({ records, columns, filters, statusFilter, onEdit, onDe
       <div className="table-wrapper">
         <table className="att-table">
           <thead><tr>
-            {showRowNum && <th className="col-num">#</th>}
+            {showRowNum && <th className="col-num">S.No</th>}
             {columns.map((c, i) => <th key={i} className={alignClass(c.align)} style={c.width ? {width:c.width} : {}}>{c.label}</th>)}
             {showActions && <th className="col-center" style={{width:"90px"}}>Actions</th>}
           </tr></thead>

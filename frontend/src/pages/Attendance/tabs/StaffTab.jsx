@@ -4,9 +4,9 @@ import { VerticalBar, DeptSplit, TopPerformers } from "../components/Charts";
 import AttendanceTable from "../components/AttendanceTable";
 import BulkUpload from "../components/BulkUpload";
 import AddRecordModal from "../components/AddRecordModal";
-import { formatTime, formatDate, calcStats, calcAvgWorkingHours, calcWeeklyAttendance, getTopPerformers, getDepartmentSplit, getDisplayStatus, getStatusBadgeClass, formatOTDuration, formatLateDuration, getWorkingHours, ALL_STATUSES } from "../utils";
+import { formatTime, formatDate, calcStats, calcAvgWorkingHours, calcWeeklyAttendance, getTopPerformers, getDepartmentSplit, getDisplayStatus, getStatusBadgeClass, formatOTDuration, getWorkingHours, ALL_STATUSES } from "../utils";
 
-const StaffTab = ({ data, onDelete, onBulkUpload, onAddRecord, onEditRecord }) => {
+const StaffTab = ({ data, contacts = [], onDelete, onBulkUpload, onAddRecord, onEditRecord }) => {
   const [statusFilter, setStatusFilter] = useState("all");
   const [showUpload, setShowUpload] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -18,8 +18,10 @@ const StaffTab = ({ data, onDelete, onBulkUpload, onAddRecord, onEditRecord }) =
   const deptSplit = useMemo(() => getDepartmentSplit(data), [data]);
   const departments = useMemo(() => [...new Set(data.map(r => r.department).filter(Boolean))], [data]);
   const designations = useMemo(() => [...new Set(data.map(r => r.designation).filter(Boolean))], [data]);
+  const contactDepartments = useMemo(() => [...new Set(contacts.map(r => r.department).filter(Boolean))], [contacts]);
 
   const columns = [
+    { key: "siteCode",    label: "Site Code",   align: "center" },
     { key: "date",        label: "Date",        align: "center", render: r => formatDate(r.date) },
     { key: "name",        label: "Name",        className: "cell-bold" },
     { key: "department",  label: "Department" },
@@ -30,11 +32,11 @@ const StaffTab = ({ data, onDelete, onBulkUpload, onAddRecord, onEditRecord }) =
     { key: "outTime",     label: "Out Time",    align: "center", render: r => formatTime(r.outTime) },
     { key: "working",     label: "Working Hrs", align: "right",  render: r => getWorkingHours(r) },
     { key: "ot",          label: "OT",          align: "right",  render: r => formatOTDuration(r) },
-    { key: "remarks",     label: "Remarks",                      render: r => formatLateDuration(r) || r.remarks || "-" },
+    { key: "remarks",     label: "Remarks",                      render: r => r.remarks || "-" },
   ];
 
   const filters = [
-    { key: "status", label: "All status", options: ALL_STATUSES },
+    { key: "status", label: "All status", options: [...ALL_STATUSES, "Late"] },
     { key: "department", label: "All department", options: departments },
     { key: "designation", label: "All designation", options: designations },
     { type: "date" },
@@ -49,7 +51,7 @@ const StaffTab = ({ data, onDelete, onBulkUpload, onAddRecord, onEditRecord }) =
         </button>
         <button className="btn-add" onClick={() => setShowModal(true)}>+ Add record</button>
       </div>
-      <BulkUpload visible={showUpload} onUpload={(file) => { onBulkUpload?.(file, "staff"); setShowUpload(false); }} columns="Date,Name,Designation,Department,Status,InTime,OutTime,Remarks" />
+      <BulkUpload visible={showUpload} onUpload={(file) => { onBulkUpload?.(file, "staff"); setShowUpload(false); }} columns="Date,SiteCode,Name,Designation,Department,Status,InTime,OutTime,Shift,Remarks" />
       <StatCards stats={stats} onStatClick={setStatusFilter} activeFilter={statusFilter} />
       <div className="charts-grid charts-3">
         <VerticalBar data={weeklyData} />
@@ -57,8 +59,8 @@ const StaffTab = ({ data, onDelete, onBulkUpload, onAddRecord, onEditRecord }) =
         <TopPerformers performers={topPerformers} />
       </div>
       <AttendanceTable records={data} columns={columns} filters={filters} statusFilter={statusFilter} onEdit={(rec) => setEditRecord(rec)} onDelete={onDelete} exportFilename="Staff_Attendance" />
-      <AddRecordModal visible={showModal} onClose={() => setShowModal(false)} onSave={onAddRecord} type="staff" />
-      <AddRecordModal visible={!!editRecord} initialData={editRecord} onClose={() => setEditRecord(null)} onSave={(d) => { onEditRecord?.({ ...editRecord, ...d }); setEditRecord(null); }} type="staff" />
+      <AddRecordModal visible={showModal} onClose={() => setShowModal(false)} onSave={onAddRecord} type="staff" contacts={contacts} departmentOptions={contactDepartments} />
+      <AddRecordModal visible={!!editRecord} initialData={editRecord} onClose={() => setEditRecord(null)} onSave={(d) => { onEditRecord?.({ ...editRecord, ...d }); setEditRecord(null); }} type="staff" contacts={contacts} departmentOptions={contactDepartments} />
     </div>
   );
 };

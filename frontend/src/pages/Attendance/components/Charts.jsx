@@ -106,11 +106,11 @@ export const DeptSplit = ({ data }) => (
 );
 
 // ─── Vertical Bar (replaces WeeklyBar for Staff) ────────
-export const VerticalBar = ({ data }) => (
+export const VerticalBar = ({ data = [] }) => (
   <div className="chart-card">
     <div className="chart-title">Weekly attendance %</div>
     <div className="vbar-wrap">
-      {data.map((d, i) => (
+      {(data || []).map((d, i) => (
         <div key={i} className="vbar-col">
           <span className="vbar-label">{d.pct > 0 ? `${d.pct}%` : "—"}</span>
           <div className="vbar-track">
@@ -127,10 +127,10 @@ export const VerticalBar = ({ data }) => (
 );
 
 // ─── Weekly Bar (kept for Guard tab) ────────────────────
-export const WeeklyBar = ({ data }) => (
+export const WeeklyBar = ({ data = [] }) => (
   <div className="chart-card">
     <div className="chart-title">Weekly attendance %</div>
-    {data.map((d, i) => (
+    {(data || []).map((d, i) => (
       <div key={i} className="bar-row">
         <span className="bar-day">{d.day}</span>
         <div className="bar-track"><div className={`bar-fill ${d.pct < 80 ? "bg-warning" : "bg-success"}`} style={{ width: `${d.pct}%` }} /></div>
@@ -172,10 +172,10 @@ export const MonthlyHeatmap = ({ records }) => {
 };
 
 // ─── Top Performers ──────────────────────────────────────
-export const TopPerformers = ({ performers }) => (
+export const TopPerformers = ({ performers = [] }) => (
   <div className="chart-card">
     <div className="chart-title">Top performers</div>
-    {performers.length === 0 ? <div className="chart-empty">No data</div> :
+    {(performers || []).length === 0 ? <div className="chart-empty">No data</div> :
       performers.map((p, i) => (
         <div key={i} className="perf-item">
           <div className={`perf-avatar ${i === 0 ? "perf-gold" : "perf-blue"}`}>{p.initials}</div>

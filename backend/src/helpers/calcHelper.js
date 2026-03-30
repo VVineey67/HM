@@ -5,11 +5,48 @@
 
 /**
  * JS Date → Excel Serial Date
+ * Accepts:
+ *   ISO "2026-03-29"       (YYYY-MM-DD)
+ *   "29-03-2026"           (DD-MM-YYYY)
+ *   "29-3-26" / "29-03-26" (DD-MM-YY)
+ *   "29-Mar-26"            (DD-Mon-YY — internal format)
  */
+const MONTH_NAMES = { jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11 };
+
 const jsToExcelDate = (date) => {
   if (!date) return "";
-  const d = new Date(date);
-  return Math.floor((d - new Date("1899-12-30")) / 86400000);
+  let day, month, year;
+
+  const s = String(date).trim();
+
+  // ISO: YYYY-MM-DD
+  const iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (iso) {
+    year = parseInt(iso[1]); month = parseInt(iso[2]) - 1; day = parseInt(iso[3]);
+  } else {
+    // DD-MM-YYYY  or  DD-MM-YY  or  DD-Mon-YY
+    const parts = s.split("-");
+    if (parts.length === 3) {
+      day = parseInt(parts[0]);
+      const mid = parts[1];
+      const yr  = parseInt(parts[2]);
+      year = yr < 100 ? 2000 + yr : yr;
+      // Month can be numeric ("3", "03") or name ("Mar")
+      const num = parseInt(mid);
+      if (!isNaN(num)) {
+        month = num - 1;
+      } else {
+        month = MONTH_NAMES[mid.toLowerCase().slice(0, 3)] ?? 0;
+      }
+    }
+  }
+
+  if (isNaN(day) || isNaN(month) || isNaN(year)) return "";
+
+  // Always use UTC to avoid timezone shift
+  const d    = Date.UTC(year, month, day);
+  const base = Date.UTC(1899, 11, 30);       // 1899-12-30 UTC
+  return Math.floor((d - base) / 86400000);
 };
 
 /**

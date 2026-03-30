@@ -15,34 +15,48 @@ router.get("/read/:projectId", async (req, res) => {
     const { projectId } = req.params;
     const filePath = `/Autox/${projectId}/Staff Attendance/Attendance.xlsx`;
 
-    const [staffData, guardData, contactData] = await Promise.all([
-      graphHelper.readSheet(filePath, projectId),
-      graphHelper.readSheet(filePath, "Guard"),
-      graphHelper.readSheet(filePath, "Contact")
+    const safeRead = (sheet) =>
+      graphHelper.readSheet(filePath, sheet).catch((e) => {
+        console.warn(`Sheet '${sheet}' not found or error:`, e.message);
+        return [];
+      });
+
+    const [staffData, guardData, staffContactData, guardContactData] = await Promise.all([
+      safeRead(projectId),
+      safeRead("Guard"),
+      safeRead("SC"),
+      safeRead("GC"),
     ]);
 
     /* ================= STAFF (AUTO CALC ON READ) ================= */
+    // Excel columns: Date[0], SiteCod[1], Name[2], Designation[3], Department[4],
+    //                Status[5], InTime[6], OutTime[7], Shift[8], Remarks[9]
     const staffWithCalc = (staffData || []).slice(1).map((r) => {
       const { workingHrs, otHrs } =
-        calcHelper.calculateAttendance(r[4], r[5]);
+        calcHelper.calculateAttendance(r[6], r[7]);
 
       return [
-        r[0],             // Date
-        r[1],             // Name
-        r[2],             // Designation
-        r[3] || "Absent", // Status
-        r[4],             // In Time
-        r[5],             // Out Time
-        workingHrs,       // ✅ Working Hrs (calculated)
-        otHrs,            // ✅ OT Hrs (calculated)
-        r[6] || ""        // Remarks
+        r[0],        // [0] Date
+        r[1] || "",  // [1] SiteCod
+        r[2],        // [2] Name
+        r[3] || "",  // [3] Designation
+        r[4] || "",  // [4] Department
+        r[5] || "",  // [5] Status
+        r[6],        // [6] InTime decimal
+        r[7],        // [7] OutTime decimal
+        r[8] || "Day", // [8] Shift
+        workingHrs,  // [9] Working Hrs (calculated)
+        otHrs,       // [10] OT Hrs (calculated)
+        r[9] || "",  // [11] Remarks
       ];
     });
 
     res.json({
       staff: staffWithCalc,
       guards: guardData,
-      contacts: contactData
+      staffContacts: staffContactData,
+      guardContacts: guardContactData,
+      contacts: staffContactData
     });
   } catch (err) {
     console.error("Read Error:", err.message);
@@ -59,47 +73,76 @@ router.post("/add/:projectId/:sheetName", async (req, res) => {
     const data = req.body;
     const filePath = `/Autox/${projectId}/Staff Attendance/Attendance.xlsx`;
 
-    const targetSheet = sheetName === "Staff" ? projectId : sheetName;
+    const targetSheet =
+      sheetName === "Staff" ? projectId :
+      sheetName === "Contact" ? "SC" :
+      sheetName;
+
+    // Duplicate EmpID check for Staff Contact (SC)
+    if ((sheetName === "Contact" || sheetName === "SC") && data.empId) {
+      const existing = await graphHelper.readSheet(filePath, "SC").catch(() => []);
+      const isDuplicate = (existing || []).slice(1).some(row => row[2] && String(row[2]).toLowerCase() === String(data.empId).toLowerCase());
+      if (isDuplicate) {
+        return res.status(400).json({ error: "Duplicate Employee ID", detail: `EmpID "${data.empId}" is already registered` });
+      }
+    }
+
     const tableName = await graphHelper.getFirstTableName(filePath, targetSheet);
 
     let payload = [];
 
     if (sheetName === "Staff") {
-      // Excel Staff columns: Date, Name, Designation, Department, Status, InTime, OutTime, Remarks
+      // Excel Staff columns: Date, SiteCod, Name, Designation, Department, Status, InTime, OutTime, Shift, Remarks
       payload = [
         calcHelper.jsToExcelDate(data.date),
-        data.name,
-        data.designation,
+        data.siteCode || data.site || projectId,
+        data.name || "",
+        data.designation || "",
         data.department || "",
-        data.status,
-        calcHelper.timeStringToDecimal(data.inTime),
-        calcHelper.timeStringToDecimal(data.outTime),
-        data.remarks || ""
-      ];
-    } else if (sheetName === "Guard") {
-      // Excel Guard columns: Date, Name, Designation, Department, Status, InTime, OutTime, Shift, Remarks
-      payload = [
-        calcHelper.jsToExcelDate(data.date),
-        data.name,
-        data.designation,
-        data.department || "",
-        data.status,
+        data.status || "Absent",
         calcHelper.timeStringToDecimal(data.inTime),
         calcHelper.timeStringToDecimal(data.outTime),
         data.shift || "Day",
         data.remarks || ""
       ];
-    } else if (sheetName === "Contact") {
+    } else if (sheetName === "Guard") {
+      // Excel Guard columns: Date, SiteCod, Name, Type, Location, Status, InTime, OutTime, Shift, Remarks
+      payload = [
+        calcHelper.jsToExcelDate(data.date),
+        data.siteCode || data.site || projectId,
+        data.name || "",
+        data.designation || data.type || "Security Guard",
+        data.department || data.location || "",
+        data.status || "Absent",
+        calcHelper.timeStringToDecimal(data.inTime),
+        calcHelper.timeStringToDecimal(data.outTime),
+        data.shift || "Day",
+        data.remarks || ""
+      ];
+    } else if (sheetName === "Contact" || sheetName === "SC") {
       payload = [
         data.sNo,
-        data.site,
+        data.site || projectId,
         data.empId,
-        data.joiningDate,
+        calcHelper.jsToExcelDate(data.joiningDate),
         data.emailId,
         data.name,
         data.designation,
+        data.department || "",
         data.manager,
         data.contactNo
+      ];
+    } else if (sheetName === "GC") {
+      payload = [
+        data.sNo,
+        data.site || projectId,
+        data.name || "",
+        calcHelper.jsToExcelDate(data.joiningDate),
+        data.designation || "Security Guard",
+        data.status || "Deactive",
+        data.shift || "",
+        data.contactNo || "",
+        data.remarks || ""
       ];
     }
 
@@ -120,47 +163,66 @@ router.patch("/update/:projectId/:sheetName/:rowIndex", async (req, res) => {
     const data = req.body;
     const filePath = `/Autox/${projectId}/Staff Attendance/Attendance.xlsx`;
 
-    const targetSheet = sheetName === "Staff" ? projectId : sheetName;
+    const targetSheet =
+      sheetName === "Staff" ? projectId :
+      sheetName === "Contact" ? "SC" :
+      sheetName;
     const tableName = await graphHelper.getFirstTableName(filePath, targetSheet);
 
     let payload = [];
 
     if (sheetName === "Staff") {
-      // Excel Staff columns: Date, Name, Designation, Department, Status, InTime, OutTime, Remarks
+      // Excel Staff columns: Date, SiteCod, Name, Designation, Department, Status, InTime, OutTime, Shift, Remarks
       payload = [
         calcHelper.jsToExcelDate(data.date),
-        data.name,
-        data.designation,
+        data.siteCode || data.site || projectId,
+        data.name || "",
+        data.designation || "",
         data.department || "",
-        data.status,
-        calcHelper.timeStringToDecimal(data.inTime),
-        calcHelper.timeStringToDecimal(data.outTime),
-        data.remarks || ""
-      ];
-    } else if (sheetName === "Guard") {
-      // Excel Guard columns: Date, Name, Designation, Department, Status, InTime, OutTime, Shift, Remarks
-      payload = [
-        calcHelper.jsToExcelDate(data.date),
-        data.name,
-        data.designation,
-        data.department || "",
-        data.status,
+        data.status || "Absent",
         calcHelper.timeStringToDecimal(data.inTime),
         calcHelper.timeStringToDecimal(data.outTime),
         data.shift || "Day",
         data.remarks || ""
       ];
-    } else if (sheetName === "Contact") {
+    } else if (sheetName === "Guard") {
+      // Excel Guard columns: Date, SiteCod, Name, Type, Location, Status, InTime, OutTime, Shift, Remarks
+      payload = [
+        calcHelper.jsToExcelDate(data.date),
+        data.siteCode || data.site || projectId,
+        data.name || "",
+        data.designation || data.type || "Security Guard",
+        data.department || data.location || "",
+        data.status || "Absent",
+        calcHelper.timeStringToDecimal(data.inTime),
+        calcHelper.timeStringToDecimal(data.outTime),
+        data.shift || "Day",
+        data.remarks || ""
+      ];
+    } else if (sheetName === "Contact" || sheetName === "SC") {
       payload = [
         data.sNo,
-        data.site,
+        data.site || projectId,
         data.empId,
-        data.joiningDate,
+        calcHelper.jsToExcelDate(data.joiningDate),
         data.emailId,
         data.name,
         data.designation,
+        data.department || "",
         data.manager,
         data.contactNo
+      ];
+    } else if (sheetName === "GC") {
+      payload = [
+        data.sNo,
+        data.site || projectId,
+        data.name || "",
+        calcHelper.jsToExcelDate(data.joiningDate),
+        data.designation || "Security Guard",
+        data.status || "Deactive",
+        data.shift || "",
+        data.contactNo || "",
+        data.remarks || ""
       ];
     }
 
@@ -212,9 +274,11 @@ router.delete("/delete/:projectId/:sheetName/:rowIndex", async (req, res) => {
 
 // Expected headers per type (must match Excel table exactly)
 const EXPECTED_HEADERS = {
-  staff:   ["Date", "Name", "Designation", "Department", "Status", "InTime", "OutTime", "Remarks"],
-  guard:   ["Date", "Name", "Designation", "Department", "Status", "InTime", "OutTime", "Shift", "Remarks"],
-  contact: ["S.No", "Site", "EmpID", "JoiningDate", "Email", "Name", "Designation", "Manager", "Contact"]
+  staff:   ["Date", "SiteCode", "Name", "Designation", "Department", "Status", "InTime", "OutTime", "Shift", "Remarks"],
+  guard:   ["Date", "SiteCode", "Name", "Type", "Location", "Status", "InTime", "OutTime", "Shift", "Remarks"],
+  contact: ["S.No", "Site", "EmpID", "JoiningDate", "Email", "Name", "Designation", "Department", "Manager", "Contact"],
+  sc:      ["S.No", "Site", "EmpID", "JoiningDate", "Email", "Name", "Designation", "Department", "Manager", "Contact"],
+  gc:      ["S.No", "Site", "Name", "JoiningDate", "Designation", "Status", "ShiftDuty", "ContactNo", "Remarks"]
 };
 
 // Parse a single CSV line into array of fields
@@ -230,6 +294,9 @@ function parseCSVLine(line) {
   result.push(cur.trim());
   return result;
 }
+
+const normalizeHeader = (h) =>
+  String(h || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 
 router.post("/bulk-upload/:projectId/:type", upload.single("file"), async (req, res) => {
   try {
@@ -248,7 +315,7 @@ router.post("/bulk-upload/:projectId/:type", upload.single("file"), async (req, 
 
     // Validate header row
     const headerRow = parseCSVLine(lines[0]).map(h => h.replace(/^"|"$/g, "").trim());
-    const missingCols = expected.filter((h, i) => headerRow[i]?.toLowerCase() !== h.toLowerCase());
+    const missingCols = expected.filter((h, i) => normalizeHeader(headerRow[i]) !== normalizeHeader(h));
     if (missingCols.length > 0 || headerRow.length < expected.length) {
       return res.status(400).json({
         error: "Wrong column format",
@@ -268,49 +335,69 @@ router.post("/bulk-upload/:projectId/:type", upload.single("file"), async (req, 
 
       if (type === "staff") {
         // Validate required fields
+        // CSV columns: Date[0], SiteCode[1], Name[2], Designation[3], Department[4], Status[5], InTime[6], OutTime[7], Shift[8], Remarks[9]
         if (!clean[0]) { errors.push(`Row ${rowNum}: Date is required (format: YYYY-MM-DD)`); return; }
-        if (!clean[1]) { errors.push(`Row ${rowNum}: Name is required`); return; }
-        const validStatuses = ["Present", "Absent", "Half Day", "Late", "On Leave", "Holiday", "Week Off"];
-        if (clean[4] && !validStatuses.includes(clean[4])) {
-          errors.push(`Row ${rowNum}: Status "${clean[4]}" is invalid. Use: ${validStatuses.join(", ")}`);
+        if (!clean[2]) { errors.push(`Row ${rowNum}: Name is required`); return; }
+        const validStatuses = ["Present", "Absent", "Annual Leave", "Comp Off", "Holiday", "On Duty", "Week Off"];
+        if (clean[5] && !validStatuses.includes(clean[5])) {
+          errors.push(`Row ${rowNum}: Status "${clean[5]}" is invalid. Use: ${validStatuses.join(", ")}`);
         }
+        const inD = calcHelper.timeStringToDecimal(clean[6]);
+        const outD = calcHelper.timeStringToDecimal(clean[7]);
         rows.push([
           calcHelper.jsToExcelDate(clean[0]),
-          clean[1],
-          clean[2] || "",
+          clean[1] || projectId,
+          clean[2],
           clean[3] || "",
-          clean[4] || "Absent",
-          calcHelper.timeStringToDecimal(clean[5]),
-          calcHelper.timeStringToDecimal(clean[6]),
-          clean[7] || ""
+          clean[4] || "",
+          clean[5] || "Absent",
+          inD,
+          outD,
+          clean[8] || "Day",
+          clean[9] || ""
         ]);
       } else if (type === "guard") {
         if (!clean[0]) { errors.push(`Row ${rowNum}: Date is required (format: YYYY-MM-DD)`); return; }
-        if (!clean[1]) { errors.push(`Row ${rowNum}: Name is required`); return; }
+        if (!clean[2]) { errors.push(`Row ${rowNum}: Name is required`); return; }
         const validShifts = ["Day", "Night"];
-        if (clean[7] && !validShifts.includes(clean[7])) {
-          errors.push(`Row ${rowNum}: Shift "${clean[7]}" is invalid. Use: Day or Night`);
+        if (clean[8] && !validShifts.includes(clean[8])) {
+          errors.push(`Row ${rowNum}: Shift "${clean[8]}" is invalid. Use: Day or Night`);
         }
         rows.push([
           calcHelper.jsToExcelDate(clean[0]),
-          clean[1],
-          clean[2] || "",
-          clean[3] || "",
-          clean[4] || "Absent",
-          calcHelper.timeStringToDecimal(clean[5]),
+          clean[1] || projectId,
+          clean[2],
+          clean[3] || "Security Guard",
+          clean[4] || "",
+          clean[5] || "Absent",
           calcHelper.timeStringToDecimal(clean[6]),
-          clean[7] || "Day",
-          clean[8] || ""
+          calcHelper.timeStringToDecimal(clean[7]),
+          clean[8] || "Day",
+          clean[9] || ""
         ]);
-      } else if (type === "contact") {
+      } else if (type === "contact" || type === "sc") {
         if (!clean[5]) { errors.push(`Row ${rowNum}: Name is required`); return; }
         rows.push([
           clean[0] || (idx + 1),
-          clean[1] || "",
+          clean[1] || projectId,
           clean[2] || "",
-          clean[3] || "",
+          calcHelper.jsToExcelDate(clean[3]),
           clean[4] || "",
           clean[5],
+          clean[6] || "",
+          clean[7] || "",
+          clean[8] || "",
+          clean[9] || ""
+        ]);
+      } else if (type === "gc") {
+        if (!clean[2]) { errors.push(`Row ${rowNum}: Name is required`); return; }
+        rows.push([
+          clean[0] || (idx + 1),
+          clean[1] || projectId,
+          clean[2] || "",
+          calcHelper.jsToExcelDate(clean[3]),
+          clean[4] || "Security Guard",
+          clean[5] || "Deactive",
           clean[6] || "",
           clean[7] || "",
           clean[8] || ""
@@ -325,7 +412,7 @@ router.post("/bulk-upload/:projectId/:type", upload.single("file"), async (req, 
 
     if (!rows.length) return res.status(400).json({ error: "No valid rows found in CSV" });
 
-    const sheetMap = { staff: projectId, guard: "Guard", contact: "Contact" };
+    const sheetMap = { staff: projectId, guard: "Guard", contact: "SC", sc: "SC", gc: "GC" };
     const targetSheet = sheetMap[type] || type;
     const tableName = await graphHelper.getFirstTableName(filePath, targetSheet);
 

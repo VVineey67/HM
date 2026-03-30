@@ -16,7 +16,8 @@ const Attendance = ({ selectedProject }) => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [staffData, setStaffData] = useState([]);
   const [guardData, setGuardData] = useState([]);
-  const [contactData, setContactData] = useState([]);
+  const [staffContacts, setStaffContacts] = useState([]);
+  const [guardContacts, setGuardContacts] = useState([]);
   const [toast, setToast] = useState(null);
 
   const showToast = useCallback((message, type = "success") => {
@@ -37,74 +38,141 @@ const Attendance = ({ selectedProject }) => {
   };
 
   useEffect(() => {
-    if (selectedProject) fetchData();
+    if (selectedProject) {
+      // Reset data before fetching new project
+      setStaffData([]);
+      setGuardData([]);
+      setStaffContacts([]);
+      setGuardContacts([]);
+      fetchData();
+    }
   }, [selectedProject]);
 
   const fetchData = async () => {
     setLoading(true);
     try {
       const res = await API.get(`/api/attendance/read/${selectedProject}`);
+      const normalize = (v) => String(v || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      const getIndex = (headers, keys, fallback = -1) => {
+        const normalizedHeaders = headers.map(normalize);
+        for (const k of keys) {
+          const idx = normalizedHeaders.indexOf(normalize(k));
+          if (idx !== -1) return idx;
+        }
+        return fallback;
+      };
+      const pick = (row, idx, def = "") => (idx >= 0 ? (row[idx] ?? def) : def);
 
       // ═══ STAFF PARSING ═══
-      // Backend already slices header — do NOT slice again here.
-      // Backend returns: [Date, Name, Desig, Dept, Status, InTime, WorkHrs, OTHrs, OutTime]
+      // Backend returns: [Date, SiteCode, Name, Desig, Dept, Status, InTime, OutTime, Shift, WorkHrs, OTHrs, Remarks]
       const staffParsed = (res.data.staff || []).map((r, i) => ({
         id: i,
         date: excelToJSDate(r[0]),
-        name: r[1] || "",
-        designation: r[2] || "",
-        department: r[3] || "",
-        status: r[4] || "",
-        inTime: r[5],           // decimal like 0.3958
-        outTime: r[8],          // decimal like 0.75 (index 8!)
-        workingHrs: r[6] || "", // "0Hrs 0Min"
-        otHrs: r[7] || "",      // "0Hrs 0Min"
-        shift: "Day",           // Staff doesn't have shift column, default Day
-        remarks: "",
+        siteCode: r[1] || selectedProject || "",
+        name: r[2] || "",
+        designation: r[3] || "",
+        department: r[4] || "",
+        status: r[5] || "",
+        inTime: r[6],
+        outTime: r[7],
+        shift: r[8] || "Day",
+        workingHrs: r[9] || "",
+        otHrs: r[10] || "",
+        remarks: r[11] || "",
         type: "staff",
       }));
 
       // ═══ GUARD PARSING ═══
-      // RAW: [0]=Date(serial), [1]=Name, [2]=Designation, [3]=Department,
-      //       [4]=Status, [5]=InTime(decimal), [6]=OutTime(decimal), [7]=Shift, [8]=Remarks
+      // RAW: [0]=Date, [1]=SiteCode, [2]=Name, [3]=Type, [4]=Location,
+      //       [5]=Status, [6]=InTime, [7]=OutTime, [8]=Shift, [9]=Remarks
       const guardParsed = (res.data.guards || []).slice(1).map((r, i) => ({
         id: i,
         date: excelToJSDate(r[0]),
-        name: r[1] || "",
-        designation: r[2] || "",
-        department: r[3] || "",
-        status: r[4] || "",
-        inTime: r[5],           // decimal
-        outTime: r[6],          // decimal
-        shift: r[7] || "Day",
-        remarks: r[8] || "",
+        siteCode: r[1] || selectedProject || "",
+        name: r[2] || "",
+        designation: r[3] || "",
+        department: r[4] || "",
+        status: r[5] || "",
+        inTime: r[6],
+        outTime: r[7],
+        shift: r[8] || "Day",
+        remarks: r[9] || "",
         workingHrs: "",
         otHrs: "",
         type: "guard",
       }));
 
-      // ═══ CONTACT PARSING ═══
-      // RAW: [0]=S.No, [1]=Site, [2]=EmpID, [3]=JoiningDate, [4]=Email,
-      //       [5]=Name, [6]=Designation, [7]=Manager, [8]=Contact
-      const contactParsed = (res.data.contacts || []).slice(1).map((r, i) => ({
+      const scRaw = res.data.staffContacts || res.data.contacts || [];
+      const scHeaders = Array.isArray(scRaw[0]) ? scRaw[0] : [];
+      const scDataRows = Array.isArray(scRaw[0]) ? scRaw.slice(1) : scRaw;
+      const scIdx = {
+        sNo: getIndex(scHeaders, ["S.No", "SNo"], 0),
+        site: getIndex(scHeaders, ["Site", "SiteCode", "Site Cod"], 1),
+        empId: getIndex(scHeaders, ["EmpID", "Emp Id", "EmployeeId"], 2),
+        joiningDate: getIndex(scHeaders, ["JoiningDate", "Joining Date"], 3),
+        email: getIndex(scHeaders, ["Email", "EmailID", "Email Id"], 4),
+        name: getIndex(scHeaders, ["Name"], 5),
+        designation: getIndex(scHeaders, ["Designation"], 6),
+        department: getIndex(scHeaders, ["Department"], 7),
+        manager: getIndex(scHeaders, ["Manager", "ReportingManager", "Reporting Manager"], 8),
+        contact: getIndex(scHeaders, ["Contact", "ContactNo", "Contact No"], 9),
+      };
+      const staffContactsParsed = scDataRows.map((r, i) => ({
         id: i,
-        sNo: r[0] || i + 1,
-        site: r[1] || "",
-        empId: r[2] || "",
-        joiningDate: excelToJSDate(r[3]),
-        email: r[4] || "",
-        name: r[5] || "",
-        designation: r[6] || "",
-        manager: r[7] || "",
-        contact: r[8] || "",
-        type: "contact",
+        sNo: pick(r, scIdx.sNo, i + 1),
+        site: pick(r, scIdx.site, ""),
+        empId: pick(r, scIdx.empId, ""),
+        joiningDate: excelToJSDate(pick(r, scIdx.joiningDate, "")),
+        email: pick(r, scIdx.email, ""),
+        name: pick(r, scIdx.name, ""),
+        designation: pick(r, scIdx.designation, ""),
+        department: pick(r, scIdx.department, ""),
+        manager: pick(r, scIdx.manager, ""),
+        contact: pick(r, scIdx.contact, ""),
+        sheetType: "staffContact",
+        type: "staffContact",
+      }));
+
+      const gcRaw = res.data.guardContacts || [];
+      const gcHeaders = Array.isArray(gcRaw[0]) ? gcRaw[0] : [];
+      const gcDataRows = Array.isArray(gcRaw[0]) ? gcRaw.slice(1) : gcRaw;
+      const gcIdx = {
+        sNo: getIndex(gcHeaders, ["S.No", "SNo"], 0),
+        site: getIndex(gcHeaders, ["Site", "SiteCode", "Site Cod"], 1),
+        name: getIndex(gcHeaders, ["Name"], 2),
+        joiningDate: getIndex(gcHeaders, ["JoiningDate", "Joining Date"], 3),
+        designation: getIndex(gcHeaders, ["Designation"], 4),
+        status: getIndex(gcHeaders, ["Status"], 5),
+        shift: getIndex(gcHeaders, ["ShiftDuty", "Shift Duty", "Shift"], 6),
+        contact: getIndex(gcHeaders, ["ContactNo", "Contact No", "Contact"], 7),
+        remarks: getIndex(gcHeaders, ["Remarks"], 8),
+      };
+      const guardContactsParsed = gcDataRows.map((r, i) => ({
+        id: i,
+        sNo: pick(r, gcIdx.sNo, i + 1),
+        site: pick(r, gcIdx.site, ""),
+        name: pick(r, gcIdx.name, ""),
+        joiningDate: excelToJSDate(pick(r, gcIdx.joiningDate, "")),
+        designation: pick(r, gcIdx.designation, ""),
+        status: pick(r, gcIdx.status, ""),
+        shift: pick(r, gcIdx.shift, ""),
+        contact: pick(r, gcIdx.contact, ""),
+        remarks: pick(r, gcIdx.remarks, ""),
+        sheetType: "guardContact",
+        type: "guardContact",
       }));
 
       setStaffData(staffParsed);
       setGuardData(guardParsed);
-      setContactData(contactParsed);
+      setStaffContacts(staffContactsParsed);
+      setGuardContacts(guardContactsParsed);
     } catch (err) {
       console.error("Error fetching attendance:", err);
+      setStaffData([]);
+      setGuardData([]);
+      setStaffContacts([]);
+      setGuardContacts([]);
+      showToast("Failed to load attendance data for this project", "error");
     } finally {
       setLoading(false);
     }
@@ -115,7 +183,7 @@ const Attendance = ({ selectedProject }) => {
 
   const handleEditRecord = async (data) => {
     try {
-      const sheetMap = { staff: "Staff", guard: "Guard", contact: "Contact" };
+      const sheetMap = { staff: "Staff", guard: "Guard", staffContact: "SC", guardContact: "GC" };
       const sheet = sheetMap[data.type];
       const payload = buildPayload(data);
       console.log("Sending update payload:", payload); // DEBUG
@@ -132,7 +200,7 @@ const Attendance = ({ selectedProject }) => {
   const handleDelete = async (record) => {
     if (!window.confirm(`Delete record for ${record.name}?`)) return;
     try {
-      const sheetMap = { staff: "Staff", guard: "Guard", contact: "Contact" };
+      const sheetMap = { staff: "Staff", guard: "Guard", staffContact: "SC", guardContact: "GC" };
       await API.delete(`/api/attendance/delete/${selectedProject}/${sheetMap[record.type]}/${record.id}`);
       showToast("Record deleted successfully");
       fetchData();
@@ -153,36 +221,26 @@ const Attendance = ({ selectedProject }) => {
       return (h * 60 + m) / 1440;
     };
 
-    // Helper to convert "yyyy-MM-dd" from <input type="date"> back to "DD-Mon-YY"
-    const fromHTMLDate = (dateStr) => {
-      if (!dateStr) return "";
-      try {
-        const d = new Date(dateStr);
-        const month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-        return `${String(d.getUTCDate()).padStart(2, '0')}-${month[d.getUTCMonth()]}-${String(d.getFullYear()).slice(-2)}`;
-      } catch (e) {
-        return "";
-      }
-    };
 
     if (data.type === 'staff') {
-      const row = [
-        fromHTMLDate(data.date), // Col 0: Date
-        data.name,               // Col 1: Name
-        data.designation,        // Col 2: Designation
-        data.department,         // Col 3: Department
-        data.status,             // Col 4: Status
-        timeStrToDecimal(data.inTime), // Col 5: InTime
-        data.workingHrs || "",   // Col 6: WorkingHrs
-        data.otHrs || "",        // Col 7: OTHrs
-        timeStrToDecimal(data.outTime) // Col 8: OutTime
-      ];
-      return { values: [row] }; // Send as a 2D array for sheet compatibility
+      return {
+        date:        data.date,   // ISO "yyyy-MM-dd" — backend jsToExcelDate handles it correctly
+        siteCode:    data.siteCode || selectedProject,
+        name:        data.name,
+        designation: data.designation,
+        department:  data.department || "",
+        status:      data.status,
+        inTime:      timeStrToDecimal(data.inTime),
+        outTime:     timeStrToDecimal(data.outTime),
+        shift:       data.shift || "Day",
+        remarks:     data.remarks || "",
+      };
     }
 
     if (data.type === 'guard') {
       return {
-        date: fromHTMLDate(data.date),
+        date: data.date,   // ISO "yyyy-MM-dd"
+        siteCode: data.siteCode || selectedProject,
         name: data.name,
         designation: data.designation,
         department: data.department,
@@ -194,25 +252,54 @@ const Attendance = ({ selectedProject }) => {
       };
     }
 
-    if (data.type === "contact") {
+    if (data.type === "staffContact") {
       return {
         sNo:         data.sNo,
         site:        data.site || selectedProject,
         empId:       data.empId,
-        joiningDate: fromHTMLDate(data.joiningDate),
+        joiningDate: data.joiningDate,
         emailId:     data.email || data.emailId,
         name:        data.name,
         designation: data.designation,
+        department:  data.department || "",
         manager:     data.manager,
         contactNo:   data.contact || data.contactNo,
+      };
+    }
+    if (data.type === "guardContact") {
+      return {
+        sNo:         data.sNo,
+        site:        data.site || selectedProject,
+        name:        data.name,
+        joiningDate: data.joiningDate,
+        designation: data.designation || "Security Guard",
+        status:      data.status || "Deactive",
+        shift:       data.shift || "",
+        contactNo:   data.contact || data.contactNo,
+        remarks:     data.remarks || "",
       };
     }
     return data; // Fallback
   };
 
   const handleAddRecord = async (data) => {
+    // Validate: name must exist in contacts for staff/guard
+    if (data.type === "staff" && staffContacts.length > 0) {
+      const known = staffContacts.some(c => c.name?.toLowerCase() === data.name?.trim().toLowerCase());
+      if (!known) {
+        showToast(`"${data.name}" is not registered in Contacts. Please add the employee to Contacts first.`, "error");
+        return;
+      }
+    }
+    if (data.type === "guard" && guardContacts.length > 0) {
+      const known = guardContacts.some(c => c.name?.toLowerCase() === data.name?.trim().toLowerCase());
+      if (!known) {
+        showToast(`"${data.name}" is not registered in Guard Contacts. Please add the employee to GC first.`, "error");
+        return;
+      }
+    }
     try {
-      const sheetMap = { staff: "Staff", guard: "Guard", contact: "Contact" };
+      const sheetMap = { staff: "Staff", guard: "Guard", staffContact: "SC", guardContact: "GC" };
       const sheet = sheetMap[data.type];
       const payload = buildPayload(data);
       await API.post(`/api/attendance/add/${selectedProject}/${sheet}`, payload);
@@ -300,9 +387,9 @@ const Attendance = ({ selectedProject }) => {
 
       <div className="tab-container">
         {activeTab === 0 && <TodayTab staffData={staffData} guardData={guardData} onEdit={handleEdit} onDelete={handleDelete} />}
-        {activeTab === 1 && <StaffTab data={staffData} onDelete={handleDelete} onBulkUpload={handleBulkUpload} onAddRecord={handleAddRecord} onEditRecord={handleEditRecord} />}
-        {activeTab === 2 && <GuardTab data={guardData} onDelete={handleDelete} onBulkUpload={handleBulkUpload} onAddRecord={handleAddRecord} onEditRecord={handleEditRecord} />}
-        {activeTab === 3 && <ContactsTab data={contactData} onDelete={handleDelete} onBulkUpload={handleBulkUpload} onAddRecord={handleAddRecord} onEditRecord={handleEditRecord} />}
+        {activeTab === 1 && <StaffTab data={staffData} contacts={staffContacts} onDelete={handleDelete} onBulkUpload={handleBulkUpload} onAddRecord={handleAddRecord} onEditRecord={handleEditRecord} />}
+        {activeTab === 2 && <GuardTab data={guardData} contacts={guardContacts} onDelete={handleDelete} onBulkUpload={handleBulkUpload} onAddRecord={handleAddRecord} onEditRecord={handleEditRecord} />}
+        {activeTab === 3 && <ContactsTab staffData={staffContacts} guardData={guardContacts} onDelete={handleDelete} onBulkUpload={handleBulkUpload} onAddRecord={handleAddRecord} onEditRecord={handleEditRecord} />}
       </div>
     </div>
   );
