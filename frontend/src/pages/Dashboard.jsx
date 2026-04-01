@@ -11,7 +11,7 @@ export default function Dashboard({ project }) {
   }, [activeTab]);
 
   return (
-    <div className="p-6 space-y-8 bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 min-h-screen relative overflow-hidden">
+    <div className="p-3 md:p-6 space-y-6 md:space-y-8 bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 min-h-screen relative overflow-hidden">
       
       {/* BACKGROUND ELEMENTS */}
       <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-bl from-indigo-200/20 to-cyan-200/10 rounded-full blur-3xl -translate-y-48 translate-x-48"></div>
@@ -20,11 +20,11 @@ export default function Dashboard({ project }) {
       {/* HEADER */}
       <div className="relative">
         <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-cyan-500/5 rounded-3xl blur-xl"></div>
-        <div className="relative backdrop-blur-sm bg-white/70 rounded-3xl p-8 border border-white/50 shadow-2xl">
+        <div className="relative backdrop-blur-sm bg-white/70 rounded-3xl p-5 md:p-8 border border-white/50 shadow-2xl">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div className="relative">
               <div className="absolute -left-4 top-1/2 -translate-y-1/2 w-2 h-16 bg-gradient-to-b from-blue-600 to-cyan-500 rounded-full"></div>
-              <h1 className="text-4xl font-bold bg-gradient-to-r from-slate-900 to-blue-900 bg-clip-text text-transparent pl-6">
+              <h1 className="text-2xl md:text-4xl font-bold bg-gradient-to-r from-slate-900 to-blue-900 bg-clip-text text-transparent pl-6">
                 Construction Dashboard
               </h1>
               <p className="text-slate-600 pl-6 mt-2">

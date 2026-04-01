@@ -53,8 +53,8 @@ export default function About() {
     <div className="min-h-screen bg-gray-50 p-6 md:p-10 font-sans">
       {/* Header Section */}
       <div className="mb-10 text-center md:text-left">
-        <h1 className="text-4xl font-extrabold text-slate-800 flex items-center justify-center md:justify-start gap-3">
-          <Info className="text-blue-600" size={36} />
+        <h1 className="text-2xl md:text-4xl font-extrabold text-slate-800 flex items-center justify-center md:justify-start gap-3">
+          <Info className="text-blue-600 shrink-0" size={28} />
           BOOTES Monitoring System
         </h1>
         <p className="text-slate-500 mt-2 text-lg">Empowering Projects, Building Future</p>
@@ -67,9 +67,9 @@ export default function About() {
           alt="Construction Site" 
           className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
         />
-        <div className="absolute inset-0 bg-gradient-to-r from-slate-900/90 via-slate-900/40 to-transparent flex flex-col justify-center px-10 text-white">
-          <h2 className="text-4xl font-bold mb-3 tracking-tight text-white">Our Strength, Our People</h2>
-          <p className="max-w-md text-slate-200 text-lg leading-relaxed">
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-900/90 via-slate-900/40 to-transparent flex flex-col justify-center px-6 md:px-10 text-white">
+          <h2 className="text-2xl md:text-4xl font-bold mb-3 tracking-tight text-white">Our Strength, Our People</h2>
+          <p className="max-w-md text-slate-200 text-sm md:text-lg leading-relaxed">
             Meet the dedicated visionaries behind the innovative BOOTES Monitoring System.
           </p>
         </div>

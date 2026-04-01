@@ -196,22 +196,22 @@ const PaymentRequestDashboard = () => {
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-gray-100 text-gray-800 font-sans">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-white border-b border-gray-200 shadow-sm">
-        <div className="w-full px-8 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-green-600 to-green-800 rounded-xl flex items-center justify-center shadow-lg">
-              <Icon.CreditCard className="text-white" size={24} />
+        <div className="w-full px-4 md:px-8 min-h-[64px] md:h-20 py-3 md:py-0 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-green-600 to-green-800 rounded-xl flex items-center justify-center shadow-lg shrink-0">
+              <Icon.CreditCard className="text-white" size={20} />
             </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Payment Request Management</h1>
-              <p className="text-sm text-gray-600">Bootes Construction - Payment Workflow</p>
+            <div className="min-w-0">
+              <h1 className="text-base md:text-2xl font-bold text-gray-900 truncate">Payment Request Management</h1>
+              <p className="text-xs md:text-sm text-gray-600 hidden sm:block">Bootes Construction - Payment Workflow</p>
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            <button className="px-6 py-3 text-sm font-semibold text-white bg-gradient-to-r from-green-600 to-green-800 rounded-xl hover:from-green-700 hover:to-green-900 transition-all flex items-center gap-2 shadow-lg">
-              <Icon.Plus size={18} /> New Payment Request
+          <div className="flex items-center gap-2 shrink-0">
+            <button className="px-3 md:px-6 py-2 md:py-3 text-xs md:text-sm font-semibold text-white bg-gradient-to-r from-green-600 to-green-800 rounded-xl hover:from-green-700 hover:to-green-900 transition-all flex items-center gap-1 md:gap-2 shadow-lg">
+              <Icon.Plus size={16} /> <span className="hidden sm:inline">New Payment Request</span><span className="sm:hidden">New</span>
             </button>
-            <div className="w-10 h-10 bg-gradient-to-br from-gray-200 to-gray-300 rounded-full flex items-center justify-center">
-              <Icon.User size={20} className="text-gray-700" />
+            <div className="w-9 h-9 bg-gradient-to-br from-gray-200 to-gray-300 rounded-full flex items-center justify-center">
+              <Icon.User size={18} className="text-gray-700" />
             </div>
           </div>
         </div>
@@ -219,12 +219,12 @@ const PaymentRequestDashboard = () => {
 
       {/* Tabs */}
       <div className="sticky top-20 z-40 bg-white/90 backdrop-blur-sm border-b border-gray-200">
-        <div className="w-full px-8 flex space-x-1">
+        <div className="w-full px-4 md:px-8 flex space-x-1 overflow-x-auto scrollbar-none">
           {["process", "dashboard", "new_request", "tracking", "reports"].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`py-4 px-6 text-sm font-semibold capitalize whitespace-nowrap transition-all border-b-2 ${activeTab === tab ? "text-green-600 border-green-600" : "text-gray-500 hover:text-gray-700 border-transparent"}`}
+              className={`py-3 md:py-4 px-4 md:px-6 text-xs md:text-sm font-semibold capitalize whitespace-nowrap transition-all border-b-2 shrink-0 ${activeTab === tab ? "text-green-600 border-green-600" : "text-gray-500 hover:text-gray-700 border-transparent"}`}
             >
               {tab.split('_').join(' ')}
             </button>
@@ -233,7 +233,7 @@ const PaymentRequestDashboard = () => {
       </div>
 
       {/* Main Content */}
-      <main className="w-full px-8 py-8">
+      <main className="w-full px-3 md:px-8 py-4 md:py-8">
         {activeTab === "process" && <PaymentProcessFlow selectedPayment={selectedPayment} />}
         {activeTab === "dashboard" && <PaymentDashboard />}
         {activeTab === "new_request" && <NewPaymentForm newPayment={newPayment} setNewPayment={setNewPayment} />}

@@ -26,10 +26,10 @@ const Login = ({ onLogin }) => {
       </div>
 
       {/* Main Container */}
-      <div className="flex h-[580px] w-full max-w-4xl overflow-hidden rounded-[2.5rem] bg-white/90 backdrop-blur-xl shadow-2xl shadow-blue-500/20 border border-white/30 relative z-10">
+      <div className="flex flex-col lg:flex-row w-full max-w-4xl min-h-[480px] overflow-hidden rounded-[2rem] lg:rounded-[2.5rem] bg-white/90 backdrop-blur-xl shadow-2xl shadow-blue-500/20 border border-white/30 relative z-10">
         
         {/* Left Side: Blue Section */}
-        <div className="relative hidden w-[42%] flex-col items-center justify-center bg-gradient-to-br from-gray-900 to-blue-900 p-8 lg:flex overflow-hidden">
+        <div className="relative hidden w-full lg:w-[42%] flex-col items-center justify-center bg-gradient-to-br from-gray-900 to-blue-900 p-8 lg:flex overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-full">
             <div className="absolute top-10 left-10 w-32 h-32 bg-blue-500/10 rounded-full"></div>
             <div className="absolute bottom-10 right-10 w-40 h-40 bg-purple-500/10 rounded-full"></div>
@@ -77,7 +77,7 @@ const Login = ({ onLogin }) => {
         </div>
 
         {/* Right Side: Login Form */}
-        <div className="flex flex-1 flex-col justify-center bg-gradient-to-b from-white/95 to-blue-50/30 px-12 md:px-16 lg:px-20 backdrop-blur-sm">
+        <div className="flex flex-1 flex-col justify-center bg-gradient-to-b from-white/95 to-blue-50/30 px-6 py-10 sm:px-10 md:px-14 lg:px-20 backdrop-blur-sm">
           {/* Login Header */}
           <div className="mb-8"> {/* Reduced mb from 10 to 8 */}
             <h2 className="text-4xl font-black text-gray-900 leading-none">Login</h2>
