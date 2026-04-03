@@ -4,8 +4,9 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 
-const attendanceRoutes = require("./src/routes/attendance");
-const viewRoutes = require("./src/routes/view");
+const attendanceRoutes  = require("./src/routes/attendance");
+const viewRoutes        = require("./src/routes/view");
+const procurementRoutes = require("./src/routes/procurement");
 
 const app = express();
 
@@ -14,8 +15,9 @@ app.use(cors());
 app.use(express.json());
 
 // Routes
-app.use("/api/attendance", attendanceRoutes);
-app.use("/api/view", viewRoutes);
+app.use("/api/attendance",  attendanceRoutes);
+app.use("/api/view",        viewRoutes);
+app.use("/api/procurement", procurementRoutes);
 
 // Port Configuration (Railway ke liye important)
 const PORT = process.env.PORT || 3000;

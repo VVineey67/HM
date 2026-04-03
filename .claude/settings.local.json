@@ -6,7 +6,9 @@
       "Bash(for f:*)",
       "Bash(do echo:*)",
       "Read(//d/BMS/**)",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(xargs wc:*)",
+      "Bash(docker compose:*)"
     ]
   }
 }

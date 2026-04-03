@@ -126,7 +126,27 @@ const graphHelper = {
         });
 
         return res.data; // includes @microsoft.graph.downloadUrl
-    }
+    },
+
+    /* ----------------------------------------------------
+       7. Upload file to OneDrive, return download URL
+    -----------------------------------------------------*/
+    uploadFile: async (filePath, buffer, mimeType) => {
+        const token = await getAccessToken();
+        const encoded = encodeURIComponent(filePath);
+
+        const url = `https://graph.microsoft.com/v1.0/users/${USER_ID}/drive/root:${encoded}:/content`;
+
+        const res = await axios.put(url, buffer, {
+            headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": mimeType || "application/octet-stream",
+            },
+        });
+
+        // Return the public download URL
+        return res.data["@microsoft.graph.downloadUrl"] || res.data.webUrl || "";
+    },
 };
 
 module.exports = graphHelper;

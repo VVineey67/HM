@@ -1,0 +1,140 @@
+================================================================
+           BMS PROJECT - DOCKER COMPLETE GUIDE
+================================================================
+
+DATE: April 2, 2026
+PROJECT: BMS (Building Management System)
+DEVELOPER: Jitendar Goyal
+
+----------------------------------------------------------------
+PROJECT STRUCTURE
+----------------------------------------------------------------
+BMS/
+├── backend/        (Node.js + Express, port 3000)
+├── frontend/       (React + Vite, port 80)
+├── docker-compose.yml
+├── .env.example
+└── Docker_Guide.txt
+
+----------------------------------------------------------------
+TECH STACK
+----------------------------------------------------------------
+Backend  : Node.js, Express, Microsoft Graph API (OneDrive/Excel)
+Frontend : React 19, Vite, Tailwind CSS, Three.js
+Database : Microsoft OneDrive (Excel files via Graph API)
+Docker   : Backend + Frontend containers
+
+----------------------------------------------------------------
+DOCKER FILES BANAYE
+----------------------------------------------------------------
+1. backend/Dockerfile
+2. frontend/Dockerfile
+3. frontend/nginx.conf
+4. docker-compose.yml
+5. backend/.dockerignore
+6. frontend/.dockerignore
+7. .env.example
+
+----------------------------------------------------------------
+PEHLI BAAR DOCKER CHALANA (Is Machine Pe)
+----------------------------------------------------------------
+Step 1: Docker Desktop install karo
+Step 2: Terminal me BMS folder me jao
+Step 3: Command chalao:
+
+        docker-compose up --build
+
+Step 4: Browser me kholo:
+        - Frontend : http://localhost
+        - Backend  : http://localhost:3000
+
+----------------------------------------------------------------
+DOCKER HUB PE PUSH KARNA
+----------------------------------------------------------------
+Docker Hub Account: jitendargoyal
+Images:
+  - jitendargoyal/bms-frontend
+  - jitendargoyal/bms-backend
+
+Commands:
+        docker login
+
+        docker tag bms-backend jitendargoyal/bms-backend
+        docker tag bms-frontend jitendargoyal/bms-frontend
+
+        docker push jitendargoyal/bms-backend
+        docker push jitendargoyal/bms-frontend
+
+----------------------------------------------------------------
+NAYE PC/LAPTOP PE CHALANA
+----------------------------------------------------------------
+Zaroorat:
+  1. Docker Desktop installed ho
+  2. backend/.env file (manually bhejo - WhatsApp/Email)
+  3. Code (git clone ya copy)
+
+Commands:
+        git clone <repo-url>
+        cd BMS
+        # backend/.env file banao aur credentials paste karo
+        docker-compose up
+
+NOTE: --build nahi lagega, Docker Hub se images automatically
+      pull ho jayengi.
+
+----------------------------------------------------------------
+TEAM MEMBER KO DENA
+----------------------------------------------------------------
+Bhejo:
+  1. Git repo access (git push se code already uploaded hai)
+  2. backend/.env file - MANUALLY bhejo (WhatsApp/Email)
+     KABHI GIT ME PUSH MAT KARNA .env FILE
+
+Team member ke steps:
+  1. Docker Desktop install karo
+  2. git clone <repo-url>
+  3. backend/.env file banao
+  4. docker-compose up
+
+----------------------------------------------------------------
+CODE UPDATE KARNE KE STEPS
+----------------------------------------------------------------
+Step 1: Code changes karo (normal tarah)
+
+Step 2: Rebuild karo:
+        docker-compose up --build
+
+Step 3: Docker Hub pe push karo:
+        docker tag bms-backend jitendargoyal/bms-backend
+        docker tag bms-frontend jitendargoyal/bms-frontend
+        docker push jitendargoyal/bms-backend
+        docker push jitendargoyal/bms-frontend
+
+Step 4: Dusre PC pe update lene ke liye:
+        docker-compose pull
+        docker-compose up
+
+----------------------------------------------------------------
+ENVIRONMENT VARIABLES (.env)
+----------------------------------------------------------------
+File location: backend/.env
+
+TENANT_ID=<your_tenant_id>
+CLIENT_ID=<your_client_id>
+CLIENT_SECRET=<your_client_secret>
+PORT=3000
+
+IMPORTANT:
+  - .env file PRIVATE hai
+  - Git me nahi gayi (.gitignore me hai)
+  - Docker IMAGE me nahi gayi (.dockerignore me hai)
+  - Runtime pe container me inject hoti hai (safe)
+
+----------------------------------------------------------------
+DOCKER HUB LINK
+----------------------------------------------------------------
+https://hub.docker.com/u/jitendargoyal
+
+================================================================
+                        END OF GUIDE
+================================================================

@@ -14,7 +14,7 @@
 }
 
 /* ═══ PAGE ═══ */
-.attendance-page { padding:24px 28px; max-width:1600px; margin:0 auto; background:linear-gradient(145deg,#e8edf5 0%,#dde4ef 50%,#d6dfe9 100%); min-height:100vh; }
+.attendance-page { padding:24px 28px; width:100%; background:linear-gradient(145deg,#e8edf5 0%,#dde4ef 50%,#d6dfe9 100%); min-height:100vh; box-sizing:border-box; }
 
 /* ═══ HEADER ═══ */
 .attendance-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; background:linear-gradient(135deg,#0f172a 0%,#1a2f55 55%,#1e3a5f 100%); padding:20px 28px; border-radius:var(--radius-xl); box-shadow:0 8px 32px rgba(15,23,42,.28),0 2px 8px rgba(37,99,235,.12); position:relative; overflow:hidden; border:none; }
@@ -339,6 +339,14 @@
 .text-danger{color:var(--danger)} .text-success{color:var(--success)} .text-warning{color:var(--warning)} .text-info{color:var(--info)}
 
 /* ═══ RESPONSIVE ═══ */
+
+/* ── Large screens (≥1440px) ── */
+@media(min-width:1440px) {
+  .attendance-page { padding:28px 36px; }
+  .stat-cards-grid { grid-template-columns:repeat(6,1fr); }
+  .guard-grid { grid-template-columns:repeat(5,1fr); }
+  .alert-cards-grid { grid-template-columns:repeat(3,1fr); }
+}
 
 /* ── Tablet (900-1200px) ── */
 @media(max-width:1200px) {

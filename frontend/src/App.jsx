@@ -33,13 +33,18 @@ import LocalPurchase from "./pages/Store/LocalPurchase";
 import ConsumptionRecord from "./pages/Store/ConsumptionRecord";
 import StockAvailable from "./pages/Store/StockAvailable";
 import GRNDocs from "./pages/Store/GRNDocs";
- 
+
 // Procurement
-import PaymentRequest from "./pages/Procurement/PaymentRequest";
-import PurchaseRequest from "./pages/Procurement/PurchaseRequest";
+import ItemList from "./pages/Procurement/ItemList";
+import VendorList from "./pages/Procurement/VendorList";
+import CompanyList from "./pages/Procurement/CompanyList";
+import CreateOrder from "./pages/Procurement/CreateOrder";
 import OrderRecord from "./pages/Procurement/OrderRecord";
-import PurchaseOrder from "./pages/Procurement/PurchaseOrder";
- 
+import TermCondition from "./pages/Procurement/TermCondition";
+import PaymentTerms from "./pages/Procurement/PaymentTerms";
+import GovernmentLaws from "./pages/Procurement/GovernmentLaws";
+import SiteList from "./pages/Procurement/SiteList";
+
 // Images
 import AllImages from "./pages/Images/AllImages";
 import CompareImages from "./pages/Images/CompareImages";
@@ -95,6 +100,15 @@ function App() {
   const renderPage = () => {
     if (activeTab === "about") return <About />;
     if (activeTab === "profile") return <Profile />;
+
+    // Global procurement setup tabs — no project needed
+    if (activeTab === "proc_setup__item_list") return <ItemList />;
+    if (activeTab === "proc_setup__vendor_list") return <VendorList />;
+    if (activeTab === "proc_setup__company_list") return <CompanyList />;
+    if (activeTab === "proc_setup__term_condition") return <TermCondition />;
+    if (activeTab === "proc_setup__payment_terms") return <PaymentTerms />;
+    if (activeTab === "proc_setup__government_laws") return <GovernmentLaws />;
+    if (activeTab === "proc_setup__site_list") return <SiteList />;
  
     if (!selectedProject) {
       return (
@@ -127,10 +141,8 @@ function App() {
       case "store_consumption_record": return <ConsumptionRecord project={selectedProject} />;
       case "store_stock_available": return <StockAvailable project={selectedProject} />;
       case "store_grn_docs": return <GRNDocs project={selectedProject} />;
-      case "procurement_payment_request": return <PaymentRequest project={selectedProject} />;
-      case "procurement_purchase_request": return <PurchaseRequest project={selectedProject} />;
-      case "procurement_order_record": return <OrderRecord project={selectedProject} />;
-      case "procurement_purchase_order": return <PurchaseOrder project={selectedProject} />;
+      case "procurement__create_order": return <CreateOrder project={selectedProject} />;
+      case "procurement__order_record": return <OrderRecord project={selectedProject} />;
       case "images_all_images": return <AllImages project={selectedProject} />;
       case "images_compare_images": return <CompareImages project={selectedProject} />;
       case "staff": return <Attendance selectedProject={selectedProject} />;
