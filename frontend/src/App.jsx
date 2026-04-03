@@ -44,6 +44,7 @@ import TermCondition from "./pages/Procurement/TermCondition";
 import PaymentTerms from "./pages/Procurement/PaymentTerms";
 import GovernmentLaws from "./pages/Procurement/GovernmentLaws";
 import SiteList from "./pages/Procurement/SiteList";
+import UOMList from "./pages/Procurement/UOMList";
 
 // Images
 import AllImages from "./pages/Images/AllImages";
@@ -109,6 +110,7 @@ function App() {
     if (activeTab === "proc_setup__payment_terms") return <PaymentTerms />;
     if (activeTab === "proc_setup__government_laws") return <GovernmentLaws />;
     if (activeTab === "proc_setup__site_list") return <SiteList />;
+    if (activeTab === "proc_setup__uom") return <UOMList />;
  
     if (!selectedProject) {
       return (

@@ -9,6 +9,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 const ITEMS_PATH   = "/Autox/Global/Procurement Setup/Items.xlsx";
 const VENDORS_PATH = "/Autox/Global/Procurement Setup/Vendors.xlsx";
 const SITES_PATH   = "/Autox/Global/Procurement Setup/Site-List.xlsx";
+const UOM_PATH     = "/Autox/Global/Procurement Setup/UOM.xlsx";
 
 /* ─── Excel column definitions ─── */
 // Items sheet columns (row index):
@@ -324,6 +325,65 @@ router.delete("/sites/:idx", async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error("Site delete error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ════════════════════════════════════
+   UOM
+════════════════════════════════════ */
+
+// GET all UOMs
+router.get("/uom", async (_req, res) => {
+  try {
+    const rows = await graphHelper.readSheet(UOM_PATH, "Sheet1");
+    const uoms = (rows || []).slice(1).map(r => ({
+      uomName: r[0] || "",
+      uomCode: r[1] || "",
+    }));
+    res.json({ uoms });
+  } catch (err) {
+    console.error("UOM read error:", err.message);
+    res.json({ uoms: [] });
+  }
+});
+
+// POST add UOM
+router.post("/uom", async (req, res) => {
+  try {
+    const { uomName, uomCode } = req.body;
+    const tableName = await graphHelper.getFirstTableName(UOM_PATH, "Sheet1");
+    await graphHelper.addRows(UOM_PATH, "Sheet1", tableName, [[uomName || "", uomCode || ""]]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("UOM add error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT update UOM
+router.put("/uom/:idx", async (req, res) => {
+  try {
+    const idx = parseInt(req.params.idx);
+    const { uomName, uomCode } = req.body;
+    const tableName = await graphHelper.getFirstTableName(UOM_PATH, "Sheet1");
+    await graphHelper.updateRow(UOM_PATH, "Sheet1", tableName, idx, [uomName || "", uomCode || ""]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("UOM update error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE UOM
+router.delete("/uom/:idx", async (req, res) => {
+  try {
+    const idx = parseInt(req.params.idx);
+    const tableName = await graphHelper.getFirstTableName(UOM_PATH, "Sheet1");
+    await graphHelper.deleteRow(UOM_PATH, "Sheet1", tableName, idx);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("UOM delete error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });

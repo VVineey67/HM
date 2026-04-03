@@ -14,7 +14,7 @@ const globalMenu = [
   { id: "about",       label: "Team Bootes",      icon: Info           },
   { id: "boq_prepare", label: "BOQ Prepare",       icon: FileSpreadsheet },
   { id: "proc_setup",  label: "Procurement Setup", icon: Settings2,
-    sub: ["Item List","Vendor List","Company List","Site List","Term Condition","Payment Terms","Government Laws"] },
+    sub: ["Company List","Site List","Vendor List","UOM","Item List","Term Condition","Payment Terms","Government Laws"] },
 ];
 
 const projectMenu = [

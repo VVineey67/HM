@@ -4,12 +4,12 @@ import { Plus, Upload, Search, Pencil, Trash2, X, Package, ChevronDown, Image as
 const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
 const CATEGORIES = ["Civil", "Electrical", "Plumbing", "HVAC", "Finishing", "Structural", "Safety", "Tools", "Other"];
-const UNITS = ["nos", "kg", "ltr", "mtr", "sqm", "cum", "bag", "set", "pair", "roll", "box"];
 
 const emptyForm = { materialName: "", make: "", description: "", category: "", unit: "", qty: "", image: null, imagePreview: "" };
 
 export default function ItemList() {
   const [items, setItems]       = useState([]);
+  const [uoms, setUoms]         = useState([]);
   const [loading, setLoading]   = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm]         = useState(emptyForm);
@@ -20,7 +20,15 @@ export default function ItemList() {
   const fileRef                 = useRef();
   const csvRef                  = useRef();
 
-  useEffect(() => { fetchItems(); }, []);
+  useEffect(() => { fetchItems(); fetchUoms(); }, []);
+
+  const fetchUoms = async () => {
+    try {
+      const res  = await fetch(`${API}/api/procurement/uom`);
+      const data = await res.json();
+      setUoms(data.uoms || []);
+    } catch { setUoms([]); }
+  };
 
   const fetchItems = async () => {
     setLoading(true);
@@ -248,7 +256,7 @@ export default function ItemList() {
                   <select value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))}
                     className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-400 text-slate-600 bg-white">
                     <option value="">Select…</option>
-                    {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                    {uoms.map(u => <option key={u.uomCode || u.uomName} value={u.uomCode}>{u.uomName} ({u.uomCode})</option>)}
                   </select>
                 </div>
 
