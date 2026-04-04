@@ -20,6 +20,18 @@ const calcWorkingHours = (inTime, outTime) => {
   return { workingHrs: fmt(total), otHrs: fmt(ot) };
 };
 
+/* ── Backend cache (60s TTL per project) ── */
+const _cache = {};
+const CACHE_TTL = 60 * 1000;
+
+const getCached = (key) => {
+  const entry = _cache[key];
+  if (entry && Date.now() - entry.ts < CACHE_TTL) return entry.data;
+  return null;
+};
+const setCache = (key, data) => { _cache[key] = { data, ts: Date.now() }; };
+const clearCache = (projectId) => { delete _cache[projectId]; };
+
 /* ── Fetch all rows (single query, high limit) ── */
 const TABLES_WITH_DATE = ["attendance", "guard_attendance"];
 
@@ -42,6 +54,9 @@ const fetchAll = async (table, filters = {}) => {
 router.get("/read/:projectId", async (req, res) => {
   try {
     const { projectId } = req.params;
+
+    const cached = getCached(projectId);
+    if (cached) return res.json(cached);
 
     const [staffData, guardsData, scData, gcData] = await Promise.all([
       fetchAll("attendance",      { project_id: projectId }),
@@ -115,7 +130,9 @@ router.get("/read/:projectId", async (req, res) => {
       remarks:     r.remarks     || "",
     }));
 
-    res.json({ staff, guards, staffContacts, guardContacts, contacts: staffContacts });
+    const result = { staff, guards, staffContacts, guardContacts, contacts: staffContacts };
+    setCache(projectId, result);
+    res.json(result);
   } catch (err) {
     console.error("Attendance read error:", err.message);
     res.status(500).json({ error: "Failed to fetch attendance data" });
@@ -128,6 +145,7 @@ router.get("/read/:projectId", async (req, res) => {
 router.post("/add/:projectId/:sheetName", async (req, res) => {
   try {
     const { projectId, sheetName } = req.params;
+    clearCache(projectId);
     const data = req.body;
 
     if (sheetName === "Staff") {
@@ -213,6 +231,7 @@ router.post("/add/:projectId/:sheetName", async (req, res) => {
 router.patch("/update/:projectId/:sheetName/:id", async (req, res) => {
   try {
     const { projectId, sheetName, id } = req.params;
+    clearCache(projectId);
     const data = req.body;
 
     if (sheetName === "Staff") {
@@ -283,6 +302,8 @@ router.patch("/update/:projectId/:sheetName/:id", async (req, res) => {
 ═══════════════════════════════════ */
 router.delete("/delete/:projectId/:sheetName/:id", async (req, res) => {
   try {
+    const { projectId } = req.params;
+    clearCache(projectId);
     const { sheetName, id } = req.params;
     const tableMap = { Staff: "attendance", Guard: "guard_attendance", SC: "staff_contacts", Contact: "staff_contacts", GC: "guard_contacts" };
     const table = tableMap[sheetName];
