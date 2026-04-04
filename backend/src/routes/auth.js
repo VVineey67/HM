@@ -20,17 +20,18 @@ router.post("/login", async (req, res) => {
   if (!email || !password)
     return res.status(400).json({ error: "Email aur password required hai" });
 
-  const authClient = getAdminClient();
-  const { data, error } = await authClient.auth.signInWithPassword({ email, password });
+  const admin = getAdminClient();
+
+  // Run both in parallel: sign in + fetch profile by email
+  const [authResult, profileResult] = await Promise.all([
+    admin.auth.signInWithPassword({ email, password }),
+    admin.from("users").select("*").eq("email", email).single(),
+  ]);
+
+  const { data, error } = authResult;
   if (error) return res.status(401).json({ error: "Email ya password galat hai" });
 
-  // User ka profile + role fetch karo (fresh admin client use karo)
-  const admin = getAdminClient();
-  const { data: profile } = await admin
-    .from("users")
-    .select("*")
-    .eq("id", data.user.id)
-    .single();
+  const profile = profileResult.data;
 
   if (!profile || !profile.is_active)
     return res.status(403).json({ error: "Account inactive hai, admin se contact karo" });
