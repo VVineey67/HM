@@ -177,36 +177,36 @@ const Sidebar = ({
   return (
     <motion.div
       initial={false}
-      animate={{ width: collapsed ? "60px" : "248px" }}
+      animate={{ width: collapsed ? "56px" : "220px" }}
       transition={{ duration: 0.22, ease: "easeInOut" }}
       className="h-screen flex flex-col shrink-0 overflow-hidden"
       style={{ background: "#1c1c1e", borderRight: "1px solid rgba(255,255,255,0.07)" }}
     >
       {/* ── HEADER ── */}
-      <div className={`shrink-0 px-3 py-3 border-b flex items-center gap-2.5 ${collapsed ? "justify-center" : "justify-between"}`}
+      <div className={`shrink-0 border-b ${collapsed ? "px-2 py-3 flex justify-center" : "px-3 py-3"}`}
         style={{ borderColor: "rgba(255,255,255,0.07)" }}>
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-8 rounded-xl bg-white flex items-center justify-center shrink-0 shadow-md">
-            <img src="/logo.png" className="w-5 h-5" alt="logo" />
-          </div>
-          {!collapsed && (
-            <div className="min-w-0 flex-1">
-              <p className="text-[13.5px] font-bold text-white leading-none truncate">BOOTES</p>
-              <p className="text-[10px] text-[#636366] mt-0.5 truncate">bootes.in</p>
+        {collapsed ? (
+          <button onClick={() => setIsCollapsed(false)} title="Expand">
+            <div className="w-8 h-8 rounded-xl bg-white flex items-center justify-center shadow-md">
+              <img src="/logo.png" className="w-5 h-5" alt="logo" />
             </div>
-          )}
-        </div>
-        {!collapsed && (
-          <button onClick={() => setIsCollapsed(!isCollapsed)}
-            className="text-[#636366] hover:text-[#aeaeb2] transition-colors shrink-0">
-            <ChevronsUpDown size={15} />
           </button>
-        )}
-        {collapsed && (
-          <button onClick={() => setIsCollapsed(false)}
-            className="text-[#636366] hover:text-[#aeaeb2] transition-colors">
-            <ChevronRight size={13} />
-          </button>
+        ) : (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center shrink-0 shadow-md">
+                <img src="/logo.png" className="w-6 h-6" alt="logo" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[14px] font-bold text-white leading-tight tracking-wide">BOOTES</p>
+                <p className="text-[10px] text-[#48484a] leading-tight">A Net-Zero Engineering Co.</p>
+              </div>
+            </div>
+            <button onClick={() => setIsCollapsed(true)}
+              className="text-[#48484a] hover:text-[#8b8b8f] transition-colors shrink-0 ml-1">
+              <ChevronsUpDown size={14} />
+            </button>
+          </div>
         )}
       </div>
 
@@ -276,11 +276,12 @@ const Sidebar = ({
       </div>
 
       {/* ── FOOTER ── */}
-      <div className="shrink-0 px-3 py-3" style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }}>
+      <div className="shrink-0 px-2 py-2" style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }}>
         {!collapsed ? (
-          <div className="w-full flex items-center gap-2.5 rounded-lg px-2 py-2 hover:bg-white/5 transition-all group">
+          <div className="rounded-xl px-2.5 py-2 flex items-center gap-2.5"
+            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
             <button onClick={() => setActiveTab("profile")} className="flex items-center gap-2.5 flex-1 min-w-0 text-left">
-              <div className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0 overflow-hidden"
+              <div className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0 overflow-hidden ring-2 ring-white/10"
                 style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)" }}>
                 {currentUser.avatar
                   ? <img src={currentUser.avatar} alt="" className="w-full h-full object-cover" />
@@ -288,25 +289,29 @@ const Sidebar = ({
                 }
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[12.5px] font-semibold text-white truncate leading-none">{currentUser.name || userName}</p>
-                <p className="text-[11px] text-[#636366] mt-0.5 truncate">{currentUser.email || userEmail}</p>
+                <p className="text-[12px] font-semibold text-white truncate leading-tight">{currentUser.name || userName}</p>
+                <p className="text-[10px] text-[#48484a] mt-0.5 truncate">{currentUser.email || userEmail}</p>
               </div>
             </button>
             <button onClick={onLogout} title="Logout"
-              className="text-[#48484a] hover:text-red-400 transition-colors p-1 rounded shrink-0">
+              className="text-[#48484a] hover:text-red-400 transition-colors p-1.5 rounded-lg hover:bg-white/5 shrink-0">
               <LogOut size={13} />
             </button>
           </div>
         ) : (
-          <div className="flex justify-center">
+          <div className="flex flex-col items-center gap-2">
             <button onClick={() => setActiveTab("profile")} title="Profile">
-              <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white overflow-hidden"
+              <div className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white overflow-hidden ring-2 ring-white/10"
                 style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)" }}>
                 {currentUser.avatar
                   ? <img src={currentUser.avatar} alt="" className="w-full h-full object-cover" />
                   : (currentUser.name || userName).split(" ").map(n => n[0]).join("").slice(0,2).toUpperCase()
                 }
               </div>
+            </button>
+            <button onClick={onLogout} title="Logout"
+              className="text-[#48484a] hover:text-red-400 transition-colors">
+              <LogOut size={12} />
             </button>
           </div>
         )}

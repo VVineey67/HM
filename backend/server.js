@@ -15,7 +15,7 @@ const usersRoutes       = require("./src/routes/users");
 const app = express();
 
 // Middleware
-app.use(cors());
+app.use(cors({ origin: "*", credentials: false }));
 app.use(express.json({ limit: "5mb" }));
 
 // Routes
