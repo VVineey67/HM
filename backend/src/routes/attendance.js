@@ -20,29 +20,20 @@ const calcWorkingHours = (inTime, outTime) => {
   return { workingHrs: fmt(total), otHrs: fmt(ot) };
 };
 
-/* ── Fetch all rows bypassing 1000 row default limit ── */
+/* ── Fetch all rows (single query, high limit) ── */
 const TABLES_WITH_DATE = ["attendance", "guard_attendance"];
 
 const fetchAll = async (table, filters = {}) => {
-  const PAGE = 1000;
-  let all = [], from = 0;
-  while (true) {
-    let q = supabase.from(table).select("*");
-    if (TABLES_WITH_DATE.includes(table)) {
-      q = q.order("date", { ascending: true });
-    } else {
-      q = q.order("created_at", { ascending: true });
-    }
-    q = q.range(from, from + PAGE - 1);
-    Object.entries(filters).forEach(([k, v]) => { q = q.eq(k, v); });
-    const { data, error } = await q;
-    if (error) throw error;
-    if (!data || data.length === 0) break;
-    all = all.concat(data);
-    if (data.length < PAGE) break;
-    from += PAGE;
+  let q = supabase.from(table).select("*").limit(10000);
+  if (TABLES_WITH_DATE.includes(table)) {
+    q = q.order("date", { ascending: true });
+  } else {
+    q = q.order("created_at", { ascending: true });
   }
-  return all;
+  Object.entries(filters).forEach(([k, v]) => { q = q.eq(k, v); });
+  const { data, error } = await q;
+  if (error) throw error;
+  return data || [];
 };
 
 /* ═══════════════════════════════════

@@ -10,6 +10,9 @@ import "./Attendance.css";
 
 const TABS = ["Today", "Staff", "Guard", "Contacts"];
 
+// Module-level cache — survives tab switches (component unmount/remount)
+const _cache = {};
+
 const Attendance = ({ selectedProject }) => {
   const [activeTab, setActiveTab] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -38,18 +41,20 @@ const Attendance = ({ selectedProject }) => {
   };
 
   useEffect(() => {
-    if (selectedProject) {
-      // Reset data before fetching new project
-      setStaffData([]);
-      setGuardData([]);
-      setStaffContacts([]);
-      setGuardContacts([]);
-      fetchData();
-    }
+    if (selectedProject) fetchData();
   }, [selectedProject]);
 
   const fetchData = async () => {
-    setLoading(true);
+    // Serve from cache immediately, then refresh in background
+    if (_cache[selectedProject]) {
+      const c = _cache[selectedProject];
+      setStaffData(c.staff);
+      setGuardData(c.guard);
+      setStaffContacts(c.staffContacts);
+      setGuardContacts(c.guardContacts);
+    } else {
+      setLoading(true);
+    }
     try {
       const res = await API.get(`/api/attendance/read/${selectedProject}`);
       // ═══ STAFF PARSING ═══
@@ -125,6 +130,7 @@ const Attendance = ({ selectedProject }) => {
       setGuardData(guardParsed);
       setStaffContacts(staffContactsParsed);
       setGuardContacts(guardContactsParsed);
+      _cache[selectedProject] = { staff: staffParsed, guard: guardParsed, staffContacts: staffContactsParsed, guardContacts: guardContactsParsed };
     } catch (err) {
       console.error("Error fetching attendance:", err);
       setStaffData([]);
@@ -145,8 +151,8 @@ const Attendance = ({ selectedProject }) => {
       const sheetMap = { staff: "Staff", guard: "Guard", staffContact: "SC", guardContact: "GC" };
       const sheet = sheetMap[data.type];
       const payload = buildPayload(data);
-      console.log("Sending update payload:", payload); // DEBUG
       await API.patch(`/api/attendance/update/${selectedProject}/${sheet}/${data.id}`, payload);
+      delete _cache[selectedProject];
       showToast("Record updated successfully");
       fetchData();
     } catch (err) {
@@ -161,6 +167,7 @@ const Attendance = ({ selectedProject }) => {
     try {
       const sheetMap = { staff: "Staff", guard: "Guard", staffContact: "SC", guardContact: "GC" };
       await API.delete(`/api/attendance/delete/${selectedProject}/${sheetMap[record.type]}/${record.id}`);
+      delete _cache[selectedProject];
       showToast("Record deleted successfully");
       fetchData();
     } catch (err) {
@@ -247,6 +254,7 @@ const Attendance = ({ selectedProject }) => {
       const sheet = sheetMap[data.type];
       const payload = buildPayload(data);
       await API.post(`/api/attendance/add/${selectedProject}/${sheet}`, payload);
+      delete _cache[selectedProject];
       showToast("Record added successfully");
       fetchData();
     } catch (err) {
