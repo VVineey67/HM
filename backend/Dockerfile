@@ -8,5 +8,6 @@ RUN npm install --omit=dev
 
 COPY . .
 
-# Railway sets PORT automatically — do not hardcode
+EXPOSE 8080
+
 CMD ["node", "server.js"]
