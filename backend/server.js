@@ -14,9 +14,14 @@ const usersRoutes       = require("./src/routes/users");
 
 const app = express();
 
-// Middleware
-app.options("/(.*)", cors({ origin: "*", credentials: false }));
-app.use(cors({ origin: "*", credentials: false }));
+// Middleware — manual CORS headers (works with all Express versions)
+app.use((req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  if (req.method === "OPTIONS") return res.sendStatus(200);
+  next();
+});
 app.use(express.json({ limit: "5mb" }));
 
 // Routes
