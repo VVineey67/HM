@@ -24,6 +24,8 @@ const emptyForm = {
 
 const CSV_HEADERS = ["Site Name", "Site Code", "City", "State", "Billing Address", "Site Address"];
 
+const PER_PAGE = 10;
+
 export default function SiteList() {
   const [sites, setSites]           = useState([]);
   const [loading, setLoading]       = useState(true);
@@ -32,11 +34,12 @@ export default function SiteList() {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const exportMenuRef                       = useRef();
   const [form, setForm]             = useState(emptyForm);
-  const [editIdx, setEditIdx]       = useState(null);
+  const [editId, setEditId]         = useState(null);
   const [search, setSearch]         = useState("");
   const [saving, setSaving]         = useState(false);
   const [toast, setToast]           = useState(null);
   const [bulking, setBulking]       = useState(false);
+  const [page, setPage]             = useState(1);
   const csvRef                      = useRef();
   const bulkMenuRef                 = useRef();
 
@@ -64,26 +67,26 @@ export default function SiteList() {
 
   const showToast = (msg, type = "success") => { setToast({ msg, type }); setTimeout(() => setToast(null), 3500); };
 
-  const openAdd  = () => { setForm(emptyForm); setEditIdx(null); setShowModal(true); };
-  const openEdit = (s, idx) => { setForm({ ...emptyForm, ...s }); setEditIdx(idx); setShowModal(true); };
+  const openAdd  = () => { setForm(emptyForm); setEditId(null); setShowModal(true); };
+  const openEdit = (s) => { setForm({ ...emptyForm, ...s }); setEditId(s.id); setShowModal(true); };
 
   const handleSave = async () => {
     if (!form.siteName.trim()) return showToast("Site Name required", "error");
     setSaving(true);
     try {
-      const url    = editIdx !== null ? `${API}/api/procurement/sites/${editIdx}` : `${API}/api/procurement/sites`;
-      const method = editIdx !== null ? "PUT" : "POST";
+      const url    = editId ? `${API}/api/procurement/sites/${editId}` : `${API}/api/procurement/sites`;
+      const method = editId ? "PUT" : "POST";
       await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
-      showToast(editIdx !== null ? "Site updated" : "Site added");
+      showToast(editId ? "Site updated" : "Site added");
       setShowModal(false); fetchSites();
     } catch { showToast("Failed to save", "error"); }
     setSaving(false);
   };
 
-  const handleDelete = async (idx) => {
+  const handleDelete = async (id) => {
     if (!confirm("Delete this site?")) return;
     try {
-      await fetch(`${API}/api/procurement/sites/${idx}`, { method: "DELETE" });
+      await fetch(`${API}/api/procurement/sites/${id}`, { method: "DELETE" });
       showToast("Site deleted"); fetchSites();
     } catch { showToast("Failed to delete", "error"); }
   };
@@ -213,6 +216,8 @@ export default function SiteList() {
     s.city?.toLowerCase().includes(search.toLowerCase()) ||
     s.state?.toLowerCase().includes(search.toLowerCase())
   );
+  const totalPages = Math.ceil(filtered.length / PER_PAGE) || 1;
+  const paginated  = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
 
 
   return (
@@ -293,7 +298,7 @@ export default function SiteList() {
       {/* Search */}
       <div className="relative mb-5">
         <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, code, city or state…"
+        <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Search by name, code, city or state…"
           className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm outline-none focus:border-slate-400 bg-white text-slate-700" />
       </div>
 
@@ -319,9 +324,9 @@ export default function SiteList() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((s, idx) => (
+                {paginated.map((s, idx) => (
                   <tr key={idx} className={`transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-slate-50"} hover:bg-blue-50/50`}>
-                    <td className="px-4 py-3 text-slate-400 text-xs border border-slate-200 align-top">{idx + 1}</td>
+                    <td className="px-4 py-3 text-slate-400 text-xs border border-slate-200 align-top">{(page - 1) * PER_PAGE + idx + 1}</td>
                     <td className="px-4 py-3 font-semibold text-slate-800 text-sm border border-slate-200 align-top leading-snug">{s.siteName}</td>
                     <td className="px-4 py-3 border border-slate-200 align-top">
                       <span className="inline-block px-2 py-0.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-mono font-semibold whitespace-nowrap">{s.siteCode}</span>
@@ -332,8 +337,8 @@ export default function SiteList() {
                     <td className="px-4 py-3 text-slate-600 text-xs border border-slate-200 align-top leading-relaxed">{s.siteAddress}</td>
                     <td className="px-4 py-3 border border-slate-200 align-top">
                       <div className="flex items-center gap-1 justify-end">
-                        <button onClick={() => openEdit(s, idx)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all"><Pencil size={13} /></button>
-                        <button onClick={() => handleDelete(idx)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"><Trash2 size={13} /></button>
+                        <button onClick={() => openEdit(s)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all"><Pencil size={13} /></button>
+                        <button onClick={() => handleDelete(s.id)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"><Trash2 size={13} /></button>
                       </div>
                     </td>
                   </tr>
@@ -342,7 +347,30 @@ export default function SiteList() {
             </table>
           </div>
           <div className="px-4 py-3 border-t border-slate-200 bg-slate-50">
-            <p className="text-xs text-slate-400">{filtered.length} site{filtered.length !== 1 ? "s" : ""}</p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-slate-400">{filtered.length} sites · Page {page} of {totalPages}</p>
+              {totalPages > 1 && (
+                <div className="flex items-center gap-1">
+                  <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page === 1}
+                    className="px-2 py-1 rounded-lg text-xs font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 disabled:opacity-30 transition-all">‹</button>
+                  {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                    let n;
+                    if (totalPages <= 5) n = i + 1;
+                    else if (page <= 3) n = i + 1;
+                    else if (page >= totalPages - 2) n = totalPages - 4 + i;
+                    else n = page - 2 + i;
+                    return (
+                      <button key={n} onClick={() => setPage(n)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${page === n ? "bg-slate-900 text-white border-slate-900" : "text-slate-600 border-slate-200 hover:bg-slate-50"}`}>
+                        {n}
+                      </button>
+                    );
+                  })}
+                  <button onClick={() => setPage(p => Math.min(totalPages, p+1))} disabled={page === totalPages}
+                    className="px-2 py-1 rounded-lg text-xs font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 disabled:opacity-30 transition-all">›</button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -352,7 +380,7 @@ export default function SiteList() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-              <h2 className="text-base font-bold text-slate-800">{editIdx !== null ? "Edit Site" : "Add Site"}</h2>
+              <h2 className="text-base font-bold text-slate-800">{editId ? "Edit Site" : "Add Site"}</h2>
               <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
             </div>
             <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
@@ -370,7 +398,7 @@ export default function SiteList() {
                 className="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-200 transition-all">Cancel</button>
               <button onClick={handleSave} disabled={saving}
                 className="px-5 py-2 rounded-xl text-sm font-semibold bg-slate-900 text-white hover:bg-slate-700 transition-all disabled:opacity-50">
-                {saving ? "Saving…" : editIdx !== null ? "Update" : "Add Site"}
+                {saving ? "Saving…" : editId ? "Update" : "Add Site"}
               </button>
             </div>
           </div>

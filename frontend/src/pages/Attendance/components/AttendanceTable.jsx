@@ -28,6 +28,9 @@ const AttendanceTable = ({ records, columns, filters, statusFilter, onEdit, onDe
             r.sort((a, b) => {
               const parse = (s) => {
                 if (!s) return 0;
+                // ISO format: "2024-12-20" — directly sortable
+                if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(s).getTime();
+                // Legacy "DD-Mon-YY" format
                 const p = s.split("-");
                 if (p.length !== 3) return 0;
                 const MON = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};

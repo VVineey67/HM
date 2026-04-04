@@ -1,426 +1,388 @@
-const express = require("express");
-const router = express.Router();
-const multer = require("multer");
-const graphHelper = require("../helpers/graphHelper");
-const calcHelper = require("../helpers/calcHelper");
+const express  = require("express");
+const router   = express.Router();
+const multer   = require("multer");
+const supabase  = require("../helpers/supabaseHelper");
 
 const upload = multer({ storage: multer.memoryStorage() });
 
-/**
- * 1. READ: Staff + Guard + Contact
- * GET /api/attendance/read/:projectId
- */
+/* ─── Working hours calculator (HH:MM format) ─── */
+const calcWorkingHours = (inTime, outTime) => {
+  if (!inTime || !outTime) return { workingHrs: "0Hrs 0Min", otHrs: "0Hrs 0Min" };
+  const [ih, im] = inTime.split(":").map(Number);
+  const [oh, om] = outTime.split(":").map(Number);
+  if (isNaN(ih) || isNaN(im) || isNaN(oh) || isNaN(om)) return { workingHrs: "0Hrs 0Min", otHrs: "0Hrs 0Min" };
+  const inMin  = ih * 60 + im;
+  const outMin = oh * 60 + om;
+  if (outMin <= inMin) return { workingHrs: "0Hrs 0Min", otHrs: "0Hrs 0Min" };
+  const total = outMin - inMin;
+  const ot    = Math.max(0, total - 480);
+  const fmt   = (m) => `${Math.floor(m / 60)}Hrs ${m % 60}Min`;
+  return { workingHrs: fmt(total), otHrs: fmt(ot) };
+};
+
+/* ── Fetch all rows bypassing 1000 row default limit ── */
+const TABLES_WITH_DATE = ["attendance", "guard_attendance"];
+
+const fetchAll = async (table, filters = {}) => {
+  const PAGE = 1000;
+  let all = [], from = 0;
+  while (true) {
+    let q = supabase.from(table).select("*");
+    if (TABLES_WITH_DATE.includes(table)) {
+      q = q.order("date", { ascending: true });
+    } else {
+      q = q.order("created_at", { ascending: true });
+    }
+    q = q.range(from, from + PAGE - 1);
+    Object.entries(filters).forEach(([k, v]) => { q = q.eq(k, v); });
+    const { data, error } = await q;
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    all = all.concat(data);
+    if (data.length < PAGE) break;
+    from += PAGE;
+  }
+  return all;
+};
+
+/* ═══════════════════════════════════
+   GET /api/attendance/read/:projectId
+═══════════════════════════════════ */
 router.get("/read/:projectId", async (req, res) => {
   try {
     const { projectId } = req.params;
-    const filePath = `/Autox/${projectId}/Staff Attendance/Attendance.xlsx`;
 
-    const safeRead = (sheet) =>
-      graphHelper.readSheet(filePath, sheet).catch((e) => {
-        console.warn(`Sheet '${sheet}' not found or error:`, e.message);
-        return [];
-      });
-
-    const [staffData, guardData, staffContactData, guardContactData] = await Promise.all([
-      safeRead(projectId),
-      safeRead("Guard"),
-      safeRead("SC"),
-      safeRead("GC"),
+    const [staffData, guardsData, scData, gcData] = await Promise.all([
+      fetchAll("attendance",      { project_id: projectId }),
+      fetchAll("guard_attendance",{ project_id: projectId }),
+      fetchAll("staff_contacts",  { project_id: projectId }),
+      fetchAll("guard_contacts",  { project_id: projectId }),
     ]);
 
-    /* ================= STAFF (AUTO CALC ON READ) ================= */
-    // Excel columns: Date[0], SiteCod[1], Name[2], Designation[3], Department[4],
-    //                Status[5], InTime[6], OutTime[7], Shift[8], Remarks[9]
-    const staffWithCalc = (staffData || []).slice(1).map((r) => {
-      const { workingHrs, otHrs } =
-        calcHelper.calculateAttendance(r[6], r[7]);
+    const staffRes   = { data: staffData };
+    const guardsRes  = { data: guardsData };
+    const scRes      = { data: scData };
+    const gcRes      = { data: gcData };
 
-      return [
-        r[0],        // [0] Date
-        r[1] || "",  // [1] SiteCod
-        r[2],        // [2] Name
-        r[3] || "",  // [3] Designation
-        r[4] || "",  // [4] Department
-        r[5] || "",  // [5] Status
-        r[6],        // [6] InTime decimal
-        r[7],        // [7] OutTime decimal
-        r[8] || "Day", // [8] Shift
-        workingHrs,  // [9] Working Hrs (calculated)
-        otHrs,       // [10] OT Hrs (calculated)
-        r[9] || "",  // [11] Remarks
-      ];
+    const staff = (staffRes.data || []).map(r => {
+      const { workingHrs, otHrs } = calcWorkingHours(r.in_time, r.out_time);
+      return {
+        id:          r.id,
+        date:        r.date        || "",
+        siteCode:    r.site_code   || "",
+        name:        r.name        || "",
+        designation: r.designation || "",
+        department:  r.department  || "",
+        status:      r.status      || "",
+        inTime:      r.in_time     || "",
+        outTime:     r.out_time    || "",
+        shift:       r.shift       || "Day",
+        workingHrs,
+        otHrs,
+        remarks:     r.remarks     || "",
+      };
     });
 
-    res.json({
-      staff: staffWithCalc,
-      guards: guardData,
-      staffContacts: staffContactData,
-      guardContacts: guardContactData,
-      contacts: staffContactData
-    });
+    const guards = (guardsRes.data || []).map(r => ({
+      id:          r.id,
+      date:        r.date        || "",
+      siteCode:    r.site_code   || "",
+      name:        r.name        || "",
+      designation: r.type        || "Security Guard",
+      department:  r.location    || "",
+      status:      r.status      || "",
+      inTime:      r.in_time     || "",
+      outTime:     r.out_time    || "",
+      shift:       r.shift       || "Day",
+      remarks:     r.remarks     || "",
+    }));
+
+    const staffContacts = (scRes.data || []).map(r => ({
+      id:          r.id,
+      sNo:         r.id,
+      site:        r.project_id   || "",
+      empId:       r.emp_id        || "",
+      joiningDate: r.joining_date  || "",
+      email:       r.email         || "",
+      name:        r.name          || "",
+      designation: r.designation   || "",
+      department:  r.department    || "",
+      manager:     r.manager       || "",
+      contact:     r.contact_no    || "",
+    }));
+
+    const guardContacts = (gcRes.data || []).map(r => ({
+      id:          r.id,
+      sNo:         r.id,
+      site:        r.project_id  || "",
+      name:        r.name        || "",
+      joiningDate: r.joining_date|| "",
+      designation: r.designation || "",
+      status:      r.status      || "",
+      shift:       r.shift_duty  || "",
+      contact:     r.contact_no  || "",
+      remarks:     r.remarks     || "",
+    }));
+
+    res.json({ staff, guards, staffContacts, guardContacts, contacts: staffContacts });
   } catch (err) {
-    console.error("Read Error:", err.message);
-    res.status(500).json({ error: "Failed to fetch data from sheets" });
+    console.error("Attendance read error:", err.message);
+    res.status(500).json({ error: "Failed to fetch attendance data" });
   }
 });
 
-/**
- * 2. ADD
- */
+/* ═══════════════════════════════════
+   POST /api/attendance/add/:projectId/:sheetName
+═══════════════════════════════════ */
 router.post("/add/:projectId/:sheetName", async (req, res) => {
   try {
     const { projectId, sheetName } = req.params;
     const data = req.body;
-    const filePath = `/Autox/${projectId}/Staff Attendance/Attendance.xlsx`;
 
-    const targetSheet =
-      sheetName === "Staff" ? projectId :
-      sheetName === "Contact" ? "SC" :
-      sheetName;
+    if (sheetName === "Staff") {
+      const { error } = await supabase.from("attendance").insert({
+        project_id:  projectId,
+        date:        data.date        || null,
+        site_code:   data.siteCode    || data.site || projectId,
+        name:        data.name        || "",
+        designation: data.designation || "",
+        department:  data.department  || "",
+        status:      data.status      || "Absent",
+        in_time:     data.inTime      || data.in_time  || "",
+        out_time:    data.outTime     || data.out_time || "",
+        shift:       data.shift       || "Day",
+        remarks:     data.remarks     || "",
+      });
+      if (error) throw error;
 
-    // Duplicate EmpID check for Staff Contact (SC)
-    if ((sheetName === "Contact" || sheetName === "SC") && data.empId) {
-      const existing = await graphHelper.readSheet(filePath, "SC").catch(() => []);
-      const isDuplicate = (existing || []).slice(1).some(row => row[2] && String(row[2]).toLowerCase() === String(data.empId).toLowerCase());
-      if (isDuplicate) {
-        return res.status(400).json({ error: "Duplicate Employee ID", detail: `EmpID "${data.empId}" is already registered` });
+    } else if (sheetName === "Guard") {
+      const { error } = await supabase.from("guard_attendance").insert({
+        project_id: projectId,
+        date:       data.date        || null,
+        site_code:  data.siteCode    || data.site || projectId,
+        name:       data.name        || "",
+        type:       data.designation || data.type || "Security Guard",
+        location:   data.department  || data.location || "",
+        status:     data.status      || "Absent",
+        in_time:    data.inTime      || data.in_time  || "",
+        out_time:   data.outTime     || data.out_time || "",
+        shift:      data.shift       || "Day",
+        remarks:    data.remarks     || "",
+      });
+      if (error) throw error;
+
+    } else if (sheetName === "SC" || sheetName === "Contact") {
+      // Duplicate EmpID check
+      if (data.empId) {
+        const { data: existing } = await supabase
+          .from("staff_contacts")
+          .select("id")
+          .eq("project_id", projectId)
+          .ilike("emp_id", data.empId);
+        if (existing?.length > 0)
+          return res.status(400).json({ error: "Duplicate Employee ID", detail: `EmpID "${data.empId}" is already registered` });
       }
-    }
+      const { error } = await supabase.from("staff_contacts").insert({
+        project_id:   projectId,
+        emp_id:       data.empId       || "",
+        joining_date: data.joiningDate || null,
+        email:        data.emailId     || data.email || "",
+        name:         data.name        || "",
+        designation:  data.designation || "",
+        department:   data.department  || "",
+        manager:      data.manager     || "",
+        contact_no:   data.contactNo   || data.contact || "",
+      });
+      if (error) throw error;
 
-    const tableName = await graphHelper.getFirstTableName(filePath, targetSheet);
-
-    let payload = [];
-
-    if (sheetName === "Staff") {
-      // Excel Staff columns: Date, SiteCod, Name, Designation, Department, Status, InTime, OutTime, Shift, Remarks
-      payload = [
-        calcHelper.jsToExcelDate(data.date),
-        data.siteCode || data.site || projectId,
-        data.name || "",
-        data.designation || "",
-        data.department || "",
-        data.status || "Absent",
-        calcHelper.timeStringToDecimal(data.inTime),
-        calcHelper.timeStringToDecimal(data.outTime),
-        data.shift || "Day",
-        data.remarks || ""
-      ];
-    } else if (sheetName === "Guard") {
-      // Excel Guard columns: Date, SiteCod, Name, Type, Location, Status, InTime, OutTime, Shift, Remarks
-      payload = [
-        calcHelper.jsToExcelDate(data.date),
-        data.siteCode || data.site || projectId,
-        data.name || "",
-        data.designation || data.type || "Security Guard",
-        data.department || data.location || "",
-        data.status || "Absent",
-        calcHelper.timeStringToDecimal(data.inTime),
-        calcHelper.timeStringToDecimal(data.outTime),
-        data.shift || "Day",
-        data.remarks || ""
-      ];
-    } else if (sheetName === "Contact" || sheetName === "SC") {
-      payload = [
-        data.sNo,
-        data.site || projectId,
-        data.empId,
-        calcHelper.jsToExcelDate(data.joiningDate),
-        data.emailId,
-        data.name,
-        data.designation,
-        data.department || "",
-        data.manager,
-        data.contactNo
-      ];
     } else if (sheetName === "GC") {
-      payload = [
-        data.sNo,
-        data.site || projectId,
-        data.name || "",
-        calcHelper.jsToExcelDate(data.joiningDate),
-        data.designation || "Security Guard",
-        data.status || "Deactive",
-        data.shift || "",
-        data.contactNo || "",
-        data.remarks || ""
-      ];
+      const { error } = await supabase.from("guard_contacts").insert({
+        project_id:   projectId,
+        name:         data.name        || "",
+        joining_date: data.joiningDate || null,
+        designation:  data.designation || "Security Guard",
+        status:       data.status      || "Deactive",
+        shift_duty:   data.shift       || data.shiftDuty || "",
+        contact_no:   data.contactNo   || data.contact || "",
+        remarks:      data.remarks     || "",
+      });
+      if (error) throw error;
     }
 
-    await graphHelper.addRows(filePath, targetSheet, tableName, [payload]);
     res.json({ success: true });
   } catch (err) {
-    console.error("ADD ERROR:", err?.response?.data || err.message);
-    res.status(500).json({ error: "Failed to add record", detail: err?.response?.data?.error?.message || err.message });
+    console.error("ADD ERROR:", err.message);
+    res.status(500).json({ error: "Failed to add record", detail: err.message });
   }
 });
 
-/**
- * 3. UPDATE
- */
-router.patch("/update/:projectId/:sheetName/:rowIndex", async (req, res) => {
+/* ═══════════════════════════════════
+   PATCH /api/attendance/update/:projectId/:sheetName/:id
+═══════════════════════════════════ */
+router.patch("/update/:projectId/:sheetName/:id", async (req, res) => {
   try {
-    const { projectId, sheetName, rowIndex } = req.params;
+    const { projectId, sheetName, id } = req.params;
     const data = req.body;
-    const filePath = `/Autox/${projectId}/Staff Attendance/Attendance.xlsx`;
-
-    const targetSheet =
-      sheetName === "Staff" ? projectId :
-      sheetName === "Contact" ? "SC" :
-      sheetName;
-    const tableName = await graphHelper.getFirstTableName(filePath, targetSheet);
-
-    let payload = [];
 
     if (sheetName === "Staff") {
-      // Excel Staff columns: Date, SiteCod, Name, Designation, Department, Status, InTime, OutTime, Shift, Remarks
-      payload = [
-        calcHelper.jsToExcelDate(data.date),
-        data.siteCode || data.site || projectId,
-        data.name || "",
-        data.designation || "",
-        data.department || "",
-        data.status || "Absent",
-        calcHelper.timeStringToDecimal(data.inTime),
-        calcHelper.timeStringToDecimal(data.outTime),
-        data.shift || "Day",
-        data.remarks || ""
-      ];
+      const { error } = await supabase.from("attendance").update({
+        date:        data.date        || null,
+        site_code:   data.siteCode    || data.site || projectId,
+        name:        data.name        || "",
+        designation: data.designation || "",
+        department:  data.department  || "",
+        status:      data.status      || "Absent",
+        in_time:     data.inTime      || data.in_time  || "",
+        out_time:    data.outTime     || data.out_time || "",
+        shift:       data.shift       || "Day",
+        remarks:     data.remarks     || "",
+      }).eq("id", id);
+      if (error) throw error;
+
     } else if (sheetName === "Guard") {
-      // Excel Guard columns: Date, SiteCod, Name, Type, Location, Status, InTime, OutTime, Shift, Remarks
-      payload = [
-        calcHelper.jsToExcelDate(data.date),
-        data.siteCode || data.site || projectId,
-        data.name || "",
-        data.designation || data.type || "Security Guard",
-        data.department || data.location || "",
-        data.status || "Absent",
-        calcHelper.timeStringToDecimal(data.inTime),
-        calcHelper.timeStringToDecimal(data.outTime),
-        data.shift || "Day",
-        data.remarks || ""
-      ];
-    } else if (sheetName === "Contact" || sheetName === "SC") {
-      payload = [
-        data.sNo,
-        data.site || projectId,
-        data.empId,
-        calcHelper.jsToExcelDate(data.joiningDate),
-        data.emailId,
-        data.name,
-        data.designation,
-        data.department || "",
-        data.manager,
-        data.contactNo
-      ];
+      const { error } = await supabase.from("guard_attendance").update({
+        date:      data.date        || null,
+        site_code: data.siteCode    || data.site || projectId,
+        name:      data.name        || "",
+        type:      data.designation || data.type || "Security Guard",
+        location:  data.department  || data.location || "",
+        status:    data.status      || "Absent",
+        in_time:   data.inTime      || data.in_time  || "",
+        out_time:  data.outTime     || data.out_time || "",
+        shift:     data.shift       || "Day",
+        remarks:   data.remarks     || "",
+      }).eq("id", id);
+      if (error) throw error;
+
+    } else if (sheetName === "SC" || sheetName === "Contact") {
+      const { error } = await supabase.from("staff_contacts").update({
+        emp_id:       data.empId       || "",
+        joining_date: data.joiningDate || null,
+        email:        data.emailId     || data.email || "",
+        name:         data.name        || "",
+        designation:  data.designation || "",
+        department:   data.department  || "",
+        manager:      data.manager     || "",
+        contact_no:   data.contactNo   || data.contact || "",
+      }).eq("id", id);
+      if (error) throw error;
+
     } else if (sheetName === "GC") {
-      payload = [
-        data.sNo,
-        data.site || projectId,
-        data.name || "",
-        calcHelper.jsToExcelDate(data.joiningDate),
-        data.designation || "Security Guard",
-        data.status || "Deactive",
-        data.shift || "",
-        data.contactNo || "",
-        data.remarks || ""
-      ];
+      const { error } = await supabase.from("guard_contacts").update({
+        name:         data.name        || "",
+        joining_date: data.joiningDate || null,
+        designation:  data.designation || "Security Guard",
+        status:       data.status      || "Deactive",
+        shift_duty:   data.shift       || data.shiftDuty || "",
+        contact_no:   data.contactNo   || data.contact || "",
+        remarks:      data.remarks     || "",
+      }).eq("id", id);
+      if (error) throw error;
     }
 
-    await graphHelper.updateRow(
-      filePath,
-      targetSheet,
-      tableName,
-      parseInt(rowIndex),
-      payload
-    );
-
     res.json({ success: true });
   } catch (err) {
-    console.error("UPDATE ERROR:", err?.response?.data || err.message);
-    res.status(500).json({ error: "Update failed", detail: err?.response?.data?.error?.message || err.message });
+    console.error("UPDATE ERROR:", err.message);
+    res.status(500).json({ error: "Update failed", detail: err.message });
   }
 });
 
-/**
- * 4. DELETE
- */
-router.delete("/delete/:projectId/:sheetName/:rowIndex", async (req, res) => {
+/* ═══════════════════════════════════
+   DELETE /api/attendance/delete/:projectId/:sheetName/:id
+═══════════════════════════════════ */
+router.delete("/delete/:projectId/:sheetName/:id", async (req, res) => {
   try {
-    const { projectId, sheetName, rowIndex } = req.params;
-    const filePath = `/Autox/${projectId}/Staff Attendance/Attendance.xlsx`;
-
-    const targetSheet = sheetName === "Staff" ? projectId : sheetName;
-    const tableName = await graphHelper.getFirstTableName(filePath, targetSheet);
-
-    await graphHelper.deleteRow(
-      filePath,
-      targetSheet,
-      tableName,
-      parseInt(rowIndex)
-    );
-
+    const { sheetName, id } = req.params;
+    const tableMap = { Staff: "attendance", Guard: "guard_attendance", SC: "staff_contacts", Contact: "staff_contacts", GC: "guard_contacts" };
+    const table = tableMap[sheetName];
+    if (!table) return res.status(400).json({ error: `Unknown sheet: ${sheetName}` });
+    const { error } = await supabase.from(table).delete().eq("id", id);
+    if (error) throw error;
     res.json({ success: true });
   } catch (err) {
-    console.error("DELETE ERROR:", err?.response?.data || err.message);
-    res.status(500).json({ error: "Delete failed", detail: err?.response?.data?.error?.message || err.message });
+    console.error("DELETE ERROR:", err.message);
+    res.status(500).json({ error: "Delete failed", detail: err.message });
   }
 });
 
-/**
- * 5. BULK UPLOAD
- * POST /api/attendance/bulk-upload/:projectId/:type
- * Accepts CSV file, validates format, appends to Excel table
- */
-
-// Expected headers per type (must match Excel table exactly)
+/* ═══════════════════════════════════
+   POST /api/attendance/bulk-upload/:projectId/:type
+═══════════════════════════════════ */
 const EXPECTED_HEADERS = {
   staff:   ["Date", "SiteCode", "Name", "Designation", "Department", "Status", "InTime", "OutTime", "Shift", "Remarks"],
   guard:   ["Date", "SiteCode", "Name", "Type", "Location", "Status", "InTime", "OutTime", "Shift", "Remarks"],
   contact: ["S.No", "Site", "EmpID", "JoiningDate", "Email", "Name", "Designation", "Department", "Manager", "Contact"],
   sc:      ["S.No", "Site", "EmpID", "JoiningDate", "Email", "Name", "Designation", "Department", "Manager", "Contact"],
-  gc:      ["S.No", "Site", "Name", "JoiningDate", "Designation", "Status", "ShiftDuty", "ContactNo", "Remarks"]
+  gc:      ["S.No", "Site", "Name", "JoiningDate", "Designation", "Status", "ShiftDuty", "ContactNo", "Remarks"],
 };
 
-// Parse a single CSV line into array of fields
-function parseCSVLine(line) {
-  const result = [];
-  let cur = "", inQuote = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
+const parseCSVLine = (line) => {
+  const result = []; let cur = "", inQuote = false;
+  for (const ch of line) {
     if (ch === '"') { inQuote = !inQuote; continue; }
     if (ch === "," && !inQuote) { result.push(cur.trim()); cur = ""; continue; }
     cur += ch;
   }
   result.push(cur.trim());
   return result;
-}
+};
 
-const normalizeHeader = (h) =>
-  String(h || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+const normalizeHeader = (h) => String(h || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 
 router.post("/bulk-upload/:projectId/:type", upload.single("file"), async (req, res) => {
   try {
     const { projectId, type } = req.params;
-    const filePath = `/Autox/${projectId}/Staff Attendance/Attendance.xlsx`;
-
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
     const expected = EXPECTED_HEADERS[type];
     if (!expected) return res.status(400).json({ error: `Unknown type: ${type}` });
 
-    // Parse CSV
-    const csv = req.file.buffer.toString("utf-8").replace(/^\uFEFF/, ""); // strip BOM
+    const csv   = req.file.buffer.toString("utf-8").replace(/^\uFEFF/, "");
     const lines = csv.split(/\r?\n/).filter(l => l.trim());
-    if (lines.length < 2) return res.status(400).json({ error: "CSV file is empty or has no data rows" });
+    if (lines.length < 2) return res.status(400).json({ error: "CSV is empty or has no data rows" });
 
-    // Validate header row
-    const headerRow = parseCSVLine(lines[0]).map(h => h.replace(/^"|"$/g, "").trim());
+    const headerRow  = parseCSVLine(lines[0]).map(h => h.replace(/^"|"$/g, "").trim());
     const missingCols = expected.filter((h, i) => normalizeHeader(headerRow[i]) !== normalizeHeader(h));
-    if (missingCols.length > 0 || headerRow.length < expected.length) {
-      return res.status(400).json({
-        error: "Wrong column format",
-        detail: `Expected columns: ${expected.join(", ")}\nGot: ${headerRow.join(", ")}\nMissing/wrong: ${missingCols.join(", ") || "column count mismatch"}`
-      });
-    }
+    if (missingCols.length > 0 || headerRow.length < expected.length)
+      return res.status(400).json({ error: "Wrong column format", detail: `Expected: ${expected.join(", ")}\nGot: ${headerRow.join(", ")}` });
 
-    const dataLines = lines.slice(1);
-    const errors = [];
-    const rows = [];
-
-    dataLines.forEach((line, idx) => {
-      const rowNum = idx + 2; // +2 because of 1-based + header row
-      const clean = parseCSVLine(line).map(c => c.replace(/^"|"$/g, "").trim());
-
-      if (clean.every(c => !c)) return; // skip blank rows
+    const errors = [], rows = [];
+    lines.slice(1).forEach((line, idx) => {
+      const rowNum = idx + 2;
+      const clean  = parseCSVLine(line).map(c => c.replace(/^"|"$/g, "").trim());
+      if (clean.every(c => !c)) return;
 
       if (type === "staff") {
-        // Validate required fields
-        // CSV columns: Date[0], SiteCode[1], Name[2], Designation[3], Department[4], Status[5], InTime[6], OutTime[7], Shift[8], Remarks[9]
-        if (!clean[0]) { errors.push(`Row ${rowNum}: Date is required (format: YYYY-MM-DD)`); return; }
-        if (!clean[2]) { errors.push(`Row ${rowNum}: Name is required`); return; }
-        const validStatuses = ["Present", "Absent", "Annual Leave", "Comp Off", "Holiday", "On Duty", "Week Off"];
-        if (clean[5] && !validStatuses.includes(clean[5])) {
-          errors.push(`Row ${rowNum}: Status "${clean[5]}" is invalid. Use: ${validStatuses.join(", ")}`);
-        }
-        const inD = calcHelper.timeStringToDecimal(clean[6]);
-        const outD = calcHelper.timeStringToDecimal(clean[7]);
-        rows.push([
-          calcHelper.jsToExcelDate(clean[0]),
-          clean[1] || projectId,
-          clean[2],
-          clean[3] || "",
-          clean[4] || "",
-          clean[5] || "Absent",
-          inD,
-          outD,
-          clean[8] || "Day",
-          clean[9] || ""
-        ]);
+        if (!clean[0]) { errors.push(`Row ${rowNum}: Date required`); return; }
+        if (!clean[2]) { errors.push(`Row ${rowNum}: Name required`); return; }
+        rows.push({ project_id: projectId, date: clean[0] || null, site_code: clean[1] || projectId, name: clean[2], designation: clean[3] || "", department: clean[4] || "", status: clean[5] || "Absent", in_time: clean[6] || "", out_time: clean[7] || "", shift: clean[8] || "Day", remarks: clean[9] || "" });
+
       } else if (type === "guard") {
-        if (!clean[0]) { errors.push(`Row ${rowNum}: Date is required (format: YYYY-MM-DD)`); return; }
-        if (!clean[2]) { errors.push(`Row ${rowNum}: Name is required`); return; }
-        const validShifts = ["Day", "Night"];
-        if (clean[8] && !validShifts.includes(clean[8])) {
-          errors.push(`Row ${rowNum}: Shift "${clean[8]}" is invalid. Use: Day or Night`);
-        }
-        rows.push([
-          calcHelper.jsToExcelDate(clean[0]),
-          clean[1] || projectId,
-          clean[2],
-          clean[3] || "Security Guard",
-          clean[4] || "",
-          clean[5] || "Absent",
-          calcHelper.timeStringToDecimal(clean[6]),
-          calcHelper.timeStringToDecimal(clean[7]),
-          clean[8] || "Day",
-          clean[9] || ""
-        ]);
+        if (!clean[0]) { errors.push(`Row ${rowNum}: Date required`); return; }
+        if (!clean[2]) { errors.push(`Row ${rowNum}: Name required`); return; }
+        rows.push({ project_id: projectId, date: clean[0] || null, site_code: clean[1] || projectId, name: clean[2], type: clean[3] || "Security Guard", location: clean[4] || "", status: clean[5] || "Absent", in_time: clean[6] || "", out_time: clean[7] || "", shift: clean[8] || "Day", remarks: clean[9] || "" });
+
       } else if (type === "contact" || type === "sc") {
-        if (!clean[5]) { errors.push(`Row ${rowNum}: Name is required`); return; }
-        rows.push([
-          clean[0] || (idx + 1),
-          clean[1] || projectId,
-          clean[2] || "",
-          calcHelper.jsToExcelDate(clean[3]),
-          clean[4] || "",
-          clean[5],
-          clean[6] || "",
-          clean[7] || "",
-          clean[8] || "",
-          clean[9] || ""
-        ]);
+        if (!clean[5]) { errors.push(`Row ${rowNum}: Name required`); return; }
+        rows.push({ project_id: projectId, emp_id: clean[2] || "", joining_date: clean[3] || null, email: clean[4] || "", name: clean[5], designation: clean[6] || "", department: clean[7] || "", manager: clean[8] || "", contact_no: clean[9] || "" });
+
       } else if (type === "gc") {
-        if (!clean[2]) { errors.push(`Row ${rowNum}: Name is required`); return; }
-        rows.push([
-          clean[0] || (idx + 1),
-          clean[1] || projectId,
-          clean[2] || "",
-          calcHelper.jsToExcelDate(clean[3]),
-          clean[4] || "Security Guard",
-          clean[5] || "Deactive",
-          clean[6] || "",
-          clean[7] || "",
-          clean[8] || ""
-        ]);
+        if (!clean[2]) { errors.push(`Row ${rowNum}: Name required`); return; }
+        rows.push({ project_id: projectId, name: clean[2], joining_date: clean[3] || null, designation: clean[4] || "Security Guard", status: clean[5] || "Deactive", shift_duty: clean[6] || "", contact_no: clean[7] || "", remarks: clean[8] || "" });
       }
     });
 
-    // If there are validation errors, return them all at once
-    if (errors.length > 0) {
-      return res.status(400).json({ error: "Validation errors in CSV", detail: errors.join("\n") });
-    }
+    if (errors.length > 0) return res.status(400).json({ error: "Validation errors", detail: errors.join("\n") });
+    if (!rows.length)      return res.status(400).json({ error: "No valid rows found in CSV" });
 
-    if (!rows.length) return res.status(400).json({ error: "No valid rows found in CSV" });
+    const tableMap = { staff: "attendance", guard: "guard_attendance", contact: "staff_contacts", sc: "staff_contacts", gc: "guard_contacts" };
+    const { error } = await supabase.from(tableMap[type]).insert(rows);
+    if (error) throw error;
 
-    const sheetMap = { staff: projectId, guard: "Guard", contact: "SC", sc: "SC", gc: "GC" };
-    const targetSheet = sheetMap[type] || type;
-    const tableName = await graphHelper.getFirstTableName(filePath, targetSheet);
-
-    await graphHelper.addRows(filePath, targetSheet, tableName, rows);
     res.json({ success: true, rowsAdded: rows.length });
   } catch (err) {
-    console.error("BULK UPLOAD ERROR:", err?.response?.data || err.message);
-    res.status(500).json({ error: "Bulk upload failed", detail: err?.response?.data?.error?.message || err.message });
+    console.error("BULK UPLOAD ERROR:", err.message);
+    res.status(500).json({ error: "Bulk upload failed", detail: err.message });
   }
 });
 

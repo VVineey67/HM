@@ -1,7 +1,26 @@
 import React, { useState, useEffect } from "react";
 import Login from "./pages/Login";
+import ResetPassword from "./pages/ResetPassword";
 import Sidebar from "./components/Sidebar";
- 
+
+// Read current tab + project from URL hash
+const parseHash = () => {
+  const params = new URLSearchParams(window.location.hash.slice(1));
+  return {
+    tab:     params.get("tab")     || "about",
+    project: params.get("project") || null,
+    isReset: params.get("type")    === "recovery",
+  };
+};
+
+// Write tab + project to URL (pushState so back-button works)
+const pushUrl = (tab, project) => {
+  const params = new URLSearchParams();
+  params.set("tab", tab);
+  if (project) params.set("project", project);
+  window.history.pushState(null, "", `#${params.toString()}`);
+};
+
 import About from "./pages/About";
 import Profile from "./pages/Profile";
  
@@ -53,39 +72,105 @@ import CompareImages from "./pages/Images/CompareImages";
 // Attendance
 import Attendance from "./pages/Attendance/Attendance";
  
+const DEFAULT_PROJECTS = [
+  { name: "All Project" }, { name: "B-47" }, { name: "GDLV" },
+  { name: "BHA" }, { name: "SLH" }, { name: "HIH" }, { name: "RWH" },
+];
+
 function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(() => !!localStorage.getItem("bms_role"));
-  const [userRole, setUserRole] = useState(() => localStorage.getItem("bms_role") || null);
-  const [activeTab, setActiveTab] = useState("about");
-  const [selectedProject, setSelectedProject] = useState(null);
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  // Detect Supabase password-recovery redirect
+  const [isResetMode, setIsResetMode] = useState(() => parseHash().isReset);
+
+  const loggedIn = !!localStorage.getItem("bms_token");
+  const [isLoggedIn, setIsLoggedIn] = useState(() => loggedIn);
+  const [userRole, setUserRole] = useState(() => {
+    const u = localStorage.getItem("bms_user");
+    return u ? JSON.parse(u).role : null;
+  });
+  const [currentUser, setCurrentUser] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("bms_user") || "{}"); } catch { return {}; }
+  });
+  const [projects, setProjects] = useState(() => {
+    const s = localStorage.getItem("bms_projects");
+    if (!s) return DEFAULT_PROJECTS;
+    const parsed = JSON.parse(s);
+    if (parsed.length > 0 && typeof parsed[0] === "string")
+      return parsed.map(name => ({ name }));
+    return parsed;
+  });
+
+  // Restore tab + project from URL on load
+  const [activeTab, setActiveTab] = useState(() => {
+    const { isReset, tab } = parseHash();
+    return (!isReset && loggedIn) ? tab : "about";
+  });
+  const [selectedProject, setSelectedProject] = useState(() => {
+    const { isReset, project } = parseHash();
+    return (!isReset && loggedIn) ? project : null;
+  });
+
+  const [isCollapsed, setIsCollapsed] = useState(() => localStorage.getItem("bms_sidebar_collapsed") === "true");
+
+  const handleSetIsCollapsed = (val) => {
+    const next = typeof val === "function" ? val(isCollapsed) : val;
+    setIsCollapsed(next);
+    localStorage.setItem("bms_sidebar_collapsed", String(next));
+  };
 
   const [isMobile, setIsMobile] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const handleLogin = (role) => {
-    localStorage.setItem("bms_role", role);
-    setUserRole(role);
+  const handleLogin = (user) => {
+    setUserRole(user.role);
+    setCurrentUser(user);
     setIsLoggedIn(true);
     setActiveTab("about");
+    pushUrl("about", null);
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("bms_role");
+    localStorage.removeItem("bms_token");
+    localStorage.removeItem("bms_user");
     setIsLoggedIn(false);
     setUserRole(null);
+    setCurrentUser({});
     setSelectedProject(null);
     setActiveTab("about");
+    window.history.replaceState(null, "", window.location.pathname);
+  };
+
+  const handleProfileUpdate = (updatedUser) => {
+    setCurrentUser(updatedUser);
+  };
+
+  const handleProjectsUpdate = (updatedProjects) => {
+    setProjects(updatedProjects);
   };
  
   const handleTabChange = (tab) => {
+    const proj = tab === "about" ? null : selectedProject;
+    if (tab === "about") setSelectedProject(null);
     setActiveTab(tab);
+    pushUrl(tab, proj);
     if (isMobile) setMobileOpen(false);
   };
- 
+
+  const handleSetSelectedProject = (project) => {
+    setSelectedProject(project);
+    pushUrl(activeTab, project);
+  };
+
+  // Browser back / forward button support
   useEffect(() => {
-    if (activeTab === "about") setSelectedProject(null);
-  }, [activeTab]);
+    const onPopState = () => {
+      const { tab, project, isReset } = parseHash();
+      if (isReset) return;
+      setActiveTab(tab);
+      setSelectedProject(project);
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
  
   useEffect(() => {
     const checkScreen = () => {
@@ -100,7 +185,7 @@ function App() {
  
   const renderPage = () => {
     if (activeTab === "about") return <About />;
-    if (activeTab === "profile") return <Profile />;
+    if (activeTab === "profile") return <Profile onProfileUpdate={handleProfileUpdate} onProjectsUpdate={handleProjectsUpdate} />;
 
     // Global procurement setup tabs — no project needed
     if (activeTab === "proc_setup__item_list") return <ItemList />;
@@ -157,6 +242,7 @@ function App() {
     }
   };
  
+  if (isResetMode) return <ResetPassword onComplete={() => { setIsResetMode(false); window.history.replaceState(null, "", "/"); }} />;
   if (!isLoggedIn) return <Login onLogin={handleLogin} />;
  
   return (
@@ -188,11 +274,13 @@ function App() {
           userRole={userRole}
           onLogout={handleLogout}
           selectedProject={selectedProject}
-          setSelectedProject={setSelectedProject}
+          setSelectedProject={handleSetSelectedProject}
           isCollapsed={isCollapsed}
-          setIsCollapsed={setIsCollapsed}
+          setIsCollapsed={handleSetIsCollapsed}
           isMobile={isMobile}
           onClose={() => setMobileOpen(false)}
+          currentUser={currentUser}
+          projects={projects}
         />
       </div>
  
@@ -207,11 +295,11 @@ function App() {
       {/* ✅ MAIN CONTENT */}
       <div
         className={`
-          flex-1 flex flex-col transition-all duration-300 min-h-screen w-full
-          ${!isMobile ? (isCollapsed ? "ml-[80px]" : "ml-[260px]") : "ml-0"}
+          flex-1 flex flex-col transition-all duration-300 min-h-screen min-w-0
+          ${!isMobile ? (isCollapsed ? "ml-20" : "ml-65") : "ml-0"}
         `}
       >
-        <main className={`flex-1 w-full min-h-screen overflow-auto relative
+        <main className={`flex-1 min-w-0 min-h-screen overflow-x-hidden overflow-y-auto relative
           ${isMobile ? "pt-14 px-3 pb-4" : "p-4"}
         `}>
           {renderPage()}

@@ -65,8 +65,8 @@ function Model({ project }) {
 
     API.get(`/api/view/model/${project}`)
       .then((res) => {
-        const baseUrl = import.meta.env.VITE_API_URL;
-        setModelUrl(`${baseUrl}${res.data.gltf}`);
+        // gltf is now a full Supabase Storage public URL
+        setModelUrl(res.data.gltf);
         setLoading(false);
       })
       .catch(() => {

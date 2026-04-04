@@ -20,10 +20,11 @@ export const isPresent = (s) => PRESENT_LIST.includes(s?.toLowerCase());
 const isAbsent = (s) => s?.toLowerCase() === "absent";
 const isLeaveStatus = (s) => LEAVE_LIST.includes(s?.toLowerCase());
 
-// ─── Excel Serial → "21-Dec-24" ─────────────────────────
+// ─── Date utilities ─────────────────────────────────────
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const MON_MAP = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
 
+// Pass-through: Supabase returns ISO "2026-04-05", legacy Excel returns serial number
 export const excelToJSDate = (serial) => {
   if (!serial) return "";
   if (typeof serial === "string") return serial.trim();
@@ -32,9 +33,15 @@ export const excelToJSDate = (serial) => {
   return `${String(d.getUTCDate()).padStart(2,"0")}-${MONTHS[d.getUTCMonth()]}-${String(d.getUTCFullYear()).slice(-2)}`;
 };
 
-// ─── Parse "21-Dec-24" → Date ────────────────────────────
+// Parse both ISO "2026-04-05" and legacy "21-Dec-24" formats
 const parseDateStr = (s) => {
   if (!s) return null;
+  // ISO format: "2026-04-05"
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const d = new Date(s + "T00:00:00");
+    return isNaN(d.getTime()) ? null : d;
+  }
+  // Legacy "DD-Mon-YY"
   const p = s.split("-");
   if (p.length !== 3) return null;
   const day = parseInt(p[0]), mon = MON_MAP[p[1]], yr = parseInt(p[2]);
@@ -42,20 +49,43 @@ const parseDateStr = (s) => {
   return new Date(yr < 100 ? 2000+yr : yr, mon, day);
 };
 
-export const formatDate = (s) => s || "-";
+export const formatDate = (s) => {
+  if (!s) return "-";
+  // ISO "2026-04-05" → "05-Apr-26"
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s.trim())) {
+    const [y, m, d] = s.trim().split("-");
+    return `${d}-${MONTHS[parseInt(m,10)-1]}-${y.slice(-2)}`;
+  }
+  return s;
+};
 
-// ─── Is Today ────────────────────────────────────────────
+// ─── Is Today — supports ISO "2026-04-05" and "DD-Mon-YY" ─
 export const isToday = (dateStr) => {
   if (!dateStr) return false;
   const t = new Date();
-  return dateStr.trim() === `${String(t.getDate()).padStart(2,"0")}-${MONTHS[t.getMonth()]}-${String(t.getFullYear()).slice(-2)}`;
+  const iso = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}-${String(t.getDate()).padStart(2,"0")}`;
+  if (dateStr.trim() === iso) return true;
+  const legacy = `${String(t.getDate()).padStart(2,"0")}-${MONTHS[t.getMonth()]}-${String(t.getFullYear()).slice(-2)}`;
+  return dateStr.trim() === legacy;
 };
 
-// ─── Excel Decimal → "9:30 AM" ───────────────────────────
+// ─── Format time → "9:30 AM" ─────────────────────────────
+// Handles: HH:MM 24hr (Supabase), Excel decimal (legacy), "H:MM AM/PM"
 export const formatTime = (val) => {
   if (val === null || val === undefined || val === "") return "-";
-  if (typeof val === "string") return val.includes("AM") || val.includes("PM") ? val : "-";
+  if (typeof val === "string") {
+    // HH:MM 24hr (new format from Supabase)
+    const hm = val.match(/^(\d{1,2}):(\d{2})$/);
+    if (hm) {
+      let h = parseInt(hm[1]); const m = parseInt(hm[2]);
+      const ampm = h >= 12 ? "PM" : "AM";
+      h = h % 12 || 12;
+      return `${h}:${String(m).padStart(2,"0")} ${ampm}`;
+    }
+    return val.includes("AM") || val.includes("PM") ? val : "-";
+  }
   if (typeof val !== "number" || val === 0) return "-";
+  // Excel decimal (legacy)
   const totalMins = Math.round(val * 24 * 60);
   let h = Math.floor(totalMins / 60);
   const m = totalMins % 60;
@@ -64,15 +94,23 @@ export const formatTime = (val) => {
   return `${h}:${String(m).padStart(2,"0")} ${ampm}`;
 };
 
-// ─── Decimal converter ───────────────────────────────────
+// ─── Time → decimal fraction of day ─────────────────────
+// Handles: HH:MM 24hr, "H:MM AM/PM", Excel decimal number
 const toDecimal = (val) => {
   if (typeof val === "number") return val;
   if (typeof val === "string") {
-    const m = val.match(/(\d+):(\d+)\s*(AM|PM)/i);
-    if (!m) return null;
-    let h = parseInt(m[1]); const mn = parseInt(m[2]);
-    if (m[3].toUpperCase() === "PM" && h !== 12) h += 12;
-    if (m[3].toUpperCase() === "AM" && h === 12) h = 0;
+    // HH:MM 24hr (Supabase format)
+    const hm = val.match(/^(\d{1,2}):(\d{2})$/);
+    if (hm) {
+      const h = parseInt(hm[1]), m = parseInt(hm[2]);
+      return (h * 60 + m) / 1440;
+    }
+    // H:MM AM/PM (legacy)
+    const ampm = val.match(/(\d+):(\d+)\s*(AM|PM)/i);
+    if (!ampm) return null;
+    let h = parseInt(ampm[1]); const mn = parseInt(ampm[2]);
+    if (ampm[3].toUpperCase() === "PM" && h !== 12) h += 12;
+    if (ampm[3].toUpperCase() === "AM" && h === 12) h = 0;
     return (h + mn/60) / 24;
   }
   return null;

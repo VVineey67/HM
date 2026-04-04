@@ -8,7 +8,10 @@
       "Read(//d/BMS/**)",
       "Bash(done)",
       "Bash(xargs wc:*)",
-      "Bash(docker compose:*)"
+      "Bash(docker compose:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(npm audit:*)",
+      "Bash(node -e ':*)"
     ]
   }
 }

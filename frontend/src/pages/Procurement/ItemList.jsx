@@ -3,6 +3,8 @@ import { Plus, Upload, Search, Pencil, Trash2, X, Package, ChevronDown, Image as
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
+const PER_PAGE = 10;
+
 const CATEGORIES = ["Civil", "Electrical", "Plumbing", "HVAC", "Finishing", "Structural", "Safety", "Tools", "Other"];
 
 const emptyForm = { materialName: "", make: "", description: "", category: "", unit: "", qty: "", image: null, imagePreview: "" };
@@ -13,10 +15,11 @@ export default function ItemList() {
   const [loading, setLoading]   = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm]         = useState(emptyForm);
-  const [editIdx, setEditIdx]   = useState(null);
+  const [editId, setEditId]     = useState(null);
   const [search, setSearch]     = useState("");
   const [saving, setSaving]     = useState(false);
   const [toast, setToast]       = useState(null);
+  const [page, setPage]         = useState(1);
   const fileRef                 = useRef();
   const csvRef                  = useRef();
 
@@ -45,11 +48,11 @@ export default function ItemList() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const openAdd = () => { setForm(emptyForm); setEditIdx(null); setShowModal(true); };
+  const openAdd = () => { setForm(emptyForm); setEditId(null); setShowModal(true); };
 
-  const openEdit = (item, idx) => {
+  const openEdit = (item) => {
     setForm({ ...item, image: null, imagePreview: item.imageUrl || "" });
-    setEditIdx(idx);
+    setEditId(item.id);
     setShowModal(true);
   };
 
@@ -67,20 +70,20 @@ export default function ItemList() {
       Object.entries(form).forEach(([k, v]) => { if (k !== "image" && k !== "imagePreview" && v) fd.append(k, v); });
       if (form.image) fd.append("image", form.image);
 
-      const url    = editIdx !== null ? `${API}/api/procurement/items/${editIdx}` : `${API}/api/procurement/items`;
-      const method = editIdx !== null ? "PUT" : "POST";
+      const url    = editId ? `${API}/api/procurement/items/${editId}` : `${API}/api/procurement/items`;
+      const method = editId ? "PUT" : "POST";
       await fetch(url, { method, body: fd });
-      showToast(editIdx !== null ? "Item updated" : "Item added");
+      showToast(editId ? "Item updated" : "Item added");
       setShowModal(false);
       fetchItems();
     } catch { showToast("Failed to save", "error"); }
     setSaving(false);
   };
 
-  const handleDelete = async (idx) => {
+  const handleDelete = async (id) => {
     if (!confirm("Delete this item?")) return;
     try {
-      await fetch(`${API}/api/procurement/items/${idx}`, { method: "DELETE" });
+      await fetch(`${API}/api/procurement/items/${id}`, { method: "DELETE" });
       showToast("Item deleted");
       fetchItems();
     } catch { showToast("Failed to delete", "error"); }
@@ -104,6 +107,8 @@ export default function ItemList() {
   };
 
   const filtered = items.filter(i => i.materialName?.toLowerCase().includes(search.toLowerCase()) || i.category?.toLowerCase().includes(search.toLowerCase()));
+  const totalPages = Math.ceil(filtered.length / PER_PAGE) || 1;
+  const paginated  = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
 
   return (
     <div className="p-6 w-full">
@@ -143,7 +148,7 @@ export default function ItemList() {
       {/* Search */}
       <div className="relative mb-4">
         <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name or category…"
+        <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Search by name or category…"
           className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm outline-none focus:border-slate-400 bg-white text-slate-700" />
       </div>
 
@@ -168,9 +173,9 @@ export default function ItemList() {
               <tr><td colSpan={8} className="text-center py-16 text-slate-400 text-sm">Loading…</td></tr>
             ) : filtered.length === 0 ? (
               <tr><td colSpan={8} className="text-center py-16 text-slate-300 font-semibold uppercase tracking-widest text-xs">No items found</td></tr>
-            ) : filtered.map((item, idx) => (
+            ) : paginated.map((item, idx) => (
               <tr key={idx} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                <td className="px-4 py-3 text-sm text-slate-400">{idx + 1}</td>
+                <td className="px-4 py-3 text-sm text-slate-400">{(page - 1) * PER_PAGE + idx + 1}</td>
                 <td className="px-4 py-3">
                   {item.imageUrl
                     ? <img src={item.imageUrl} alt="" className="w-9 h-9 rounded-lg object-cover border border-slate-100" />
@@ -186,8 +191,8 @@ export default function ItemList() {
                 <td className="px-4 py-3 text-sm text-slate-500">{item.qty || "—"}</td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-1 justify-end">
-                    <button onClick={() => openEdit(item, idx)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all"><Pencil size={14} /></button>
-                    <button onClick={() => handleDelete(idx)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"><Trash2 size={14} /></button>
+                    <button onClick={() => openEdit(item)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all"><Pencil size={14} /></button>
+                    <button onClick={() => handleDelete(item.id)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"><Trash2 size={14} /></button>
                   </div>
                 </td>
               </tr>
@@ -196,7 +201,30 @@ export default function ItemList() {
         </table>
         </div>
         <div className="px-4 py-3 border-t border-slate-100 bg-slate-50">
-          <p className="text-xs text-slate-400">{filtered.length} item{filtered.length !== 1 ? "s" : ""}</p>
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-slate-400">{filtered.length} item{filtered.length !== 1 ? "s" : ""} · Page {page} of {totalPages}</p>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-1">
+                <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page === 1}
+                  className="px-2 py-1 rounded-lg text-xs font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 disabled:opacity-30 transition-all">‹</button>
+                {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                  let n;
+                  if (totalPages <= 5) n = i + 1;
+                  else if (page <= 3) n = i + 1;
+                  else if (page >= totalPages - 2) n = totalPages - 4 + i;
+                  else n = page - 2 + i;
+                  return (
+                    <button key={n} onClick={() => setPage(n)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${page === n ? "bg-slate-900 text-white border-slate-900" : "text-slate-600 border-slate-200 hover:bg-slate-50"}`}>
+                      {n}
+                    </button>
+                  );
+                })}
+                <button onClick={() => setPage(p => Math.min(totalPages, p+1))} disabled={page === totalPages}
+                  className="px-2 py-1 rounded-lg text-xs font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 disabled:opacity-30 transition-all">›</button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -208,7 +236,7 @@ export default function ItemList() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-              <h2 className="text-base font-bold text-slate-800">{editIdx !== null ? "Edit Item" : "Add Item"}</h2>
+              <h2 className="text-base font-bold text-slate-800">{editId ? "Edit Item" : "Add Item"}</h2>
               <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 transition-colors"><X size={18} /></button>
             </div>
 
@@ -281,7 +309,7 @@ export default function ItemList() {
                 className="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-200 transition-all">Cancel</button>
               <button onClick={handleSave} disabled={saving}
                 className="px-5 py-2 rounded-xl text-sm font-semibold bg-slate-900 text-white hover:bg-slate-700 transition-all disabled:opacity-50">
-                {saving ? "Saving…" : editIdx !== null ? "Update Item" : "Add Item"}
+                {saving ? "Saving…" : editId ? "Update Item" : "Add Item"}
               </button>
             </div>
           </div>

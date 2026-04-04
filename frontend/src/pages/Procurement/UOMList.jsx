@@ -1,7 +1,12 @@
-import React, { useState, useEffect } from "react";
-import { Plus, Search, Pencil, Trash2, X, Ruler } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { Plus, Search, Pencil, Trash2, X, Ruler, Upload, Download, FileSpreadsheet, FileText, ChevronDown } from "lucide-react";
+import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
+
+const PER_PAGE = 10;
 
 const emptyForm = { uomName: "", uomCode: "" };
 
@@ -18,12 +23,28 @@ export default function UOMList() {
   const [loading, setLoading]     = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm]           = useState(emptyForm);
-  const [editIdx, setEditIdx]     = useState(null);
+  const [editId, setEditId]      = useState(null);
   const [search, setSearch]       = useState("");
   const [saving, setSaving]       = useState(false);
   const [toast, setToast]         = useState(null);
+  const [page, setPage]           = useState(1);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showBulkMenu, setShowBulkMenu]     = useState(false);
+  const [bulking, setBulking]               = useState(false);
+  const exportMenuRef = useRef();
+  const bulkMenuRef   = useRef();
+  const csvRef        = useRef();
 
   useEffect(() => { fetchUoms(); }, []);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target)) setShowExportMenu(false);
+      if (bulkMenuRef.current  && !bulkMenuRef.current.contains(e.target))   setShowBulkMenu(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   const fetchUoms = async () => {
     setLoading(true);
@@ -40,36 +61,118 @@ export default function UOMList() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const openAdd  = () => { setForm(emptyForm); setEditIdx(null); setShowModal(true); };
-  const openEdit = (u, idx) => { setForm({ ...u }); setEditIdx(idx); setShowModal(true); };
+  const openAdd  = () => { setForm(emptyForm); setEditId(null); setShowModal(true); };
+  const openEdit = (u) => { setForm({ ...u }); setEditId(u.id); setShowModal(true); };
 
   const handleSave = async () => {
     if (!form.uomName.trim()) return showToast("UOM Name required", "error");
     setSaving(true);
     try {
-      const url    = editIdx !== null ? `${API}/api/procurement/uom/${editIdx}` : `${API}/api/procurement/uom`;
-      const method = editIdx !== null ? "PUT" : "POST";
+      const url    = editId ? `${API}/api/procurement/uom/${editId}` : `${API}/api/procurement/uom`;
+      const method = editId ? "PUT" : "POST";
       await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
-      showToast(editIdx !== null ? "UOM updated" : "UOM added");
+      showToast(editId ? "UOM updated" : "UOM added");
       setShowModal(false);
       fetchUoms();
     } catch { showToast("Failed to save", "error"); }
     setSaving(false);
   };
 
-  const handleDelete = async (idx) => {
+  const handleDelete = async (id) => {
     if (!confirm("Delete this UOM?")) return;
     try {
-      await fetch(`${API}/api/procurement/uom/${idx}`, { method: "DELETE" });
+      await fetch(`${API}/api/procurement/uom/${id}`, { method: "DELETE" });
       showToast("UOM deleted");
       fetchUoms();
     } catch { showToast("Failed to delete", "error"); }
+  };
+
+  /* ── Export Excel ── */
+  const exportExcel = () => {
+    const data = filtered.map((u, i) => ({ "S.No": i + 1, "UOM Name": u.uomName, "UOM Code": u.uomCode }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "UOM");
+    XLSX.writeFile(wb, "uom_list.xlsx");
+    setShowExportMenu(false);
+  };
+
+  /* ── Export PDF ── */
+  const exportPDF = () => {
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    const pageW = doc.internal.pageSize.getWidth();
+    doc.setFontSize(16); doc.setFont("helvetica", "bold"); doc.setTextColor(30, 41, 59);
+    doc.text("UOM List", 14, 16);
+    doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(100, 116, 139);
+    doc.text(`Total: ${filtered.length} units   |   Exported: ${new Date().toLocaleDateString("en-IN")}`, 14, 23);
+    doc.setDrawColor(226, 232, 240); doc.setLineWidth(0.4);
+    doc.line(14, 26, pageW - 14, 26);
+    autoTable(doc, {
+      startY: 30,
+      head: [["S.No", "UOM Name", "UOM Code"]],
+      body: filtered.map((u, i) => [i + 1, u.uomName, u.uomCode]),
+      styles: { fontSize: 9, cellPadding: 4, lineColor: [203, 213, 225], lineWidth: 0.3, textColor: [51, 65, 85] },
+      headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: "bold" },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      columnStyles: { 0: { cellWidth: 20, halign: "center" }, 1: { cellWidth: 100 }, 2: { cellWidth: 50 } },
+      didDrawPage: (data) => {
+        const pageCount = doc.internal.getNumberOfPages();
+        doc.setFontSize(7); doc.setTextColor(148, 163, 184);
+        doc.text(`Page ${data.pageNumber} of ${pageCount}`, pageW - 14, doc.internal.pageSize.getHeight() - 8, { align: "right" });
+        doc.text("Bootes BMS — UOM List", 14, doc.internal.pageSize.getHeight() - 8);
+      },
+    });
+    doc.save("uom_list.pdf");
+    setShowExportMenu(false);
+  };
+
+  /* ── Download CSV Template ── */
+  const downloadTemplate = () => {
+    const csv = ["UOM Name,UOM Code", '"Kilogram","kg"', '"Meter","m"', '"Piece","pcs"'].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+    a.download = "uom_template.csv"; a.click();
+    setShowBulkMenu(false);
+  };
+
+  /* ── Bulk CSV Upload ── */
+  const handleBulkCSV = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setBulking(true); setShowBulkMenu(false);
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try {
+        const lines = ev.target.result.trim().split("\n").slice(1);
+        const rows = lines
+          .filter(l => l.trim())
+          .map(l => {
+            const cols = l.match(/(".*?"|[^,]+)(?=\s*,|\s*$)/g) || [];
+            const clean = cols.map(c => c.replace(/^"|"$/g, "").trim());
+            return { uomName: clean[0] || "", uomCode: clean[1] || "" };
+          })
+          .filter(r => r.uomName);
+        if (!rows.length) { showToast("No valid rows found", "error"); setBulking(false); return; }
+        await fetch(`${API}/api/procurement/uom/bulk`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rows }),
+        });
+        showToast(`${rows.length} UOM${rows.length !== 1 ? "s" : ""} added`);
+        fetchUoms();
+      } catch { showToast("Bulk upload failed", "error"); }
+      setBulking(false);
+    };
+    reader.readAsText(file);
+    e.target.value = "";
   };
 
   const filtered = uoms.filter(u =>
     u.uomName?.toLowerCase().includes(search.toLowerCase()) ||
     u.uomCode?.toLowerCase().includes(search.toLowerCase())
   );
+  const totalPages = Math.ceil(filtered.length / PER_PAGE) || 1;
+  const paginated  = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
 
   return (
     <div className="p-6 w-full">
@@ -92,16 +195,64 @@ export default function UOMList() {
             <p className="text-sm text-slate-400">Units of Measurement — used in Item List</p>
           </div>
         </div>
-        <button onClick={openAdd}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-700 transition-all">
-          <Plus size={15} /> Add UOM
-        </button>
+
+        <div className="flex items-center gap-2">
+
+          {/* Export dropdown */}
+          <div className="relative" ref={exportMenuRef}>
+            <button onClick={() => setShowExportMenu(v => !v)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all">
+              <Download size={15} /> Export <ChevronDown size={13} />
+            </button>
+            {showExportMenu && (
+              <div className="absolute right-0 top-full mt-1.5 w-44 bg-white rounded-xl shadow-xl border border-slate-100 z-30 overflow-hidden">
+                <button onClick={exportExcel}
+                  className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-emerald-700 hover:bg-emerald-50 transition-colors text-left">
+                  <FileSpreadsheet size={14} /> Excel (.xlsx)
+                </button>
+                <div className="border-t border-slate-100" />
+                <button onClick={exportPDF}
+                  className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-red-600 hover:bg-red-50 transition-colors text-left">
+                  <FileText size={14} /> PDF
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Bulk Upload dropdown */}
+          <div className="relative" ref={bulkMenuRef}>
+            <button onClick={() => setShowBulkMenu(v => !v)} disabled={bulking}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all disabled:opacity-50">
+              <Upload size={15} /> {bulking ? "Uploading…" : "Bulk Upload"} <ChevronDown size={13} />
+            </button>
+            {showBulkMenu && (
+              <div className="absolute right-0 top-full mt-1.5 w-52 bg-white rounded-xl shadow-xl border border-slate-100 z-30 overflow-hidden">
+                <button onClick={downloadTemplate}
+                  className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left">
+                  <Download size={14} className="text-slate-400" /> Download Template
+                </button>
+                <div className="border-t border-slate-100" />
+                <button onClick={() => { setShowBulkMenu(false); csvRef.current.click(); }}
+                  className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left">
+                  <Upload size={14} className="text-slate-400" /> Upload CSV
+                </button>
+              </div>
+            )}
+          </div>
+          <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleBulkCSV} />
+
+          {/* Add UOM */}
+          <button onClick={openAdd}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-700 transition-all">
+            <Plus size={15} /> Add UOM
+          </button>
+        </div>
       </div>
 
       {/* Search */}
       <div className="relative mb-5">
         <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name or code…"
+        <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Search by name or code…"
           className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm outline-none focus:border-slate-400 bg-white text-slate-700" />
       </div>
 
@@ -124,17 +275,17 @@ export default function UOMList() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((u, idx) => (
+              {paginated.map((u, idx) => (
                 <tr key={idx} className={`transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-slate-50"} hover:bg-blue-50/50`}>
-                  <td className="px-4 py-3 text-slate-400 text-xs border border-slate-200">{idx + 1}</td>
+                  <td className="px-4 py-3 text-slate-400 text-xs border border-slate-200">{(page - 1) * PER_PAGE + idx + 1}</td>
                   <td className="px-4 py-3 font-semibold text-slate-800 text-sm border border-slate-200">{u.uomName}</td>
                   <td className="px-4 py-3 border border-slate-200">
                     <span className="inline-block px-2.5 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs font-mono font-semibold">{u.uomCode}</span>
                   </td>
                   <td className="px-4 py-3 border border-slate-200">
                     <div className="flex items-center gap-1">
-                      <button onClick={() => openEdit(u, idx)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all"><Pencil size={13} /></button>
-                      <button onClick={() => handleDelete(idx)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"><Trash2 size={13} /></button>
+                      <button onClick={() => openEdit(u)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all"><Pencil size={13} /></button>
+                      <button onClick={() => handleDelete(u.id)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"><Trash2 size={13} /></button>
                     </div>
                   </td>
                 </tr>
@@ -142,7 +293,30 @@ export default function UOMList() {
             </tbody>
           </table>
           <div className="px-4 py-3 border-t border-slate-200 bg-slate-50">
-            <p className="text-xs text-slate-400">{filtered.length} unit{filtered.length !== 1 ? "s" : ""}</p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-slate-400">{filtered.length} unit{filtered.length !== 1 ? "s" : ""} · Page {page} of {totalPages}</p>
+              {totalPages > 1 && (
+                <div className="flex items-center gap-1">
+                  <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page === 1}
+                    className="px-2 py-1 rounded-lg text-xs font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 disabled:opacity-30 transition-all">‹</button>
+                  {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                    let n;
+                    if (totalPages <= 5) n = i + 1;
+                    else if (page <= 3) n = i + 1;
+                    else if (page >= totalPages - 2) n = totalPages - 4 + i;
+                    else n = page - 2 + i;
+                    return (
+                      <button key={n} onClick={() => setPage(n)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${page === n ? "bg-slate-900 text-white border-slate-900" : "text-slate-600 border-slate-200 hover:bg-slate-50"}`}>
+                        {n}
+                      </button>
+                    );
+                  })}
+                  <button onClick={() => setPage(p => Math.min(totalPages, p+1))} disabled={page === totalPages}
+                    className="px-2 py-1 rounded-lg text-xs font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 disabled:opacity-30 transition-all">›</button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -152,7 +326,7 @@ export default function UOMList() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-              <h2 className="text-base font-bold text-slate-800">{editIdx !== null ? "Edit UOM" : "Add UOM"}</h2>
+              <h2 className="text-base font-bold text-slate-800">{editId ? "Edit UOM" : "Add UOM"}</h2>
               <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
             </div>
             <div className="px-6 py-5 space-y-4">
@@ -164,7 +338,7 @@ export default function UOMList() {
                 className="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-200 transition-all">Cancel</button>
               <button onClick={handleSave} disabled={saving}
                 className="px-5 py-2 rounded-xl text-sm font-semibold bg-slate-900 text-white hover:bg-slate-700 transition-all disabled:opacity-50">
-                {saving ? "Saving…" : editIdx !== null ? "Update" : "Add UOM"}
+                {saving ? "Saving…" : editId ? "Update" : "Add UOM"}
               </button>
             </div>
           </div>

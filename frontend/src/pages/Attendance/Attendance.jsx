@@ -52,112 +52,71 @@ const Attendance = ({ selectedProject }) => {
     setLoading(true);
     try {
       const res = await API.get(`/api/attendance/read/${selectedProject}`);
-      const normalize = (v) => String(v || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-      const getIndex = (headers, keys, fallback = -1) => {
-        const normalizedHeaders = headers.map(normalize);
-        for (const k of keys) {
-          const idx = normalizedHeaders.indexOf(normalize(k));
-          if (idx !== -1) return idx;
-        }
-        return fallback;
-      };
-      const pick = (row, idx, def = "") => (idx >= 0 ? (row[idx] ?? def) : def);
-
       // ═══ STAFF PARSING ═══
-      // Backend returns: [Date, SiteCode, Name, Desig, Dept, Status, InTime, OutTime, Shift, WorkHrs, OTHrs, Remarks]
-      const staffParsed = (res.data.staff || []).map((r, i) => ({
-        id: i,
-        date: excelToJSDate(r[0]),
-        siteCode: r[1] || selectedProject || "",
-        name: r[2] || "",
-        designation: r[3] || "",
-        department: r[4] || "",
-        status: r[5] || "",
-        inTime: r[6],
-        outTime: r[7],
-        shift: r[8] || "Day",
-        workingHrs: r[9] || "",
-        otHrs: r[10] || "",
-        remarks: r[11] || "",
+      const staffParsed = (res.data.staff || []).map((r) => ({
+        id:          r.id,
+        date:        r.date        || "",
+        siteCode:    r.siteCode    || selectedProject || "",
+        name:        r.name        || "",
+        designation: r.designation || "",
+        department:  r.department  || "",
+        status:      r.status      || "",
+        inTime:      r.inTime      || "",
+        outTime:     r.outTime     || "",
+        shift:       r.shift       || "Day",
+        workingHrs:  r.workingHrs  || "",
+        otHrs:       r.otHrs       || "",
+        remarks:     r.remarks     || "",
         type: "staff",
       }));
 
       // ═══ GUARD PARSING ═══
-      // RAW: [0]=Date, [1]=SiteCode, [2]=Name, [3]=Type, [4]=Location,
-      //       [5]=Status, [6]=InTime, [7]=OutTime, [8]=Shift, [9]=Remarks
-      const guardParsed = (res.data.guards || []).slice(1).map((r, i) => ({
-        id: i,
-        date: excelToJSDate(r[0]),
-        siteCode: r[1] || selectedProject || "",
-        name: r[2] || "",
-        designation: r[3] || "",
-        department: r[4] || "",
-        status: r[5] || "",
-        inTime: r[6],
-        outTime: r[7],
-        shift: r[8] || "Day",
-        remarks: r[9] || "",
-        workingHrs: "",
+      const guardParsed = (res.data.guards || []).map((r) => ({
+        id:          r.id,
+        date:        r.date        || "",
+        siteCode:    r.siteCode    || selectedProject || "",
+        name:        r.name        || "",
+        designation: r.designation || "",
+        department:  r.department  || "",
+        status:      r.status      || "",
+        inTime:      r.inTime      || "",
+        outTime:     r.outTime     || "",
+        shift:       r.shift       || "Day",
+        remarks:     r.remarks     || "",
+        workingHrs:  "",
         otHrs: "",
         type: "guard",
       }));
 
-      const scRaw = res.data.staffContacts || res.data.contacts || [];
-      const scHeaders = Array.isArray(scRaw[0]) ? scRaw[0] : [];
-      const scDataRows = Array.isArray(scRaw[0]) ? scRaw.slice(1) : scRaw;
-      const scIdx = {
-        sNo: getIndex(scHeaders, ["S.No", "SNo"], 0),
-        site: getIndex(scHeaders, ["Site", "SiteCode", "Site Cod"], 1),
-        empId: getIndex(scHeaders, ["EmpID", "Emp Id", "EmployeeId"], 2),
-        joiningDate: getIndex(scHeaders, ["JoiningDate", "Joining Date"], 3),
-        email: getIndex(scHeaders, ["Email", "EmailID", "Email Id"], 4),
-        name: getIndex(scHeaders, ["Name"], 5),
-        designation: getIndex(scHeaders, ["Designation"], 6),
-        department: getIndex(scHeaders, ["Department"], 7),
-        manager: getIndex(scHeaders, ["Manager", "ReportingManager", "Reporting Manager"], 8),
-        contact: getIndex(scHeaders, ["Contact", "ContactNo", "Contact No"], 9),
-      };
-      const staffContactsParsed = scDataRows.map((r, i) => ({
-        id: i,
-        sNo: pick(r, scIdx.sNo, i + 1),
-        site: pick(r, scIdx.site, ""),
-        empId: pick(r, scIdx.empId, ""),
-        joiningDate: excelToJSDate(pick(r, scIdx.joiningDate, "")),
-        email: pick(r, scIdx.email, ""),
-        name: pick(r, scIdx.name, ""),
-        designation: pick(r, scIdx.designation, ""),
-        department: pick(r, scIdx.department, ""),
-        manager: pick(r, scIdx.manager, ""),
-        contact: pick(r, scIdx.contact, ""),
+      // ═══ STAFF CONTACTS PARSING ═══
+      const staffContactsParsed = (res.data.staffContacts || res.data.contacts || []).map((r, i) => ({
+        id:          r.id,
+        sNo:         i + 1,
+        site:        r.site        || "",
+        empId:       r.empId       || "",
+        joiningDate: r.joiningDate || "",
+        email:       r.email       || "",
+        name:        r.name        || "",
+        designation: r.designation || "",
+        department:  r.department  || "",
+        manager:     r.manager     || "",
+        contact:     r.contact     || "",
         sheetType: "staffContact",
         type: "staffContact",
       }));
 
-      const gcRaw = res.data.guardContacts || [];
-      const gcHeaders = Array.isArray(gcRaw[0]) ? gcRaw[0] : [];
-      const gcDataRows = Array.isArray(gcRaw[0]) ? gcRaw.slice(1) : gcRaw;
-      const gcIdx = {
-        sNo: getIndex(gcHeaders, ["S.No", "SNo"], 0),
-        site: getIndex(gcHeaders, ["Site", "SiteCode", "Site Cod"], 1),
-        name: getIndex(gcHeaders, ["Name"], 2),
-        joiningDate: getIndex(gcHeaders, ["JoiningDate", "Joining Date"], 3),
-        designation: getIndex(gcHeaders, ["Designation"], 4),
-        status: getIndex(gcHeaders, ["Status"], 5),
-        shift: getIndex(gcHeaders, ["ShiftDuty", "Shift Duty", "Shift"], 6),
-        contact: getIndex(gcHeaders, ["ContactNo", "Contact No", "Contact"], 7),
-        remarks: getIndex(gcHeaders, ["Remarks"], 8),
-      };
-      const guardContactsParsed = gcDataRows.map((r, i) => ({
-        id: i,
-        sNo: pick(r, gcIdx.sNo, i + 1),
-        site: pick(r, gcIdx.site, ""),
-        name: pick(r, gcIdx.name, ""),
-        joiningDate: excelToJSDate(pick(r, gcIdx.joiningDate, "")),
-        designation: pick(r, gcIdx.designation, ""),
-        status: pick(r, gcIdx.status, ""),
-        shift: pick(r, gcIdx.shift, ""),
-        contact: pick(r, gcIdx.contact, ""),
-        remarks: pick(r, gcIdx.remarks, ""),
+      // ═══ GUARD CONTACTS PARSING ═══
+      const guardContactsParsed = (res.data.guardContacts || []).map((r, i) => ({
+        id:          r.id,
+        sNo:         i + 1,
+        site:        r.site        || "",
+        name:        r.name        || "",
+        joiningDate: r.joiningDate || "",
+        designation: r.designation || "",
+        status:      r.status      || "",
+        shift:       r.shift       || "",
+        contact:     r.contact     || "",
+        remarks:     r.remarks     || "",
         sheetType: "guardContact",
         type: "guardContact",
       }));
@@ -213,49 +172,36 @@ const Attendance = ({ selectedProject }) => {
 
   // Map frontend field names → backend field names before sending
   const buildPayload = (data) => {
-    // Helper to convert "HH:MM" from <input type="time"> back to Excel decimal
-    const timeStrToDecimal = (timeStr) => {
-      if (!timeStr || typeof timeStr !== 'string') return null;
-      const [h, m] = timeStr.split(':').map(Number);
-      if (isNaN(h) || isNaN(m)) return null;
-      return (h * 60 + m) / 1440;
-    };
-
-
-    if (data.type === 'staff') {
+    if (data.type === "staff") {
       return {
-        date:        data.date,   // ISO "yyyy-MM-dd" — backend jsToExcelDate handles it correctly
+        date:        data.date,
         siteCode:    data.siteCode || selectedProject,
         name:        data.name,
         designation: data.designation,
         department:  data.department || "",
         status:      data.status,
-        inTime:      timeStrToDecimal(data.inTime),
-        outTime:     timeStrToDecimal(data.outTime),
-        shift:       data.shift || "Day",
+        inTime:      data.inTime  || "",
+        outTime:     data.outTime || "",
+        shift:       data.shift   || "Day",
         remarks:     data.remarks || "",
       };
     }
-
-    if (data.type === 'guard') {
+    if (data.type === "guard") {
       return {
-        date: data.date,   // ISO "yyyy-MM-dd"
-        siteCode: data.siteCode || selectedProject,
-        name: data.name,
+        date:        data.date,
+        siteCode:    data.siteCode || selectedProject,
+        name:        data.name,
         designation: data.designation,
-        department: data.department,
-        status: data.status,
-        inTime: timeStrToDecimal(data.inTime),
-        outTime: timeStrToDecimal(data.outTime),
-        shift: data.shift,
-        remarks: data.remarks,
+        department:  data.department || "",
+        status:      data.status,
+        inTime:      data.inTime  || "",
+        outTime:     data.outTime || "",
+        shift:       data.shift   || "Day",
+        remarks:     data.remarks || "",
       };
     }
-
     if (data.type === "staffContact") {
       return {
-        sNo:         data.sNo,
-        site:        data.site || selectedProject,
         empId:       data.empId,
         joiningDate: data.joiningDate,
         emailId:     data.email || data.emailId,
@@ -268,18 +214,16 @@ const Attendance = ({ selectedProject }) => {
     }
     if (data.type === "guardContact") {
       return {
-        sNo:         data.sNo,
-        site:        data.site || selectedProject,
         name:        data.name,
         joiningDate: data.joiningDate,
         designation: data.designation || "Security Guard",
-        status:      data.status || "Deactive",
-        shift:       data.shift || "",
-        contactNo:   data.contact || data.contactNo,
-        remarks:     data.remarks || "",
+        status:      data.status      || "Deactive",
+        shift:       data.shift       || "",
+        contactNo:   data.contact     || data.contactNo,
+        remarks:     data.remarks     || "",
       };
     }
-    return data; // Fallback
+    return data;
   };
 
   const handleAddRecord = async (data) => {

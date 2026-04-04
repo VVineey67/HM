@@ -1,41 +1,40 @@
 const express  = require("express");
 const router   = express.Router();
 const multer   = require("multer");
-const graphHelper = require("../helpers/graphHelper");
+const supabase  = require("../helpers/supabaseHelper");
 
 const upload = multer({ storage: multer.memoryStorage() });
 
-/* ─── Paths ─── */
-const ITEMS_PATH   = "/Autox/Global/Procurement Setup/Items.xlsx";
-const VENDORS_PATH = "/Autox/Global/Procurement Setup/Vendors.xlsx";
-const SITES_PATH   = "/Autox/Global/Procurement Setup/Site-List.xlsx";
-const UOM_PATH     = "/Autox/Global/Procurement Setup/UOM.xlsx";
-
-/* ─── Excel column definitions ─── */
-// Items sheet columns (row index):
-// 0:MaterialName 1:Make 2:Description 3:Category 4:Unit 5:Qty 6:ImageUrl
-
-// Vendors sheet columns (row index):
-// 0:VendorName 1:Address 2:BankName 3:AccountNumber 4:IFSCCode 5:GSTIN
-// 6:MSMENumber 7:PAN 8:ContactPerson 9:Mobile 10:Email 11:LogoUrl
-// 12:DocGst 13:DocPan 14:DocAadhaar 15:DocCoi 16:DocMsme 17:DocOther
+/* ─── Storage upload helper ─── */
+const uploadToStorage = async (bucket, path, buffer, mimetype) => {
+  const { error } = await supabase.storage
+    .from(bucket)
+    .upload(path, buffer, { contentType: mimetype, upsert: true });
+  if (error) throw new Error(`Storage upload failed: ${error.message}`);
+  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+  return data.publicUrl;
+};
 
 /* ════════════════════════════════════
    ITEMS
 ════════════════════════════════════ */
 
-// GET all items
-router.get("/items", async (req, res) => {
+router.get("/items", async (_req, res) => {
   try {
-    const rows = await graphHelper.readSheet(ITEMS_PATH, "Items");
-    const items = (rows || []).slice(1).map(r => ({
-      materialName: r[0] || "",
-      make:         r[1] || "",
-      description:  r[2] || "",
-      category:     r[3] || "",
-      unit:         r[4] || "",
-      qty:          r[5] || "",
-      imageUrl:     r[6] || "",
+    const { data, error } = await supabase
+      .from("items")
+      .select("*")
+      .order("created_at", { ascending: true });
+    if (error) throw error;
+    const items = (data || []).map(r => ({
+      id:           r.id,
+      materialName: r.material_name || "",
+      make:         r.make          || "",
+      description:  r.description   || "",
+      category:     r.category      || "",
+      unit:         r.unit          || "",
+      qty:          r.qty           || "",
+      imageUrl:     r.image_url     || "",
     }));
     res.json({ items });
   } catch (err) {
@@ -44,46 +43,55 @@ router.get("/items", async (req, res) => {
   }
 });
 
-// POST add item
 router.post("/items", upload.single("image"), async (req, res) => {
   try {
     const { materialName, make, description, category, unit, qty } = req.body;
-    let imageUrl = "";
-
+    let image_url = "";
     if (req.file) {
-      const uploadPath = `/Autox/Global/Procurement Setup/Images/Items/${Date.now()}_${req.file.originalname}`;
-      imageUrl = await graphHelper.uploadFile(uploadPath, req.file.buffer, req.file.mimetype);
+      image_url = await uploadToStorage(
+        "procurement-images",
+        `items/${Date.now()}_${req.file.originalname}`,
+        req.file.buffer, req.file.mimetype
+      );
     }
-
-    const tableName = await graphHelper.getFirstTableName(ITEMS_PATH, "Items");
-    await graphHelper.addRows(ITEMS_PATH, "Items", tableName, [[
-      materialName || "", make || "", description || "",
-      category || "", unit || "", qty || "", imageUrl,
-    ]]);
-
-    res.json({ success: true });
+    const { data, error } = await supabase.from("items").insert({
+      material_name: materialName || "",
+      make: make || "", description: description || "",
+      category: category || "", unit: unit || "", qty: qty || "", image_url,
+    }).select().single();
+    if (error) throw error;
+    res.json({ success: true, id: data.id });
   } catch (err) {
     console.error("Item add error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-// PUT update item (by row index)
-router.put("/items/:idx", upload.single("image"), async (req, res) => {
+router.put("/items/:id", upload.single("image"), async (req, res) => {
   try {
-    const idx = parseInt(req.params.idx);
+    const { id } = req.params;
     const { materialName, make, description, category, unit, qty } = req.body;
-    let imageUrl = req.body.imageUrl || "";
+    let image_url = req.body.imageUrl || "";
 
     if (req.file) {
-      const uploadPath = `/Autox/Global/Procurement Setup/Images/Items/${Date.now()}_${req.file.originalname}`;
-      imageUrl = await graphHelper.uploadFile(uploadPath, req.file.buffer, req.file.mimetype);
+      // Delete old image if exists
+      if (req.body.imageUrl) {
+        const oldPath = req.body.imageUrl.split("/procurement-images/")[1]?.split("?")[0];
+        if (oldPath) await supabase.storage.from("procurement-images").remove([oldPath]);
+      }
+      image_url = await uploadToStorage(
+        "procurement-images",
+        `items/${Date.now()}_${req.file.originalname}`,
+        req.file.buffer, req.file.mimetype
+      );
     }
 
-    const tableName = await graphHelper.getFirstTableName(ITEMS_PATH, "Items");
-    const newRow = [materialName || "", make || "", description || "", category || "", unit || "", qty || "", imageUrl];
-    await graphHelper.updateRow(ITEMS_PATH, "Items", tableName, idx, newRow);
-
+    const { error } = await supabase.from("items").update({
+      material_name: materialName || "", make: make || "",
+      description: description || "", category: category || "",
+      unit: unit || "", qty: qty || "", image_url,
+    }).eq("id", id);
+    if (error) throw error;
     res.json({ success: true });
   } catch (err) {
     console.error("Item update error:", err.message);
@@ -91,12 +99,17 @@ router.put("/items/:idx", upload.single("image"), async (req, res) => {
   }
 });
 
-// DELETE item
-router.delete("/items/:idx", async (req, res) => {
+router.delete("/items/:id", async (req, res) => {
   try {
-    const idx = parseInt(req.params.idx);
-    const tableName = await graphHelper.getFirstTableName(ITEMS_PATH, "Items");
-    await graphHelper.deleteRow(ITEMS_PATH, "Items", tableName, idx);
+    const { id } = req.params;
+    // Get image URL before deleting
+    const { data } = await supabase.from("items").select("image_url").eq("id", id).single();
+    if (data?.image_url) {
+      const path = data.image_url.split("/procurement-images/")[1]?.split("?")[0];
+      if (path) await supabase.storage.from("procurement-images").remove([path]);
+    }
+    const { error } = await supabase.from("items").delete().eq("id", id);
+    if (error) throw error;
     res.json({ success: true });
   } catch (err) {
     console.error("Item delete error:", err.message);
@@ -104,13 +117,16 @@ router.delete("/items/:idx", async (req, res) => {
   }
 });
 
-// POST bulk items
 router.post("/items/bulk", async (req, res) => {
   try {
     const { rows } = req.body;
-    const tableName = await graphHelper.getFirstTableName(ITEMS_PATH, "Items");
-    const values = rows.map(r => [r.materialName || "", r.make || "", r.description || "", r.category || "", r.unit || "", r.qty || "", ""]);
-    await graphHelper.addRows(ITEMS_PATH, "Items", tableName, values);
+    const inserts = rows.map(r => ({
+      material_name: r.materialName || "", make: r.make || "",
+      description: r.description || "", category: r.category || "",
+      unit: r.unit || "", qty: r.qty || "", image_url: "",
+    }));
+    const { error } = await supabase.from("items").insert(inserts);
+    if (error) throw error;
     res.json({ success: true, count: rows.length });
   } catch (err) {
     console.error("Bulk items error:", err.message);
@@ -133,35 +149,40 @@ const vendorUpload = upload.fields([
 ]);
 
 const uploadVendorFile = async (files, key, folder) => {
-  if (!files || !files[key]) return "";
+  if (!files?.[key]) return null;
   const file = files[key][0];
-  const path = `/Autox/Global/Procurement Setup/Images/Vendors/${folder}/${Date.now()}_${file.originalname}`;
-  return await graphHelper.uploadFile(path, file.buffer, file.mimetype);
+  return await uploadToStorage(
+    "vendor-docs",
+    `${folder}/${key}_${Date.now()}_${file.originalname}`,
+    file.buffer, file.mimetype
+  );
 };
 
-// GET all vendors
-router.get("/vendors", async (req, res) => {
+router.get("/vendors", async (_req, res) => {
   try {
-    const rows = await graphHelper.readSheet(VENDORS_PATH, "Vendors");
-    const vendors = (rows || []).slice(1).map(r => ({
-      vendorName:    r[0]  || "",
-      address:       r[1]  || "",
-      bankName:      r[2]  || "",
-      accountNumber: r[3]  || "",
-      ifscCode:      r[4]  || "",
-      gstin:         r[5]  || "",
-      msmeNumber:    r[6]  || "",
-      pan:           r[7]  || "",
-      contactPerson: r[8]  || "",
-      mobile:        r[9]  || "",
-      email:         r[10] || "",
-      logoUrl:       r[11] || "",
-      docGstUrl:     r[12] || "",
-      docPanUrl:     r[13] || "",
-      docAadhaarUrl: r[14] || "",
-      docCoiUrl:     r[15] || "",
-      docMsmeUrl:    r[16] || "",
-      docOtherUrl:   r[17] || "",
+    const { data, error } = await supabase
+      .from("vendors").select("*").order("created_at", { ascending: true });
+    if (error) throw error;
+    const vendors = (data || []).map(r => ({
+      id:            r.id,
+      vendorName:    r.vendor_name    || "",
+      address:       r.address        || "",
+      bankName:      r.bank_name      || "",
+      accountNumber: r.account_number || "",
+      ifscCode:      r.ifsc_code      || "",
+      gstin:         r.gstin          || "",
+      msmeNumber:    r.msme_number    || "",
+      pan:           r.pan            || "",
+      contactPerson: r.contact_person || "",
+      mobile:        r.mobile         || "",
+      email:         r.email          || "",
+      logoUrl:       r.logo_url       || "",
+      docGstUrl:     r.doc_gst_url    || "",
+      docPanUrl:     r.doc_pan_url    || "",
+      docAadhaarUrl: r.doc_aadhaar_url|| "",
+      docCoiUrl:     r.doc_coi_url    || "",
+      docMsmeUrl:    r.doc_msme_url   || "",
+      docOtherUrl:   r.doc_other_url  || "",
     }));
     res.json({ vendors });
   } catch (err) {
@@ -170,61 +191,88 @@ router.get("/vendors", async (req, res) => {
   }
 });
 
-// POST add vendor
 router.post("/vendors", vendorUpload, async (req, res) => {
   try {
     const b = req.body;
     const files = req.files || {};
+    const folder = b.vendorName || "vendor";
 
     const [logoUrl, docGstUrl, docPanUrl, docAadhaarUrl, docCoiUrl, docMsmeUrl, docOtherUrl] = await Promise.all([
-      uploadVendorFile(files, "logo",       b.vendorName || "vendor"),
-      uploadVendorFile(files, "docGst",     b.vendorName || "vendor"),
-      uploadVendorFile(files, "docPan",     b.vendorName || "vendor"),
-      uploadVendorFile(files, "docAadhaar", b.vendorName || "vendor"),
-      uploadVendorFile(files, "docCoi",     b.vendorName || "vendor"),
-      uploadVendorFile(files, "docMsme",    b.vendorName || "vendor"),
-      uploadVendorFile(files, "docOther",   b.vendorName || "vendor"),
+      uploadVendorFile(files, "logo",       folder),
+      uploadVendorFile(files, "docGst",     folder),
+      uploadVendorFile(files, "docPan",     folder),
+      uploadVendorFile(files, "docAadhaar", folder),
+      uploadVendorFile(files, "docCoi",     folder),
+      uploadVendorFile(files, "docMsme",    folder),
+      uploadVendorFile(files, "docOther",   folder),
     ]);
 
-    const tableName = await graphHelper.getFirstTableName(VENDORS_PATH, "Vendors");
-    await graphHelper.addRows(VENDORS_PATH, "Vendors", tableName, [[
-      b.vendorName || "", b.address || "", b.bankName || "", b.accountNumber || "", b.ifscCode || "",
-      b.gstin || "", b.msmeNumber || "", b.pan || "", b.contactPerson || "", b.mobile || "", b.email || "",
-      logoUrl, docGstUrl, docPanUrl, docAadhaarUrl, docCoiUrl, docMsmeUrl, docOtherUrl,
-    ]]);
-
-    res.json({ success: true });
+    const { data, error } = await supabase.from("vendors").insert({
+      vendor_name:    b.vendorName    || "",
+      address:        b.address       || "",
+      bank_name:      b.bankName      || "",
+      account_number: b.accountNumber || "",
+      ifsc_code:      b.ifscCode      || "",
+      gstin:          b.gstin         || "",
+      msme_number:    b.msmeNumber    || "",
+      pan:            b.pan           || "",
+      contact_person: b.contactPerson || "",
+      mobile:         b.mobile        || "",
+      email:          b.email         || "",
+      logo_url:       logoUrl         || "",
+      doc_gst_url:    docGstUrl       || "",
+      doc_pan_url:    docPanUrl       || "",
+      doc_aadhaar_url:docAadhaarUrl   || "",
+      doc_coi_url:    docCoiUrl       || "",
+      doc_msme_url:   docMsmeUrl      || "",
+      doc_other_url:  docOtherUrl     || "",
+    }).select().single();
+    if (error) throw error;
+    res.json({ success: true, id: data.id });
   } catch (err) {
     console.error("Vendor add error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-// PUT update vendor
-router.put("/vendors/:idx", vendorUpload, async (req, res) => {
+router.put("/vendors/:id", vendorUpload, async (req, res) => {
   try {
-    const idx  = parseInt(req.params.idx);
-    const b    = req.body;
+    const { id } = req.params;
+    const b = req.body;
     const files = req.files || {};
+    const folder = b.vendorName || "vendor";
 
-    const [logoUrl, docGstUrl, docPanUrl, docAadhaarUrl, docCoiUrl, docMsmeUrl, docOtherUrl] = await Promise.all([
-      uploadVendorFile(files, "logo",       b.vendorName) || b.logoUrl     || "",
-      uploadVendorFile(files, "docGst",     b.vendorName) || b.docGstUrl   || "",
-      uploadVendorFile(files, "docPan",     b.vendorName) || b.docPanUrl   || "",
-      uploadVendorFile(files, "docAadhaar", b.vendorName) || b.docAadhaarUrl || "",
-      uploadVendorFile(files, "docCoi",     b.vendorName) || b.docCoiUrl   || "",
-      uploadVendorFile(files, "docMsme",    b.vendorName) || b.docMsmeUrl  || "",
-      uploadVendorFile(files, "docOther",   b.vendorName) || b.docOtherUrl || "",
+    const [newLogo, newDocGst, newDocPan, newDocAadhaar, newDocCoi, newDocMsme, newDocOther] = await Promise.all([
+      uploadVendorFile(files, "logo",       folder),
+      uploadVendorFile(files, "docGst",     folder),
+      uploadVendorFile(files, "docPan",     folder),
+      uploadVendorFile(files, "docAadhaar", folder),
+      uploadVendorFile(files, "docCoi",     folder),
+      uploadVendorFile(files, "docMsme",    folder),
+      uploadVendorFile(files, "docOther",   folder),
     ]);
 
-    const newRow = [
-      b.vendorName || "", b.address || "", b.bankName || "", b.accountNumber || "", b.ifscCode || "",
-      b.gstin || "", b.msmeNumber || "", b.pan || "", b.contactPerson || "", b.mobile || "", b.email || "",
-      logoUrl, docGstUrl, docPanUrl, docAadhaarUrl, docCoiUrl, docMsmeUrl, docOtherUrl,
-    ];
-
-    const tableName = await graphHelper.getFirstTableName(VENDORS_PATH, "Vendors");
-    await graphHelper.updateRow(VENDORS_PATH, "Vendors", tableName, idx, newRow);
+    const { error } = await supabase.from("vendors").update({
+      vendor_name:    b.vendorName    || "",
+      address:        b.address       || "",
+      bank_name:      b.bankName      || "",
+      account_number: b.accountNumber || "",
+      ifsc_code:      b.ifscCode      || "",
+      gstin:          b.gstin         || "",
+      msme_number:    b.msmeNumber    || "",
+      pan:            b.pan           || "",
+      contact_person: b.contactPerson || "",
+      mobile:         b.mobile        || "",
+      email:          b.email         || "",
+      logo_url:        newLogo        || b.logoUrl        || "",
+      doc_gst_url:     newDocGst      || b.docGstUrl      || "",
+      doc_pan_url:     newDocPan      || b.docPanUrl      || "",
+      doc_aadhaar_url: newDocAadhaar  || b.docAadhaarUrl  || "",
+      doc_coi_url:     newDocCoi      || b.docCoiUrl      || "",
+      doc_msme_url:    newDocMsme     || b.docMsmeUrl     || "",
+      doc_other_url:   newDocOther    || b.docOtherUrl    || "",
+    }).eq("id", id);
+    if (error) throw error;
     res.json({ success: true });
   } catch (err) {
     console.error("Vendor update error:", err.message);
@@ -232,12 +280,10 @@ router.put("/vendors/:idx", vendorUpload, async (req, res) => {
   }
 });
 
-// DELETE vendor
-router.delete("/vendors/:idx", async (req, res) => {
+router.delete("/vendors/:id", async (req, res) => {
   try {
-    const idx = parseInt(req.params.idx);
-    const tableName = await graphHelper.getFirstTableName(VENDORS_PATH, "Vendors");
-    await graphHelper.deleteRow(VENDORS_PATH, "Vendors", tableName, idx);
+    const { error } = await supabase.from("vendors").delete().eq("id", req.params.id);
+    if (error) throw error;
     res.json({ success: true });
   } catch (err) {
     console.error("Vendor delete error:", err.message);
@@ -249,18 +295,19 @@ router.delete("/vendors/:idx", async (req, res) => {
    SITES
 ════════════════════════════════════ */
 
-// GET all sites
-router.get("/sites", async (req, res) => {
+router.get("/sites", async (_req, res) => {
   try {
-    const rows = await graphHelper.readSheet(SITES_PATH, "Sheet1");
-    const sites = (rows || []).slice(1).map(r => ({
-      sNo:            r[0] || "",
-      siteName:       r[1] || "",
-      siteCode:       r[2] || "",
-      city:           r[3] || "",
-      state:          r[4] || "",
-      billingAddress: r[5] || "",
-      siteAddress:    r[6] || "",
+    const { data, error } = await supabase
+      .from("sites").select("*").order("created_at", { ascending: true });
+    if (error) throw error;
+    const sites = (data || []).map(r => ({
+      id:             r.id,
+      siteName:       r.site_name       || "",
+      siteCode:       r.site_code       || "",
+      city:           r.city            || "",
+      state:          r.state           || "",
+      billingAddress: r.billing_address || "",
+      siteAddress:    r.site_address    || "",
     }));
     res.json({ sites });
   } catch (err) {
@@ -269,30 +316,31 @@ router.get("/sites", async (req, res) => {
   }
 });
 
-// POST add site
 router.post("/sites", async (req, res) => {
   try {
     const { siteName, siteCode, city, state, billingAddress, siteAddress } = req.body;
-    const tableName = await graphHelper.getFirstTableName(SITES_PATH, "Sheet1");
-    await graphHelper.addRows(SITES_PATH, "Sheet1", tableName, [[
-      "", siteName || "", siteCode || "", city || "", state || "", billingAddress || "", siteAddress || "",
-    ]]);
-    res.json({ success: true });
+    const { data, error } = await supabase.from("sites").insert({
+      site_name: siteName || "", site_code: siteCode || "",
+      city: city || "", state: state || "",
+      billing_address: billingAddress || "", site_address: siteAddress || "",
+    }).select().single();
+    if (error) throw error;
+    res.json({ success: true, id: data.id });
   } catch (err) {
     console.error("Site add error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-// PUT update site (by row index)
-router.put("/sites/:idx", async (req, res) => {
+router.put("/sites/:id", async (req, res) => {
   try {
-    const idx = parseInt(req.params.idx);
-    const { sNo, siteName, siteCode, city, state, billingAddress, siteAddress } = req.body;
-    const tableName = await graphHelper.getFirstTableName(SITES_PATH, "Sheet1");
-    await graphHelper.updateRow(SITES_PATH, "Sheet1", tableName, idx, [
-      sNo || "", siteName || "", siteCode || "", city || "", state || "", billingAddress || "", siteAddress || "",
-    ]);
+    const { siteName, siteCode, city, state, billingAddress, siteAddress } = req.body;
+    const { error } = await supabase.from("sites").update({
+      site_name: siteName || "", site_code: siteCode || "",
+      city: city || "", state: state || "",
+      billing_address: billingAddress || "", site_address: siteAddress || "",
+    }).eq("id", req.params.id);
+    if (error) throw error;
     res.json({ success: true });
   } catch (err) {
     console.error("Site update error:", err.message);
@@ -300,31 +348,30 @@ router.put("/sites/:idx", async (req, res) => {
   }
 });
 
-// POST bulk sites
-router.post("/sites/bulk", async (req, res) => {
+router.delete("/sites/:id", async (req, res) => {
   try {
-    const { rows } = req.body;
-    const tableName = await graphHelper.getFirstTableName(SITES_PATH, "Sheet1");
-    const values = rows.map(r => [
-      "", r.siteName || "", r.siteCode || "", r.city || "", r.state || "", r.billingAddress || "", r.siteAddress || "",
-    ]);
-    await graphHelper.addRows(SITES_PATH, "Sheet1", tableName, values);
-    res.json({ success: true, count: rows.length });
+    const { error } = await supabase.from("sites").delete().eq("id", req.params.id);
+    if (error) throw error;
+    res.json({ success: true });
   } catch (err) {
-    console.error("Bulk sites error:", err.message);
+    console.error("Site delete error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-// DELETE site
-router.delete("/sites/:idx", async (req, res) => {
+router.post("/sites/bulk", async (req, res) => {
   try {
-    const idx = parseInt(req.params.idx);
-    const tableName = await graphHelper.getFirstTableName(SITES_PATH, "Sheet1");
-    await graphHelper.deleteRow(SITES_PATH, "Sheet1", tableName, idx);
-    res.json({ success: true });
+    const { rows } = req.body;
+    const inserts = rows.map(r => ({
+      site_name: r.siteName || "", site_code: r.siteCode || "",
+      city: r.city || "", state: r.state || "",
+      billing_address: r.billingAddress || "", site_address: r.siteAddress || "",
+    }));
+    const { error } = await supabase.from("sites").insert(inserts);
+    if (error) throw error;
+    res.json({ success: true, count: rows.length });
   } catch (err) {
-    console.error("Site delete error:", err.message);
+    console.error("Bulk sites error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -333,13 +380,15 @@ router.delete("/sites/:idx", async (req, res) => {
    UOM
 ════════════════════════════════════ */
 
-// GET all UOMs
 router.get("/uom", async (_req, res) => {
   try {
-    const rows = await graphHelper.readSheet(UOM_PATH, "Sheet1");
-    const uoms = (rows || []).slice(1).map(r => ({
-      uomName: r[0] || "",
-      uomCode: r[1] || "",
+    const { data, error } = await supabase
+      .from("uom").select("*").order("created_at", { ascending: true });
+    if (error) throw error;
+    const uoms = (data || []).map(r => ({
+      id:      r.id,
+      uomName: r.uom_name || "",
+      uomCode: r.uom_code || "",
     }));
     res.json({ uoms });
   } catch (err) {
@@ -348,26 +397,27 @@ router.get("/uom", async (_req, res) => {
   }
 });
 
-// POST add UOM
 router.post("/uom", async (req, res) => {
   try {
     const { uomName, uomCode } = req.body;
-    const tableName = await graphHelper.getFirstTableName(UOM_PATH, "Sheet1");
-    await graphHelper.addRows(UOM_PATH, "Sheet1", tableName, [[uomName || "", uomCode || ""]]);
-    res.json({ success: true });
+    const { data, error } = await supabase.from("uom")
+      .insert({ uom_name: uomName || "", uom_code: uomCode || "" })
+      .select().single();
+    if (error) throw error;
+    res.json({ success: true, id: data.id });
   } catch (err) {
     console.error("UOM add error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-// PUT update UOM
-router.put("/uom/:idx", async (req, res) => {
+router.put("/uom/:id", async (req, res) => {
   try {
-    const idx = parseInt(req.params.idx);
     const { uomName, uomCode } = req.body;
-    const tableName = await graphHelper.getFirstTableName(UOM_PATH, "Sheet1");
-    await graphHelper.updateRow(UOM_PATH, "Sheet1", tableName, idx, [uomName || "", uomCode || ""]);
+    const { error } = await supabase.from("uom")
+      .update({ uom_name: uomName || "", uom_code: uomCode || "" })
+      .eq("id", req.params.id);
+    if (error) throw error;
     res.json({ success: true });
   } catch (err) {
     console.error("UOM update error:", err.message);
@@ -375,15 +425,146 @@ router.put("/uom/:idx", async (req, res) => {
   }
 });
 
-// DELETE UOM
-router.delete("/uom/:idx", async (req, res) => {
+router.delete("/uom/:id", async (req, res) => {
   try {
-    const idx = parseInt(req.params.idx);
-    const tableName = await graphHelper.getFirstTableName(UOM_PATH, "Sheet1");
-    await graphHelper.deleteRow(UOM_PATH, "Sheet1", tableName, idx);
+    const { error } = await supabase.from("uom").delete().eq("id", req.params.id);
+    if (error) throw error;
     res.json({ success: true });
   } catch (err) {
     console.error("UOM delete error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/uom/bulk", async (req, res) => {
+  try {
+    const { rows } = req.body;
+    const inserts = rows.map(r => ({ uom_name: r.uomName || "", uom_code: r.uomCode || "" }));
+    const { error } = await supabase.from("uom").insert(inserts);
+    if (error) throw error;
+    res.json({ success: true, count: rows.length });
+  } catch (err) {
+    console.error("Bulk UOM error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ════════════════════════════════════
+   COMPANIES
+════════════════════════════════════ */
+
+const companyUpload = upload.fields([
+  { name: "logo",  maxCount: 1 },
+  { name: "stamp", maxCount: 1 },
+  { name: "sign",  maxCount: 1 },
+]);
+
+const uploadCompanyImg = async (files, key, folder) => {
+  if (!files?.[key]) return null;
+  const file = files[key][0];
+  return await uploadToStorage(
+    "procurement-images",
+    `companies/${folder}/${key}_${Date.now()}_${file.originalname}`,
+    file.buffer, file.mimetype
+  );
+};
+
+router.get("/companies", async (_req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("companies").select("*").order("created_at", { ascending: true });
+    if (error) throw error;
+    const companies = (data || []).map(r => ({
+      id:          r.id,
+      companyName: r.company_name || "",
+      companyCode: r.company_code || "",
+      phone:       r.phone        || "",
+      email:       r.email        || "",
+      gstin:       r.gstin        || "",
+      pan:         r.pan          || "",
+      pincode:     r.pincode      || "",
+      state:       r.state        || "",
+      district:    r.district     || "",
+      address:     r.address      || "",
+      logoUrl:     r.logo_url     || "",
+      stampUrl:    r.stamp_url    || "",
+      signUrl:     r.sign_url     || "",
+    }));
+    res.json({ companies });
+  } catch (err) {
+    console.error("Companies read error:", err.message);
+    res.json({ companies: [] });
+  }
+});
+
+router.post("/companies", companyUpload, async (req, res) => {
+  try {
+    const b = req.body;
+    const files = req.files || {};
+    const folder = b.companyCode || b.companyName || "company";
+
+    const [logoUrl, stampUrl, signUrl] = await Promise.all([
+      uploadCompanyImg(files, "logo",  folder),
+      uploadCompanyImg(files, "stamp", folder),
+      uploadCompanyImg(files, "sign",  folder),
+    ]);
+
+    const { data, error } = await supabase.from("companies").insert({
+      company_name: b.companyName || "", company_code: b.companyCode || "",
+      phone: b.phone || "", email: b.email || "",
+      gstin: b.gstin || "", pan: b.pan || "",
+      pincode: b.pincode || "", state: b.state || "",
+      district: b.district || "", address: b.address || "",
+      logo_url:  logoUrl  || "",
+      stamp_url: stampUrl || "",
+      sign_url:  signUrl  || "",
+    }).select().single();
+    if (error) throw error;
+    res.json({ success: true, id: data.id });
+  } catch (err) {
+    console.error("Company add error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put("/companies/:id", companyUpload, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const b = req.body;
+    const files = req.files || {};
+    const folder = b.companyCode || b.companyName || "company";
+
+    const [newLogo, newStamp, newSign] = await Promise.all([
+      uploadCompanyImg(files, "logo",  folder),
+      uploadCompanyImg(files, "stamp", folder),
+      uploadCompanyImg(files, "sign",  folder),
+    ]);
+
+    const { error } = await supabase.from("companies").update({
+      company_name: b.companyName || "", company_code: b.companyCode || "",
+      phone: b.phone || "", email: b.email || "",
+      gstin: b.gstin || "", pan: b.pan || "",
+      pincode: b.pincode || "", state: b.state || "",
+      district: b.district || "", address: b.address || "",
+      logo_url:  newLogo  || b.logoUrl  || "",
+      stamp_url: newStamp || b.stampUrl || "",
+      sign_url:  newSign  || b.signUrl  || "",
+    }).eq("id", id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Company update error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete("/companies/:id", async (req, res) => {
+  try {
+    const { error } = await supabase.from("companies").delete().eq("id", req.params.id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Company delete error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });

@@ -68,12 +68,14 @@ const Sidebar = ({
   isMobile = false,
   userName = "Jitendar Goyal",
   userEmail = "jitendar@bootes.in",
+  currentUser: currentUserProp = null,
+  projects: projectsProp = null,
 }) => {
+  const currentUser = currentUserProp || (() => { try { return JSON.parse(localStorage.getItem("bms_user") || "{}"); } catch { return {}; } })();
   const [openSub, setOpenSub]   = useState(null);
   const [projOpen, setProjOpen] = useState(false);
 
-
-  const projects = ["All Project","B-47","GDLV","BHA","SLH","HIH","RWH"];
+  const projects = projectsProp || ["All Project","B-47","GDLV","BHA","SLH","HIH","RWH"];
   const collapsed = isMobile ? false : isCollapsed;
   const initials  = userName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
 
@@ -174,6 +176,7 @@ const Sidebar = ({
 
   return (
     <motion.div
+      initial={false}
       animate={{ width: collapsed ? "60px" : "248px" }}
       transition={{ duration: 0.22, ease: "easeInOut" }}
       className="h-screen flex flex-col shrink-0 overflow-hidden"
@@ -240,16 +243,19 @@ const Sidebar = ({
                   className="rounded-xl overflow-hidden mb-2 shadow-2xl"
                   style={{ background: "#2c2c2e", border: "1px solid rgba(255,255,255,0.1)" }}
                 >
-                  {projects.map(p => (
-                    <button key={p}
-                      onClick={() => { setSelectedProject(p); setProjOpen(false); }}
-                      className={`w-full text-left px-3 py-2 text-[12.5px] transition-all flex items-center gap-2
-                        ${selectedProject === p ? "text-white font-semibold bg-white/8" : "text-[#8b8b8f] hover:bg-white/5 hover:text-white"}`}
-                    >
-                      {selectedProject === p && <span className="w-1.5 h-1.5 rounded-full bg-white shrink-0" />}
-                      {p}
-                    </button>
-                  ))}
+                  {projects.map(p => {
+                    const name = typeof p === "string" ? p : p.name;
+                    return (
+                      <button key={name}
+                        onClick={() => { setSelectedProject(name); setProjOpen(false); }}
+                        className={`w-full text-left px-3 py-2 text-[12.5px] transition-all flex items-center gap-2
+                          ${selectedProject === name ? "text-white font-semibold bg-white/8" : "text-[#8b8b8f] hover:bg-white/5 hover:text-white"}`}
+                      >
+                        {selectedProject === name && <span className="w-1.5 h-1.5 rounded-full bg-white shrink-0" />}
+                        {name}
+                      </button>
+                    );
+                  })}
                 </motion.div>
               )}
             </AnimatePresence>
@@ -272,27 +278,36 @@ const Sidebar = ({
       {/* ── FOOTER ── */}
       <div className="shrink-0 px-3 py-3" style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }}>
         {!collapsed ? (
-          <button className="w-full flex items-center gap-2.5 rounded-lg px-2 py-2 hover:bg-white/5 transition-all group">
-            <div className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0"
-              style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)" }}>
-              {initials}
-            </div>
-            <div className="flex-1 min-w-0 text-left">
-              <p className="text-[12.5px] font-semibold text-white truncate leading-none">{userName}</p>
-              <p className="text-[11px] text-[#636366] mt-0.5 truncate">{userEmail}</p>
-            </div>
-            <button onClick={e => { e.stopPropagation(); onLogout(); }}
-              title="Logout"
-              className="text-[#48484a] hover:text-red-400 transition-colors p-1 rounded">
+          <div className="w-full flex items-center gap-2.5 rounded-lg px-2 py-2 hover:bg-white/5 transition-all group">
+            <button onClick={() => setActiveTab("profile")} className="flex items-center gap-2.5 flex-1 min-w-0 text-left">
+              <div className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0 overflow-hidden"
+                style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)" }}>
+                {currentUser.avatar
+                  ? <img src={currentUser.avatar} alt="" className="w-full h-full object-cover" />
+                  : (currentUser.name || userName).split(" ").map(n => n[0]).join("").slice(0,2).toUpperCase()
+                }
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[12.5px] font-semibold text-white truncate leading-none">{currentUser.name || userName}</p>
+                <p className="text-[11px] text-[#636366] mt-0.5 truncate">{currentUser.email || userEmail}</p>
+              </div>
+            </button>
+            <button onClick={onLogout} title="Logout"
+              className="text-[#48484a] hover:text-red-400 transition-colors p-1 rounded shrink-0">
               <LogOut size={13} />
             </button>
-          </button>
+          </div>
         ) : (
           <div className="flex justify-center">
-            <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white"
-              style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)" }}>
-              {initials}
-            </div>
+            <button onClick={() => setActiveTab("profile")} title="Profile">
+              <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white overflow-hidden"
+                style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)" }}>
+                {currentUser.avatar
+                  ? <img src={currentUser.avatar} alt="" className="w-full h-full object-cover" />
+                  : (currentUser.name || userName).split(" ").map(n => n[0]).join("").slice(0,2).toUpperCase()
+                }
+              </div>
+            </button>
           </div>
         )}
       </div>
