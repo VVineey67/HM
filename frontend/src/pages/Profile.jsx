@@ -6,6 +6,7 @@ import {
   UserCircle, Lock, Eye, EyeOff, KeyRound, SendHorizonal,
 } from "lucide-react";
 import api from "../utils/api";
+import ManageProjects from "../components/ManageProjects";
 
 const ROLE_BADGE = {
   global_admin: { label: "Global Admin", color: "bg-purple-100 text-purple-700 border border-purple-200" },
@@ -123,16 +124,6 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
   const [permLoading, setPermLoading] = useState(false);
   const [permFilter, setPermFilter]   = useState("all");
 
-  /* Projects */
-  const EMPTY_PROJECT = { name: "", code: "", location: "", manager: "", address: "", city: "", state: "", pincode: "" };
-  const [projects, setProjects] = useState(() => {
-    const s = localStorage.getItem("bms_projects");
-    if (!s) return [{ name: "All Project" }, { name: "B-47" }, { name: "GDLV" }, { name: "BHA" }, { name: "SLH" }, { name: "HIH" }, { name: "RWH" }];
-    const parsed = JSON.parse(s);
-    if (parsed.length > 0 && typeof parsed[0] === "string") return parsed.map(n => ({ name: n }));
-    return parsed;
-  });
-  const [newProject, setNewProject] = useState({ ...EMPTY_PROJECT });
 
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
@@ -210,7 +201,7 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
   const sendOtp = async () => {
     setOtpLoading(true);
     try {
-      await api.post("/api/auth/send-otp");
+      await api.post("/api/auth/send-otp", { email: currentUser.email });
       setSecStep(2);
       showToast(`OTP sent to ${currentUser.email}`);
     } catch (err) {
@@ -226,7 +217,11 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
     if (!otp.trim())         return showToast("Enter the OTP", "error");
     setOtpLoading(true);
     try {
-      await api.post("/api/auth/verify-otp-change-password", { otp, newPassword: newPw });
+      await api.post("/api/auth/verify-otp-change-password", {
+        email: currentUser.email,
+        otp,
+        newPassword: newPw,
+      });
       showToast("Password changed successfully!");
       setSecStep(1);
       setOtp(""); setNewPw(""); setConfirmPw("");
@@ -280,27 +275,6 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
     finally { setPermLoading(false); }
   };
 
-  /* ── Projects ── */
-  const addProject = () => {
-    const name = newProject.name.trim();
-    if (!name) return showToast("Project name is required", "error");
-    if (projects.some(p => p.name === name)) return showToast("Project already exists", "error");
-    const updated = [...projects, { ...newProject, name }];
-    setProjects(updated);
-    localStorage.setItem("bms_projects", JSON.stringify(updated));
-    onProjectsUpdate?.(updated);
-    setNewProject({ ...EMPTY_PROJECT });
-    showToast(`Project "${name}" added`);
-  };
-
-  const removeProject = (name) => {
-    if (name === "All Project") return showToast("Cannot remove 'All Project'", "error");
-    const updated = projects.filter((p) => p.name !== name);
-    setProjects(updated);
-    localStorage.setItem("bms_projects", JSON.stringify(updated));
-    onProjectsUpdate?.(updated);
-    showToast(`Project "${name}" removed`);
-  };
 
   const badge = ROLE_BADGE[currentUser.role] || ROLE_BADGE.user;
 
@@ -802,113 +776,7 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
 
             {/* ─── MANAGE PROJECTS ─── */}
             {section === "projects" && isGlobalAdmin && (
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-                <h2 className="text-lg font-black text-slate-800 mb-1">Manage Projects</h2>
-                <p className="text-sm text-slate-500 mb-6">Add or remove projects from the sidebar.</p>
-
-                {/* Add new project form */}
-                <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4 mb-6">
-                  <p className={`${lbl} mb-3`}>New Project</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <span className={lbl}>Project Name *</span>
-                      <input className={inp} placeholder="e.g. B-47"
-                        value={newProject.name}
-                        onChange={(e) => setNewProject((p) => ({ ...p, name: e.target.value }))} />
-                    </div>
-                    <div>
-                      <span className={lbl}>Project Code</span>
-                      <input className={inp} placeholder="e.g. BMS-001"
-                        value={newProject.code}
-                        onChange={(e) => setNewProject((p) => ({ ...p, code: e.target.value }))} />
-                    </div>
-                    <div>
-                      <span className={lbl}>Project Location</span>
-                      <input className={inp} placeholder="e.g. Mumbai"
-                        value={newProject.location}
-                        onChange={(e) => setNewProject((p) => ({ ...p, location: e.target.value }))} />
-                    </div>
-                    <div>
-                      <span className={lbl}>Project Manager Name</span>
-                      <input className={inp} placeholder="Manager full name"
-                        value={newProject.manager}
-                        onChange={(e) => setNewProject((p) => ({ ...p, manager: e.target.value }))} />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <span className={lbl}>Project Address</span>
-                      <input className={inp} placeholder="Street / Area"
-                        value={newProject.address}
-                        onChange={(e) => setNewProject((p) => ({ ...p, address: e.target.value }))} />
-                    </div>
-                    <div>
-                      <span className={lbl}>City</span>
-                      <input className={inp} placeholder="City"
-                        value={newProject.city}
-                        onChange={(e) => setNewProject((p) => ({ ...p, city: e.target.value }))} />
-                    </div>
-                    <div>
-                      <span className={lbl}>State</span>
-                      <input className={inp} placeholder="State"
-                        value={newProject.state}
-                        onChange={(e) => setNewProject((p) => ({ ...p, state: e.target.value }))} />
-                    </div>
-                    <div>
-                      <span className={lbl}>Pincode</span>
-                      <input className={inp} placeholder="000000"
-                        value={newProject.pincode}
-                        onChange={(e) => setNewProject((p) => ({ ...p, pincode: e.target.value }))} />
-                    </div>
-                  </div>
-                  <div className="mt-3">
-                    <button onClick={addProject}
-                      className="flex items-center gap-1.5 rounded-xl bg-linear-to-r from-blue-600 to-purple-600 px-5 py-2.5 text-sm font-bold text-white shadow hover:shadow-md transition-all">
-                      <Plus size={15} />
-                      Add Project
-                    </button>
-                  </div>
-                </div>
-
-                {/* Project list */}
-                <div className="space-y-2">
-                  {projects.map((p) => {
-                    const pName = typeof p === "string" ? p : p.name;
-                    const details = typeof p === "object" ? p : {};
-                    return (
-                      <div key={pName}
-                        className="p-4 rounded-xl border border-slate-100 hover:border-slate-200 bg-slate-50 hover:bg-white transition-all">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="w-9 h-9 rounded-xl bg-linear-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-[11px] font-bold shrink-0">
-                              {pName.slice(0, 2).toUpperCase()}
-                            </div>
-                            <div className="min-w-0">
-                              <p className="font-bold text-sm text-slate-800">{pName}</p>
-                              <p className="text-[11px] text-slate-400 truncate">
-                                {[details.code, details.location, details.city].filter(Boolean).join(" · ") || "No details added"}
-                              </p>
-                            </div>
-                          </div>
-                          {pName !== "All Project" && (
-                            <button onClick={() => removeProject(pName)}
-                              className="text-slate-400 hover:text-red-500 transition-colors p-1.5 rounded-lg hover:bg-red-50 shrink-0 ml-2">
-                              <Trash2 size={14} />
-                            </button>
-                          )}
-                        </div>
-                        {/* Detail chips */}
-                        {typeof p === "object" && (details.manager || details.address || details.state || details.pincode) && (
-                          <div className="mt-2.5 flex flex-wrap gap-1.5 pl-12">
-                            {details.manager && <span className="text-[10px] bg-blue-50 text-blue-600 border border-blue-100 px-2 py-0.5 rounded-full font-medium">👤 {details.manager}</span>}
-                            {details.address && <span className="text-[10px] bg-slate-100 text-slate-500 border border-slate-200 px-2 py-0.5 rounded-full">{details.address}</span>}
-                            {details.state   && <span className="text-[10px] bg-slate-100 text-slate-500 border border-slate-200 px-2 py-0.5 rounded-full">{details.state}</span>}
-                            {details.pincode && <span className="text-[10px] bg-slate-100 text-slate-500 border border-slate-200 px-2 py-0.5 rounded-full">{details.pincode}</span>}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+              <ManageProjects onProjectsUpdate={onProjectsUpdate} />
             )}
 
           </div>

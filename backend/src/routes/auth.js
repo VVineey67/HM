@@ -201,49 +201,57 @@ router.delete("/avatar", async (req, res) => {
 /* ─────────────────────────────────────────
    POST /api/auth/send-otp
    Logged-in user ke email pe OTP bhejo
+   Body: { email }  ← frontend localStorage se bhejta hai
+   Token verify ki zaroorat nahi — OTP hi security hai
 ───────────────────────────────────────── */
 router.post("/send-otp", async (req, res) => {
-  const token = req.headers.authorization?.split(" ")[1];
-  if (!token) return res.status(401).json({ error: "Login required" });
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: "Email required" });
 
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-  if (authError || !user) return res.status(401).json({ error: "Invalid token" });
+  const admin = getAdminClient();
 
-  const { error } = await supabase.auth.signInWithOtp({
-    email: user.email,
+  // Verify: yeh email hamare users table mein hai?
+  const { data: userRow, error: dbErr } = await admin
+    .from("users").select("id").eq("email", email).single();
+  if (dbErr || !userRow) return res.status(404).json({ error: "Email not found in system" });
+
+  // OTP bhejo
+  const { error } = await admin.auth.signInWithOtp({
+    email,
     options: { shouldCreateUser: false },
   });
 
   if (error) return res.status(500).json({ error: error.message });
-  res.json({ success: true, email: user.email });
+  res.json({ success: true, email });
 });
 
 /* ─────────────────────────────────────────
    POST /api/auth/verify-otp-change-password
    OTP verify karke password badlo
-   Body: { otp, newPassword }
+   Body: { email, otp, newPassword }
 ───────────────────────────────────────── */
 router.post("/verify-otp-change-password", async (req, res) => {
-  const token = req.headers.authorization?.split(" ")[1];
-  if (!token) return res.status(401).json({ error: "Login required" });
+  const { email, otp, newPassword } = req.body;
+  if (!email || !otp || !newPassword)
+    return res.status(400).json({ error: "Email, OTP aur naya password required hai" });
 
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-  if (authError || !user) return res.status(401).json({ error: "Invalid token" });
-
-  const { otp, newPassword } = req.body;
-  if (!otp || !newPassword) return res.status(400).json({ error: "OTP aur naya password required hai" });
+  const admin = getAdminClient();
 
   // OTP verify karo
-  const { error: otpError } = await supabase.auth.verifyOtp({
-    email: user.email,
+  const { data: verifyData, error: otpError } = await admin.auth.verifyOtp({
+    email,
     token: otp,
     type: "email",
   });
 
   if (otpError) return res.status(400).json({ error: "Invalid or expired OTP" });
 
-  // Password update karo
-  const { error: pwError } = await supabase.auth.admin.updateUserById(user.id, {
+  // Auth user ID nikalo
+  const userId = verifyData?.user?.id;
+  if (!userId) return res.status(400).json({ error: "OTP verification failed" });
+
+  // Password update karo via admin API
+  const { error: pwError } = await admin.auth.admin.updateUserById(userId, {
     password: newPassword,
   });
 

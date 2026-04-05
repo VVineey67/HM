@@ -244,14 +244,19 @@ const Sidebar = ({
                   style={{ background: "#2c2c2e", border: "1px solid rgba(255,255,255,0.1)" }}
                 >
                   {projects.map(p => {
-                    const name = typeof p === "string" ? p : p.name;
+                    const name    = typeof p === "string" ? p : p.name;
+                    const logoUrl = typeof p === "object" ? p.logoUrl : null;
                     return (
                       <button key={name}
                         onClick={() => { setSelectedProject(name); setProjOpen(false); }}
                         className={`w-full text-left px-3 py-2 text-[12.5px] transition-all flex items-center gap-2
                           ${selectedProject === name ? "text-white font-semibold bg-white/8" : "text-[#8b8b8f] hover:bg-white/5 hover:text-white"}`}
                       >
-                        {selectedProject === name && <span className="w-1.5 h-1.5 rounded-full bg-white shrink-0" />}
+                        {logoUrl ? (
+                          <img src={logoUrl} alt={name} className="w-5 h-5 rounded object-cover shrink-0" />
+                        ) : (
+                          selectedProject === name && <span className="w-1.5 h-1.5 rounded-full bg-white shrink-0" />
+                        )}
                         {name}
                       </button>
                     );
@@ -262,10 +267,18 @@ const Sidebar = ({
           </div>
         ) : (
           <button onClick={() => setIsCollapsed(false)} title="Select project" className="w-full flex justify-center mb-2">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-[9px] font-bold text-[#8b8b8f]"
-              style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
-              {selectedProject ? selectedProject.slice(0, 3).toUpperCase() : "PRJ"}
-            </div>
+            {(() => {
+              const activePrj = projects.find(p => (typeof p === "string" ? p : p.name) === selectedProject);
+              const logo = activePrj && typeof activePrj === "object" ? activePrj.logoUrl : null;
+              return logo ? (
+                <img src={logo} alt={selectedProject} className="w-8 h-8 rounded-lg object-cover" />
+              ) : (
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center text-[9px] font-bold text-[#8b8b8f]"
+                  style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  {selectedProject ? selectedProject.slice(0, 3).toUpperCase() : "PRJ"}
+                </div>
+              );
+            })()}
           </button>
         )}
 

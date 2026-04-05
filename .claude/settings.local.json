@@ -11,7 +11,11 @@
       "Bash(docker compose:*)",
       "Bash(npm uninstall:*)",
       "Bash(npm audit:*)",
-      "Bash(node -e ':*)"
+      "Bash(node -e ':*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(curl -sv \"https://hm-production-7401.up.railway.app/\")"
     ]
   }
 }

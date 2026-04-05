@@ -72,10 +72,7 @@ import CompareImages from "./pages/Images/CompareImages";
 // Attendance
 import Attendance from "./pages/Attendance/Attendance";
  
-const DEFAULT_PROJECTS = [
-  { name: "All Project" }, { name: "B-47" }, { name: "GDLV" },
-  { name: "BHA" }, { name: "SLH" }, { name: "HIH" }, { name: "RWH" },
-];
+const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
 function App() {
   // Detect Supabase password-recovery redirect
@@ -90,14 +87,8 @@ function App() {
   const [currentUser, setCurrentUser] = useState(() => {
     try { return JSON.parse(localStorage.getItem("bms_user") || "{}"); } catch { return {}; }
   });
-  const [projects, setProjects] = useState(() => {
-    const s = localStorage.getItem("bms_projects");
-    if (!s) return DEFAULT_PROJECTS;
-    const parsed = JSON.parse(s);
-    if (parsed.length > 0 && typeof parsed[0] === "string")
-      return parsed.map(name => ({ name }));
-    return parsed;
-  });
+  // projects = [{ name: "All Project" }, ...active projects from DB]
+  const [projects, setProjects] = useState([{ name: "All Project" }]);
 
   // Restore tab + project from URL on load
   const [activeTab, setActiveTab] = useState(() => {
@@ -119,6 +110,24 @@ function App() {
 
   const [isMobile, setIsMobile] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  const fetchProjects = async () => {
+    try {
+      const res  = await fetch(`${API}/api/projects`);
+      const data = await res.json();
+      const active = (data.projects || [])
+        .filter(p => p.isActive)
+        .map(p => ({ ...p, name: p.projectCode || p.projectName }));
+      setProjects([{ name: "All Project" }, ...active]);
+    } catch {
+      setProjects([{ name: "All Project" }]);
+    }
+  };
+
+  // Fetch projects whenever logged in
+  useEffect(() => {
+    if (isLoggedIn) fetchProjects();
+  }, [isLoggedIn]);
 
   const handleLogin = (user) => {
     setUserRole(user.role);
@@ -143,8 +152,8 @@ function App() {
     setCurrentUser(updatedUser);
   };
 
-  const handleProjectsUpdate = (updatedProjects) => {
-    setProjects(updatedProjects);
+  const handleProjectsUpdate = () => {
+    fetchProjects();
   };
  
   const handleTabChange = (tab) => {
