@@ -19,22 +19,42 @@ const uploadToStorage = async (bucket, path, buffer, mimetype) => {
    ITEMS
 ════════════════════════════════════ */
 
+/* helper: parse JSON array stored in text column */
+const parseJsonArr = (val) => {
+  try { const b = JSON.parse(val || "[]"); return Array.isArray(b) ? b : [val].filter(Boolean); }
+  catch { return val ? [val] : []; }
+};
+const parseBrands = parseJsonArr;
+
+/* helper: next item code — separate sequences for Supply (ITM-) and SITC (SIT-) */
+const getNextItemCode = async (itemType = "Supply") => {
+  const prefix = itemType === "SITC" ? "SIT" : "ITM";
+  const { data } = await supabase.schema("procurement").from("items")
+    .select("item_code").eq("item_type", itemType);
+  const nums = (data || []).map(r => parseInt((r.item_code || "").replace(`${prefix}-`, "")) || 0);
+  const next = nums.length ? Math.max(...nums) + 1 : 1;
+  return `${prefix}-${String(next).padStart(3, "0")}`;
+};
+
 router.get("/items", async (_req, res) => {
   try {
     const { data, error } = await supabase
-      .from("items")
+      .schema("procurement").from("items")
       .select("*")
       .order("created_at", { ascending: true });
     if (error) throw error;
     const items = (data || []).map(r => ({
       id:           r.id,
+      itemCode:     r.item_code     || "",
+      itemType:     r.item_type     || "Supply",
       materialName: r.material_name || "",
-      make:         r.make          || "",
-      description:  r.description   || "",
+      brands:         parseBrands(r.make),
+      specifications: parseJsonArr(r.description),
       category:     r.category      || "",
       unit:         r.unit          || "",
-      qty:          r.qty           || "",
       imageUrl:     r.image_url     || "",
+      scopeOfWork:  r.scope_of_work || "",
+      remarks:      r.remarks       || "",
     }));
     res.json({ items });
   } catch (err) {
@@ -45,8 +65,11 @@ router.get("/items", async (_req, res) => {
 
 router.post("/items", upload.single("image"), async (req, res) => {
   try {
-    const { materialName, make, description, category, unit, qty } = req.body;
-    let image_url = "";
+    const { materialName, category, unit, itemType, scopeOfWork, remarks } = req.body;
+    const brands         = JSON.parse(req.body.brands         || "[]");
+    const specifications = JSON.parse(req.body.specifications || "[]");
+    const item_code      = await getNextItemCode(itemType || "Supply");
+    let image_url        = "";
     if (req.file) {
       image_url = await uploadToStorage(
         "procurement-images",
@@ -54,13 +77,15 @@ router.post("/items", upload.single("image"), async (req, res) => {
         req.file.buffer, req.file.mimetype
       );
     }
-    const { data, error } = await supabase.from("items").insert({
-      material_name: materialName || "",
-      make: make || "", description: description || "",
-      category: category || "", unit: unit || "", qty: qty || "", image_url,
+    const { data, error } = await supabase.schema("procurement").from("items").insert({
+      item_code, item_type: itemType || "Supply",
+      material_name: materialName || "", make: JSON.stringify(brands),
+      description: JSON.stringify(specifications), category: category || "",
+      unit: unit || "", image_url,
+      scope_of_work: scopeOfWork || "", remarks: remarks || "",
     }).select().single();
     if (error) throw error;
-    res.json({ success: true, id: data.id });
+    res.json({ success: true, id: data.id, itemCode: item_code });
   } catch (err) {
     console.error("Item add error:", err.message);
     res.status(500).json({ error: err.message });
@@ -70,11 +95,12 @@ router.post("/items", upload.single("image"), async (req, res) => {
 router.put("/items/:id", upload.single("image"), async (req, res) => {
   try {
     const { id } = req.params;
-    const { materialName, make, description, category, unit, qty } = req.body;
-    let image_url = req.body.imageUrl || "";
+    const { materialName, category, unit, itemType, scopeOfWork, remarks } = req.body;
+    const brands         = JSON.parse(req.body.brands         || "[]");
+    const specifications = JSON.parse(req.body.specifications || "[]");
+    let image_url        = req.body.imageUrl || "";
 
     if (req.file) {
-      // Delete old image if exists
       if (req.body.imageUrl) {
         const oldPath = req.body.imageUrl.split("/procurement-images/")[1]?.split("?")[0];
         if (oldPath) await supabase.storage.from("procurement-images").remove([oldPath]);
@@ -86,10 +112,12 @@ router.put("/items/:id", upload.single("image"), async (req, res) => {
       );
     }
 
-    const { error } = await supabase.from("items").update({
-      material_name: materialName || "", make: make || "",
-      description: description || "", category: category || "",
-      unit: unit || "", qty: qty || "", image_url,
+    const { error } = await supabase.schema("procurement").from("items").update({
+      item_type: itemType || "Supply",
+      material_name: materialName || "", make: JSON.stringify(brands),
+      description: JSON.stringify(specifications), category: category || "",
+      unit: unit || "", image_url,
+      scope_of_work: scopeOfWork || "", remarks: remarks || "",
     }).eq("id", id);
     if (error) throw error;
     res.json({ success: true });
@@ -102,13 +130,12 @@ router.put("/items/:id", upload.single("image"), async (req, res) => {
 router.delete("/items/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    // Get image URL before deleting
-    const { data } = await supabase.from("items").select("image_url").eq("id", id).single();
+    const { data } = await supabase.schema("procurement").from("items").select("image_url").eq("id", id).single();
     if (data?.image_url) {
       const path = data.image_url.split("/procurement-images/")[1]?.split("?")[0];
       if (path) await supabase.storage.from("procurement-images").remove([path]);
     }
-    const { error } = await supabase.from("items").delete().eq("id", id);
+    const { error } = await supabase.schema("procurement").from("items").delete().eq("id", id);
     if (error) throw error;
     res.json({ success: true });
   } catch (err) {
@@ -120,16 +147,256 @@ router.delete("/items/:id", async (req, res) => {
 router.post("/items/bulk", async (req, res) => {
   try {
     const { rows } = req.body;
-    const inserts = rows.map(r => ({
-      material_name: r.materialName || "", make: r.make || "",
-      description: r.description || "", category: r.category || "",
-      unit: r.unit || "", qty: r.qty || "", image_url: "",
-    }));
-    const { error } = await supabase.from("items").insert(inserts);
+    if (!rows?.length) return res.status(400).json({ error: "No rows provided" });
+
+    // Fetch existing item names + all codes for auto-numbering (separate per type)
+    const { data: allItems } = await supabase.schema("procurement").from("items").select("material_name, item_type, item_code");
+    const existingNames = new Set(
+      (allItems || []).map(r => `${r.item_type}__${r.material_name.trim().toLowerCase()}`)
+    );
+
+    // Build per-type next counters
+    const supplyNums = (allItems || []).filter(r => r.item_type !== "SITC").map(r => parseInt((r.item_code || "").replace("ITM-", "")) || 0);
+    const sitcNums   = (allItems || []).filter(r => r.item_type === "SITC").map(r => parseInt((r.item_code || "").replace("SIT-", "")) || 0);
+    let nextSupply = supplyNums.length ? Math.max(...supplyNums) + 1 : 1;
+    let nextSITC   = sitcNums.length   ? Math.max(...sitcNums)   + 1 : 1;
+
+    const newRows = rows.filter(r => {
+      const key = `${r.itemType || "Supply"}__${(r.materialName || "").trim().toLowerCase()}`;
+      return r.materialName?.trim() && !existingNames.has(key);
+    });
+    const skipped = rows.length - newRows.length;
+    if (!newRows.length) return res.json({ success: true, inserted: 0, skipped });
+
+    const inserts = newRows.map(r => {
+      const type   = r.itemType || "Supply";
+      const isSITC = type === "SITC";
+      const code   = isSITC ? `SIT-${String(nextSITC++).padStart(3,"0")}` : `ITM-${String(nextSupply++).padStart(3,"0")}`;
+      return {
+        item_code:     code,
+        item_type:     r.itemType      || "Supply",
+        material_name: r.materialName  || "",
+        make:          JSON.stringify(Array.isArray(r.brands) ? r.brands.filter(Boolean) : []),
+        description:   JSON.stringify(Array.isArray(r.specifications) ? r.specifications.filter(Boolean) : []),
+        category:      r.category      || "",
+        unit:          r.unit          || "",
+        scope_of_work: r.scopeOfWork   || "",
+        remarks:       r.remarks       || "",
+        image_url:     "",
+      };
+    });
+
+    const { error } = await supabase.schema("procurement").from("items").insert(inserts);
     if (error) throw error;
-    res.json({ success: true, count: rows.length });
+    res.json({ success: true, inserted: inserts.length, skipped });
   } catch (err) {
     console.error("Bulk items error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ════════════════════════════════════
+   CLAUSES  (TC / PAY / GOV)
+════════════════════════════════════ */
+
+/* helper: next clause code per type */
+const getNextClauseCode = async (type) => {
+  const prefix = type === "PAY" ? "PAY" : type === "GOV" ? "GOV" : "TC";
+  const { data } = await supabase.schema("procurement").from("clauses")
+    .select("code").eq("type", type);
+  const nums = (data || []).map(r => parseInt((r.code || "").replace(`${prefix}-`, "")) || 0);
+  const next = nums.length ? Math.max(...nums) + 1 : 1;
+  return `${prefix}-${String(next).padStart(3, "0")}`;
+};
+
+router.get("/clauses", async (req, res) => {
+  try {
+    const { type } = req.query;
+    let query = supabase.schema("procurement").from("clauses")
+      .select("*").order("code", { ascending: true });
+    if (type) query = query.eq("type", type);
+    const { data, error } = await query;
+    if (error) throw error;
+    const clauses = (data || []).map(r => ({
+      id:        r.id,
+      code:      r.code,
+      type:      r.type,
+      category:  r.category  || "",
+      title:     r.title,
+      points:    Array.isArray(r.points) ? r.points : [],
+      createdAt: r.created_at,
+    }));
+    res.json({ clauses });
+  } catch (err) {
+    console.error("Clauses read error:", err.message);
+    res.json({ clauses: [] });
+  }
+});
+
+router.post("/clauses", async (req, res) => {
+  try {
+    const { type, category, title, points, editedBy } = req.body;
+    if (!type || !title) return res.status(400).json({ error: "type and title required" });
+    const code = await getNextClauseCode(type);
+    const pts  = Array.isArray(points) ? points : [];
+    const { data, error } = await supabase.schema("procurement").from("clauses").insert({
+      code, type,
+      category: category || "",
+      title,
+      points: pts,
+    }).select().single();
+    if (error) throw error;
+    /* save version 1 */
+    try {
+      await supabase.schema("procurement").from("clause_versions").insert({
+        clause_id: data.id, version: 1,
+        title, category: category || "", points: pts,
+        edited_by: editedBy || "Unknown",
+      });
+    } catch (ve) { console.warn("Version save skipped:", ve.message); }
+    res.json({ success: true, id: data.id, code });
+  } catch (err) {
+    console.error("Clause add error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put("/clauses/:id", async (req, res) => {
+  try {
+    const { category, title, points, editedBy } = req.body;
+    const pts = Array.isArray(points) ? points : [];
+
+    // Self-healing: if no version exists (e.g. old bulk uploads), save current state as v1 before updating
+    const { data: currentData } = await supabase.schema("procurement").from("clauses").select("*").eq("id", req.params.id).single();
+    const { data: vData } = await supabase.schema("procurement").from("clause_versions").select("version").eq("clause_id", req.params.id).order("version", { ascending: false });
+    
+    if ((!vData || vData.length === 0) && currentData) {
+      await supabase.schema("procurement").from("clause_versions").insert({
+        clause_id: req.params.id, version: 1,
+        title: currentData.title, category: currentData.category || "", points: currentData.points || [],
+        edited_by: "System (Original Recovered)",
+      });
+    }
+
+    const { error } = await supabase.schema("procurement").from("clauses").update({
+      category: category || "",
+      title,
+      points: pts,
+    }).eq("id", req.params.id);
+    if (error) throw error;
+    
+    /* save new version */
+    try {
+      const nextVer = vData?.length ? vData[0].version + 1 : 2;
+      await supabase.schema("procurement").from("clause_versions").insert({
+        clause_id: req.params.id, version: nextVer,
+        title, category: category || "", points: pts,
+        edited_by: editedBy || "Unknown",
+      });
+    } catch (ve) { console.warn("Version save skipped:", ve.message); }
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Clause update error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/clauses/:id/versions", async (req, res) => {
+  try {
+    const { data, error } = await supabase.schema("procurement").from("clause_versions")
+      .select("*").eq("clause_id", req.params.id).order("version", { ascending: true });
+    if (error) throw error;
+    const versions = (data || []).map(v => ({
+      id:       v.id,
+      version:  v.version,
+      title:    v.title,
+      category: v.category || "",
+      points:   Array.isArray(v.points) ? v.points : [],
+      editedBy: v.edited_by,
+      editedAt: v.edited_at,
+    }));
+    res.json({ versions });
+  } catch (err) {
+    console.error("Clause versions error:", err.message);
+    res.json({ versions: [] });
+  }
+});
+
+router.delete("/clauses/versions/:versionId", async (req, res) => {
+  try {
+    const { error } = await supabase.schema("procurement").from("clause_versions").delete().eq("id", req.params.versionId);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Clause version delete error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+router.delete("/clauses/:id", async (req, res) => {
+  try {
+    /* Delete all versions associated with this clause */
+    try {
+      await supabase.schema("procurement").from("clause_versions").delete().eq("clause_id", req.params.id);
+    } catch (ve) { console.warn("Failed to delete versions:", ve.message); }
+    
+    /* Finally delete the clause */
+    const { error } = await supabase.schema("procurement").from("clauses").delete().eq("id", req.params.id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Clause delete error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/clauses/bulk", async (req, res) => {
+  try {
+    const { rows, type } = req.body;
+    if (!rows?.length) return res.status(400).json({ error: "No rows provided" });
+    const prefix = type === "PAY" ? "PAY" : type === "GOV" ? "GOV" : "TC";
+
+    const { data: existing } = await supabase.schema("procurement").from("clauses")
+      .select("title, type").eq("type", type);
+    const existingKeys = new Set((existing || []).map(r => r.title.trim().toLowerCase()));
+
+    const { data: allCodes } = await supabase.schema("procurement").from("clauses")
+      .select("code").eq("type", type);
+    const nums = (allCodes || []).map(r => parseInt((r.code || "").replace(`${prefix}-`, "")) || 0);
+    let nextNum = nums.length ? Math.max(...nums) + 1 : 1;
+
+    const newRows = rows.filter(r => r.title?.trim() && !existingKeys.has(r.title.trim().toLowerCase()));
+    const skipped = rows.length - newRows.length;
+    if (!newRows.length) return res.json({ success: true, inserted: 0, skipped });
+
+    const inserts = newRows.map(r => ({
+      code:     `${prefix}-${String(nextNum++).padStart(3, "0")}`,
+      type,
+      category: r.category || "",
+      title:    r.title    || "",
+      points:   Array.isArray(r.points) ? r.points : [],
+    }));
+
+    const { data: insertedRows, error } = await supabase.schema("procurement").from("clauses").insert(inserts).select();
+    if (error) throw error;
+
+    if (insertedRows && insertedRows.length > 0) {
+      const versionInserts = insertedRows.map(row => ({
+        clause_id: row.id,
+        version: 1,
+        title: row.title,
+        category: row.category || "",
+        points: row.points || [],
+        edited_by: "System (Bulk Upload)",
+      }));
+      // Manually record version 1 for all bulk uploaded items
+      await supabase.schema("procurement").from("clause_versions").insert(versionInserts);
+    }
+
+    res.json({ success: true, inserted: inserts.length, skipped });
+  } catch (err) {
+    console.error("Clause bulk error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -139,13 +406,15 @@ router.post("/items/bulk", async (req, res) => {
 ════════════════════════════════════ */
 
 const vendorUpload = upload.fields([
-  { name: "logo",       maxCount: 1 },
-  { name: "docGst",     maxCount: 1 },
-  { name: "docPan",     maxCount: 1 },
-  { name: "docAadhaar", maxCount: 1 },
-  { name: "docCoi",     maxCount: 1 },
-  { name: "docMsme",    maxCount: 1 },
-  { name: "docOther",   maxCount: 1 },
+  { name: "logo",            maxCount: 1 },
+  { name: "docGst",          maxCount: 1 },
+  { name: "docPan",          maxCount: 1 },
+  { name: "docAadhaar",      maxCount: 1 },
+  { name: "docCoi",          maxCount: 1 },
+  { name: "docMsme",         maxCount: 1 },
+  { name: "docCancelCheque", maxCount: 1 },
+  { name: "docOther",        maxCount: 1 },
+  { name: "docOther2",       maxCount: 1 },
 ]);
 
 const uploadVendorFile = async (files, key, folder) => {
@@ -161,28 +430,35 @@ const uploadVendorFile = async (files, key, folder) => {
 router.get("/vendors", async (_req, res) => {
   try {
     const { data, error } = await supabase
-      .from("vendors").select("*").order("created_at", { ascending: true });
+      .schema("procurement").from("vendors").select("*").order("created_at", { ascending: true });
     if (error) throw error;
     const vendors = (data || []).map(r => ({
-      id:            r.id,
-      vendorName:    r.vendor_name    || "",
-      address:       r.address        || "",
-      bankName:      r.bank_name      || "",
-      accountNumber: r.account_number || "",
-      ifscCode:      r.ifsc_code      || "",
-      gstin:         r.gstin          || "",
-      msmeNumber:    r.msme_number    || "",
-      pan:           r.pan            || "",
-      contactPerson: r.contact_person || "",
-      mobile:        r.mobile         || "",
-      email:         r.email          || "",
-      logoUrl:       r.logo_url       || "",
-      docGstUrl:     r.doc_gst_url    || "",
-      docPanUrl:     r.doc_pan_url    || "",
-      docAadhaarUrl: r.doc_aadhaar_url|| "",
-      docCoiUrl:     r.doc_coi_url    || "",
-      docMsmeUrl:    r.doc_msme_url   || "",
-      docOtherUrl:   r.doc_other_url  || "",
+      id:             r.id,
+      vendorName:     r.vendor_name     || "",
+      address:        r.address         || "",
+      bankName:       r.bank_name       || "",
+      accountHolder:  r.account_holder  || "",
+      accountNumber:  r.account_number  || "",
+      ifscCode:       r.ifsc_code       || "",
+      bankBranch:     r.bank_branch     || "",
+      bankCity:       r.bank_city       || "",
+      bankState:      r.bank_state      || "",
+      gstin:          r.gstin           || "",
+      msmeNumber:     r.msme_number     || "",
+      pan:            r.pan             || "",
+      aadharNo:       r.aadhar_no       || "",
+      contactPerson:  r.contact_person  || "",
+      mobile:         r.mobile          || "",
+      email:          r.email           || "",
+      logoUrl:             r.logo_url              || "",
+      docGstUrl:           r.doc_gst_url           || "",
+      docPanUrl:           r.doc_pan_url           || "",
+      docAadhaarUrl:       r.doc_aadhaar_url       || "",
+      docCoiUrl:           r.doc_coi_url           || "",
+      docMsmeUrl:          r.doc_msme_url          || "",
+      docCancelChequeUrl:  r.doc_cancel_cheque_url || "",
+      docOtherUrl:         r.doc_other_url         || "",
+      docOther2Url:        r.doc_other2_url        || "",
     }));
     res.json({ vendors });
   } catch (err) {
@@ -197,35 +473,44 @@ router.post("/vendors", vendorUpload, async (req, res) => {
     const files = req.files || {};
     const folder = b.vendorName || "vendor";
 
-    const [logoUrl, docGstUrl, docPanUrl, docAadhaarUrl, docCoiUrl, docMsmeUrl, docOtherUrl] = await Promise.all([
-      uploadVendorFile(files, "logo",       folder),
-      uploadVendorFile(files, "docGst",     folder),
-      uploadVendorFile(files, "docPan",     folder),
-      uploadVendorFile(files, "docAadhaar", folder),
-      uploadVendorFile(files, "docCoi",     folder),
-      uploadVendorFile(files, "docMsme",    folder),
-      uploadVendorFile(files, "docOther",   folder),
+    const [logoUrl, docGstUrl, docPanUrl, docAadhaarUrl, docCoiUrl, docMsmeUrl, docCancelChequeUrl, docOtherUrl, docOther2Url] = await Promise.all([
+      uploadVendorFile(files, "logo",            folder),
+      uploadVendorFile(files, "docGst",          folder),
+      uploadVendorFile(files, "docPan",          folder),
+      uploadVendorFile(files, "docAadhaar",      folder),
+      uploadVendorFile(files, "docCoi",          folder),
+      uploadVendorFile(files, "docMsme",         folder),
+      uploadVendorFile(files, "docCancelCheque", folder),
+      uploadVendorFile(files, "docOther",        folder),
+      uploadVendorFile(files, "docOther2",       folder),
     ]);
 
-    const { data, error } = await supabase.from("vendors").insert({
-      vendor_name:    b.vendorName    || "",
-      address:        b.address       || "",
-      bank_name:      b.bankName      || "",
-      account_number: b.accountNumber || "",
-      ifsc_code:      b.ifscCode      || "",
-      gstin:          b.gstin         || "",
-      msme_number:    b.msmeNumber    || "",
-      pan:            b.pan           || "",
-      contact_person: b.contactPerson || "",
-      mobile:         b.mobile        || "",
-      email:          b.email         || "",
-      logo_url:       logoUrl         || "",
-      doc_gst_url:    docGstUrl       || "",
-      doc_pan_url:    docPanUrl       || "",
-      doc_aadhaar_url:docAadhaarUrl   || "",
-      doc_coi_url:    docCoiUrl       || "",
-      doc_msme_url:   docMsmeUrl      || "",
-      doc_other_url:  docOtherUrl     || "",
+    const { data, error } = await supabase.schema("procurement").from("vendors").insert({
+      vendor_name:     b.vendorName     || "",
+      address:         b.address        || "",
+      bank_name:       b.bankName       || "",
+      account_holder:  b.accountHolder  || "",
+      account_number:  b.accountNumber  || "",
+      ifsc_code:       b.ifscCode       || "",
+      bank_branch:     b.bankBranch     || "",
+      bank_city:       b.bankCity       || "",
+      bank_state:      b.bankState      || "",
+      gstin:           b.gstin          || "",
+      msme_number:     b.msmeNumber     || "",
+      pan:             b.pan            || "",
+      aadhar_no:       b.aadharNo       || "",
+      contact_person:  b.contactPerson  || "",
+      mobile:          b.mobile         || "",
+      email:           b.email          || "",
+      logo_url:              logoUrl             || "",
+      doc_gst_url:           docGstUrl           || "",
+      doc_pan_url:           docPanUrl           || "",
+      doc_aadhaar_url:       docAadhaarUrl       || "",
+      doc_coi_url:           docCoiUrl           || "",
+      doc_msme_url:          docMsmeUrl          || "",
+      doc_cancel_cheque_url: docCancelChequeUrl  || "",
+      doc_other_url:         docOtherUrl         || "",
+      doc_other2_url:        docOther2Url        || "",
     }).select().single();
     if (error) throw error;
     res.json({ success: true, id: data.id });
@@ -242,35 +527,44 @@ router.put("/vendors/:id", vendorUpload, async (req, res) => {
     const files = req.files || {};
     const folder = b.vendorName || "vendor";
 
-    const [newLogo, newDocGst, newDocPan, newDocAadhaar, newDocCoi, newDocMsme, newDocOther] = await Promise.all([
-      uploadVendorFile(files, "logo",       folder),
-      uploadVendorFile(files, "docGst",     folder),
-      uploadVendorFile(files, "docPan",     folder),
-      uploadVendorFile(files, "docAadhaar", folder),
-      uploadVendorFile(files, "docCoi",     folder),
-      uploadVendorFile(files, "docMsme",    folder),
-      uploadVendorFile(files, "docOther",   folder),
+    const [newLogo, newDocGst, newDocPan, newDocAadhaar, newDocCoi, newDocMsme, newDocCancelCheque, newDocOther, newDocOther2] = await Promise.all([
+      uploadVendorFile(files, "logo",            folder),
+      uploadVendorFile(files, "docGst",          folder),
+      uploadVendorFile(files, "docPan",          folder),
+      uploadVendorFile(files, "docAadhaar",      folder),
+      uploadVendorFile(files, "docCoi",          folder),
+      uploadVendorFile(files, "docMsme",         folder),
+      uploadVendorFile(files, "docCancelCheque", folder),
+      uploadVendorFile(files, "docOther",        folder),
+      uploadVendorFile(files, "docOther2",       folder),
     ]);
 
-    const { error } = await supabase.from("vendors").update({
-      vendor_name:    b.vendorName    || "",
-      address:        b.address       || "",
-      bank_name:      b.bankName      || "",
-      account_number: b.accountNumber || "",
-      ifsc_code:      b.ifscCode      || "",
-      gstin:          b.gstin         || "",
-      msme_number:    b.msmeNumber    || "",
-      pan:            b.pan           || "",
-      contact_person: b.contactPerson || "",
-      mobile:         b.mobile        || "",
-      email:          b.email         || "",
-      logo_url:        newLogo        || b.logoUrl        || "",
-      doc_gst_url:     newDocGst      || b.docGstUrl      || "",
-      doc_pan_url:     newDocPan      || b.docPanUrl      || "",
-      doc_aadhaar_url: newDocAadhaar  || b.docAadhaarUrl  || "",
-      doc_coi_url:     newDocCoi      || b.docCoiUrl      || "",
-      doc_msme_url:    newDocMsme     || b.docMsmeUrl     || "",
-      doc_other_url:   newDocOther    || b.docOtherUrl    || "",
+    const { error } = await supabase.schema("procurement").from("vendors").update({
+      vendor_name:     b.vendorName    || "",
+      address:         b.address       || "",
+      bank_name:       b.bankName       || "",
+      account_holder:  b.accountHolder  || "",
+      account_number:  b.accountNumber  || "",
+      ifsc_code:       b.ifscCode       || "",
+      bank_branch:     b.bankBranch     || "",
+      bank_city:       b.bankCity       || "",
+      bank_state:      b.bankState      || "",
+      gstin:           b.gstin          || "",
+      msme_number:     b.msmeNumber     || "",
+      pan:             b.pan            || "",
+      aadhar_no:       b.aadharNo       || "",
+      contact_person:  b.contactPerson  || "",
+      mobile:          b.mobile         || "",
+      email:           b.email          || "",
+      logo_url:              newLogo             || b.logoUrl            || "",
+      doc_gst_url:           newDocGst           || b.docGstUrl          || "",
+      doc_pan_url:           newDocPan           || b.docPanUrl          || "",
+      doc_aadhaar_url:       newDocAadhaar       || b.docAadhaarUrl      || "",
+      doc_coi_url:           newDocCoi           || b.docCoiUrl          || "",
+      doc_msme_url:          newDocMsme          || b.docMsmeUrl         || "",
+      doc_cancel_cheque_url: newDocCancelCheque  || b.docCancelChequeUrl || "",
+      doc_other_url:         newDocOther         || b.docOtherUrl        || "",
+      doc_other2_url:        newDocOther2        || b.docOther2Url       || "",
     }).eq("id", id);
     if (error) throw error;
     res.json({ success: true });
@@ -282,11 +576,43 @@ router.put("/vendors/:id", vendorUpload, async (req, res) => {
 
 router.delete("/vendors/:id", async (req, res) => {
   try {
-    const { error } = await supabase.from("vendors").delete().eq("id", req.params.id);
+    const { error } = await supabase.schema("procurement").from("vendors").delete().eq("id", req.params.id);
     if (error) throw error;
     res.json({ success: true });
   } catch (err) {
     console.error("Vendor delete error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/vendors/bulk", async (req, res) => {
+  try {
+    const { rows } = req.body;
+    if (!rows?.length) return res.status(400).json({ error: "No rows provided" });
+    const records = rows.map(r => ({
+      vendor_name:     r["Vendor Firm Name"]       || "",
+      email:           r["Email"]                  || "",
+      contact_person:  r["Contact Person Name"]    || "",
+      mobile:          r["Contact Person Number"]  || "",
+      gstin:           r["GST No"]                 || "",
+      pan:             r["PAN No"]                 || "",
+      aadhar_no:       r["Aadhar No"]              || "",
+      msme_number:     r["MSME Number"]            || "",
+      bank_name:       r["Bank Name"]              || "",
+      account_holder:  r["Account Holder"]         || "",
+      account_number:  r["Account Number"]         || "",
+      ifsc_code:       r["Bank IFSC"]              || "",
+      bank_branch:     r["Bank Branch"]            || "",
+      bank_city:       r["Bank City"]              || "",
+      bank_state:      r["Bank State"]             || "",
+      address:         r["Address"]                || "",
+    })).filter(r => r.vendor_name);
+    if (!records.length) return res.status(400).json({ error: "No valid rows (Vendor Firm Name required)" });
+    const { error } = await supabase.schema("procurement").from("vendors").insert(records);
+    if (error) throw error;
+    res.json({ success: true, inserted: records.length });
+  } catch (err) {
+    console.error("Vendor bulk error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -298,7 +624,7 @@ router.delete("/vendors/:id", async (req, res) => {
 router.get("/sites", async (_req, res) => {
   try {
     const { data, error } = await supabase
-      .from("sites").select("*").order("created_at", { ascending: true });
+      .schema("procurement").from("sites").select("*").order("created_at", { ascending: true });
     if (error) throw error;
     const sites = (data || []).map(r => ({
       id:             r.id,
@@ -383,7 +709,7 @@ router.post("/sites/bulk", async (req, res) => {
 router.get("/uom", async (_req, res) => {
   try {
     const { data, error } = await supabase
-      .from("uom").select("*").order("created_at", { ascending: true });
+      .schema("procurement").from("uom").select("*").order("created_at", { ascending: true });
     if (error) throw error;
     const uoms = (data || []).map(r => ({
       id:      r.id,
@@ -450,6 +776,120 @@ router.post("/uom/bulk", async (req, res) => {
 });
 
 /* ════════════════════════════════════
+   CATEGORIES
+════════════════════════════════════ */
+
+/* helper: fetch all existing categories and return next auto code */
+const getNextCategoryCode = async () => {
+  const { data } = await supabase.from("categories").select("category_code");
+  const nums = (data || [])
+    .map(r => parseInt((r.category_code || "").replace("CAT-", "")) || 0);
+  const next = nums.length ? Math.max(...nums) + 1 : 1;
+  return `CAT-${String(next).padStart(3, "0")}`;
+};
+
+router.get("/categories", async (_req, res) => {
+  try {
+    const { data, error } = await supabase
+      .schema("procurement").from("categories").select("*").order("category_code", { ascending: true });
+    if (error) throw error;
+    const categories = (data || []).map(r => ({
+      id:           r.id,
+      categoryCode: r.category_code || "",
+      categoryName: r.category_name || "",
+      description:  r.description   || "",
+      status:       r.status        || "Active",
+    }));
+    res.json({ categories });
+  } catch (err) {
+    console.error("Categories read error:", err.message);
+    res.json({ categories: [] });
+  }
+});
+
+/* bulk — skips duplicates by category_name (case-insensitive) */
+router.post("/categories/bulk", async (req, res) => {
+  try {
+    const { rows } = req.body;
+    // fetch existing names to deduplicate
+    const { data: existing } = await supabase.from("categories").select("category_name, category_code");
+    const existingNames = new Set((existing || []).map(r => r.category_name.trim().toLowerCase()));
+    const existingCodes = new Set((existing || []).map(r => r.category_code.trim().toUpperCase()));
+    // get existing nums to auto-assign new codes
+    const nums = (existing || []).map(r => parseInt((r.category_code || "").replace("CAT-", "")) || 0);
+    let nextNum = nums.length ? Math.max(...nums) + 1 : 1;
+
+    const newRows = rows.filter(r => !existingNames.has(r.categoryName.trim().toLowerCase()));
+    if (!newRows.length) {
+      return res.json({ success: true, count: 0, skipped: rows.length });
+    }
+
+    const inserts = newRows.map(r => {
+      // use code from CSV if provided and not duplicate, else auto-generate
+      let code = (r.categoryCode || "").trim().toUpperCase();
+      if (!code || existingCodes.has(code)) {
+        code = `CAT-${String(nextNum).padStart(3, "0")}`;
+        nextNum++;
+      }
+      existingCodes.add(code);
+      return {
+        category_code: code,
+        category_name: r.categoryName || "",
+        description:   r.description  || "",
+        status:        r.status       || "Active",
+      };
+    });
+
+    const { error } = await supabase.from("categories").insert(inserts);
+    if (error) throw error;
+    res.json({ success: true, count: inserts.length, skipped: rows.length - inserts.length });
+  } catch (err) {
+    console.error("Bulk categories error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/categories", async (req, res) => {
+  try {
+    const { categoryName, description, status } = req.body;
+    const categoryCode = await getNextCategoryCode();
+    const { data, error } = await supabase.from("categories")
+      .insert({ category_code: categoryCode, category_name: categoryName || "", description: description || "", status: status || "Active" })
+      .select().single();
+    if (error) throw error;
+    res.json({ success: true, id: data.id, categoryCode });
+  } catch (err) {
+    console.error("Category add error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put("/categories/:id", async (req, res) => {
+  try {
+    const { categoryName, description, status } = req.body;
+    const { error } = await supabase.from("categories")
+      .update({ category_name: categoryName || "", description: description || "", status: status || "Active" })
+      .eq("id", req.params.id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Category update error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete("/categories/:id", async (req, res) => {
+  try {
+    const { error } = await supabase.from("categories").delete().eq("id", req.params.id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Category delete error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ════════════════════════════════════
    COMPANIES
 ════════════════════════════════════ */
 
@@ -472,7 +912,7 @@ const uploadCompanyImg = async (files, key, folder) => {
 router.get("/companies", async (_req, res) => {
   try {
     const { data, error } = await supabase
-      .from("companies").select("*").order("created_at", { ascending: true });
+      .schema("procurement").from("companies").select("*").order("created_at", { ascending: true });
     if (error) throw error;
     const companies = (data || []).map(r => ({
       id:          r.id,

@@ -1,44 +1,102 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Plus, Upload, Search, Pencil, Trash2, X, Package, ChevronDown, Image as ImageIcon } from "lucide-react";
+import { Plus, Upload, Search, Pencil, Trash2, X, Package, Image as ImageIcon, Eye, ChevronDown, Download, FileSpreadsheet, FileText } from "lucide-react";
+import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
-
 const PER_PAGE = 10;
+const TABS = ["Supply", "SITC"];
 
-const CATEGORIES = ["Civil", "Electrical", "Plumbing", "HVAC", "Finishing", "Structural", "Safety", "Tools", "Other"];
+const emptyForm = {
+  materialName: "", specifications: [], category: "", scopeOfWork: "",
+  brands: [], unit: "", remarks: "",
+  image: null, imagePreview: "",
+};
 
-const emptyForm = { materialName: "", make: "", description: "", category: "", unit: "", qty: "", image: null, imagePreview: "" };
+/* ── Searchable dropdown ── */
+function SearchableSelect({ options, value, onChange, placeholder }) {
+  const [open, setOpen]   = useState(false);
+  const [query, setQuery] = useState("");
+  const ref               = useRef();
+
+  useEffect(() => {
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+
+  const filtered  = options.filter(o => o.label.toLowerCase().includes(query.toLowerCase()));
+  const selected  = options.find(o => o.value === value);
+
+  return (
+    <div ref={ref} className="relative">
+      <div onClick={() => setOpen(v => !v)}
+        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm cursor-pointer flex items-center justify-between bg-white">
+        <span className={selected ? "text-slate-700" : "text-slate-400"}>{selected ? selected.label : placeholder}</span>
+        <ChevronDown size={13} className={`text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} />
+      </div>
+      {open && (
+        <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+          <div className="p-2 border-b border-slate-100">
+            <input autoFocus value={query} onChange={e => setQuery(e.target.value)}
+              placeholder="Search…"
+              className="w-full px-2 py-1 text-sm outline-none text-slate-700" />
+          </div>
+          <div className="max-h-44 overflow-y-auto">
+            {filtered.length === 0
+              ? <p className="px-3 py-2 text-xs text-slate-400">No results</p>
+              : filtered.map(o => (
+                <div key={o.value}
+                  onClick={() => { onChange(o.value); setOpen(false); setQuery(""); }}
+                  className={`px-3 py-2 text-sm cursor-pointer transition-colors
+                    ${value === o.value ? "bg-blue-50 text-blue-700 font-medium" : "hover:bg-slate-50 text-slate-700"}`}>
+                  {o.label}
+                </div>
+              ))
+            }
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function ItemList() {
-  const [items, setItems]       = useState([]);
-  const [uoms, setUoms]         = useState([]);
-  const [loading, setLoading]   = useState(true);
+  const [items, setItems]         = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [uoms, setUoms]           = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [activeTab, setActiveTab] = useState("Supply");
   const [showModal, setShowModal] = useState(false);
-  const [form, setForm]         = useState(emptyForm);
-  const [editId, setEditId]     = useState(null);
-  const [search, setSearch]     = useState("");
-  const [saving, setSaving]     = useState(false);
-  const [toast, setToast]       = useState(null);
-  const [page, setPage]         = useState(1);
-  const fileRef                 = useRef();
-  const csvRef                  = useRef();
+  const [viewItem, setViewItem]   = useState(null);
+  const [form, setForm]           = useState(emptyForm);
+  const [editId, setEditId]       = useState(null);
+  const [search, setSearch]       = useState("");
+  const [saving, setSaving]       = useState(false);
+  const [toast, setToast]         = useState(null);
+  const [page, setPage]           = useState(1);
+  const [showExport, setShowExport] = useState(false);
+  const [showBulk, setShowBulk]   = useState(false);
+  const [bulkRows, setBulkRows]   = useState([]);
+  const [bulkFile, setBulkFile]   = useState("");
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const fileRef = useRef();
+  const bulkRef = useRef();
 
-  useEffect(() => { fetchItems(); fetchUoms(); }, []);
+  useEffect(() => { fetchAll(); }, []);
 
-  const fetchUoms = async () => {
-    try {
-      const res  = await fetch(`${API}/api/procurement/uom`);
-      const data = await res.json();
-      setUoms(data.uoms || []);
-    } catch { setUoms([]); }
-  };
-
-  const fetchItems = async () => {
+  const fetchAll = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API}/api/procurement/items`);
-      const data = await res.json();
-      setItems(data.items || []);
+      const [itemsRes, catsRes, uomsRes] = await Promise.all([
+        fetch(`${API}/api/procurement/items`).then(r => r.json()),
+        fetch(`${API}/api/procurement/categories`).then(r => r.json()),
+        fetch(`${API}/api/procurement/uom`).then(r => r.json()),
+      ]);
+      setItems(itemsRes.items || []);
+      setCategories(catsRes.categories || []);
+      setUoms(uomsRes.uoms || []);
     } catch { setItems([]); }
     setLoading(false);
   };
@@ -51,7 +109,17 @@ export default function ItemList() {
   const openAdd = () => { setForm(emptyForm); setEditId(null); setShowModal(true); };
 
   const openEdit = (item) => {
-    setForm({ ...item, image: null, imagePreview: item.imageUrl || "" });
+    setForm({
+      materialName:   item.materialName   || "",
+      specifications: Array.isArray(item.specifications) ? item.specifications : [],
+      category:       item.category       || "",
+      scopeOfWork:  item.scopeOfWork  || "",
+      brands:       Array.isArray(item.brands) ? item.brands : [],
+      unit:         item.unit         || "",
+      remarks:      item.remarks      || "",
+      image:        null,
+      imagePreview: item.imageUrl     || "",
+    });
     setEditId(item.id);
     setShowModal(true);
   };
@@ -63,19 +131,27 @@ export default function ItemList() {
   };
 
   const handleSave = async () => {
-    if (!form.materialName.trim()) return showToast("Material Name required", "error");
+    if (!form.materialName.trim()) return showToast("Item Name required", "error");
     setSaving(true);
     try {
       const fd = new FormData();
-      Object.entries(form).forEach(([k, v]) => { if (k !== "image" && k !== "imagePreview" && v) fd.append(k, v); });
-      if (form.image) fd.append("image", form.image);
+      fd.append("itemType",    activeTab);
+      fd.append("materialName", form.materialName);
+      fd.append("specifications", JSON.stringify(form.specifications.filter(s => s.trim())));
+      fd.append("category",     form.category);
+      fd.append("scopeOfWork",  form.scopeOfWork);
+      fd.append("brands",       JSON.stringify(form.brands.filter(b => b.trim())));
+      fd.append("unit", form.unit);
+      fd.append("remarks",      form.remarks);
+      if (form.image)        fd.append("image",    form.image);
+      if (form.imagePreview) fd.append("imageUrl", form.imagePreview);
 
       const url    = editId ? `${API}/api/procurement/items/${editId}` : `${API}/api/procurement/items`;
       const method = editId ? "PUT" : "POST";
       await fetch(url, { method, body: fd });
       showToast(editId ? "Item updated" : "Item added");
       setShowModal(false);
-      fetchItems();
+      fetchAll();
     } catch { showToast("Failed to save", "error"); }
     setSaving(false);
   };
@@ -85,37 +161,187 @@ export default function ItemList() {
     try {
       await fetch(`${API}/api/procurement/items/${id}`, { method: "DELETE" });
       showToast("Item deleted");
-      fetchItems();
+      fetchAll();
     } catch { showToast("Failed to delete", "error"); }
   };
 
-  const handleBulkCSV = (e) => {
+  /* ── Export / Bulk helpers ── */
+  const SUPPLY_COLS = ["Category","Item Name","Specification (comma separated)","Brand 1","Brand 2","Brand 3","Brand 4","Brand 5","Unit","Remarks"];
+  const SITC_COLS   = ["Category","Item Name","Specification (comma separated)","Scope of Work","Brand 1","Brand 2","Brand 3","Brand 4","Brand 5","Unit","Remarks"];
+  const EXP_SUPPLY  = ["Item Code","Category","Item Name","Specification","Brands","Unit","Remarks"];
+  const EXP_SITC    = ["Item Code","Category","Item Name","Specification","Scope of Work","Brands","Unit","Remarks"];
+
+  const downloadTemplate = () => {
+    const headers = isSITC ? SITC_COLS : SUPPLY_COLS;
+    const ws = XLSX.utils.json_to_sheet([Object.fromEntries(headers.map(h => [h, ""]))]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, activeTab);
+    XLSX.writeFile(wb, `${activeTab}_items_template.xlsx`);
+  };
+
+  const exportExcel = () => {
+    const headers = isSITC ? EXP_SITC : EXP_SUPPLY;
+    const rows = tabItems.map(item => {
+      const brands = (item.brands || []).join("; ");
+      const base   = { "Item Code": item.itemCode, "Category": item.category, "Item Name": item.materialName, "Specification": (item.specifications||[]).join(", "), "Brands": brands, "Unit": item.unit, "Remarks": item.remarks };
+      if (isSITC) base["Scope of Work"] = item.scopeOfWork;
+      return Object.fromEntries(headers.map(h => [h, base[h] || ""]));
+    });
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, activeTab);
+    XLSX.writeFile(wb, `${activeTab}_items_${new Date().toISOString().slice(0,10)}.xlsx`);
+    setShowExport(false);
+  };
+
+  const exportPDF = () => {
+    const headers = isSITC ? EXP_SITC : EXP_SUPPLY;
+    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+
+    // Title
+    doc.setFontSize(14); doc.setFont(undefined, "bold");
+    doc.text(`Item List — ${activeTab}`, 14, 14);
+    doc.setFontSize(9); doc.setFont(undefined, "normal"); doc.setTextColor(100);
+    doc.text(`Exported: ${new Date().toLocaleDateString("en-IN")}   ·   Total Items: ${tabItems.length}`, 14, 21);
+    doc.setTextColor(0);
+
+    autoTable(doc, {
+      startY: 27,
+      head: [["S.No", ...headers]],
+      body: tabItems.map((item, idx) => {
+        const specs  = (item.specifications || []).join(", ");
+        const brands = (item.brands || []).join(", ");
+        const base   = {
+          "Item Code":    item.itemCode   || "",
+          "Category":     item.category   || "",
+          "Item Name":    item.materialName|| "",
+          "Specification": specs,
+          "Scope of Work": item.scopeOfWork|| "",
+          "Brands":        brands,
+          "Unit":          item.unit      || "",
+          "Remarks":       item.remarks   || "",
+        };
+        return [idx + 1, ...headers.map(h => base[h] || "")];
+      }),
+      styles: {
+        fontSize: 8,
+        cellPadding: 3,
+        lineColor: [203, 213, 225],
+        lineWidth: 0.3,
+        valign: "top",
+        overflow: "linebreak",
+      },
+      headStyles: {
+        fillColor: [15, 23, 42],
+        textColor: 255,
+        fontStyle: "bold",
+        fontSize: 8,
+        halign: "center",
+      },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      columnStyles: {
+        0: { halign: "center", cellWidth: 12 }, // S.No
+        1: { cellWidth: 22 },                   // Item Code
+        2: { cellWidth: 22 },                   // Category
+        3: { cellWidth: 30 },                   // Item Name
+        4: { cellWidth: "auto" },               // Specification
+        5: { cellWidth: 20 },                   // Unit / Brands
+      },
+      margin: { left: 10, right: 10 },
+      tableLineColor: [203, 213, 225],
+      tableLineWidth: 0.3,
+    });
+
+    doc.save(`${activeTab}_items_${new Date().toISOString().slice(0, 10)}.pdf`);
+    setShowExport(false);
+  };
+
+  const handleBulkFile = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    setBulkFile(file.name);
     const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const lines = ev.target.result.trim().split("\n").slice(1);
-      const rows  = lines.map(l => { const c = l.split(","); return { materialName: c[0], make: c[1], description: c[2], category: c[3], unit: c[4], qty: c[5] }; });
-      try {
-        await fetch(`${API}/api/procurement/items/bulk`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows }) });
-        showToast(`${rows.length} items added`);
-        fetchItems();
-      } catch { showToast("Bulk upload failed", "error"); }
+    reader.onload = (ev) => {
+      const wb   = XLSX.read(ev.target.result, { type: "array" });
+      const ws   = wb.Sheets[wb.SheetNames[0]];
+      const data = XLSX.utils.sheet_to_json(ws);
+      const rows = data.map(r => ({
+        category:       r["Category"]     || "",
+        materialName:   r["Item Name"]    || "",
+        specifications: (r["Specification (comma separated)"] || "").toString().split(",").map(s => s.trim()).filter(Boolean),
+        scopeOfWork:    r["Scope of Work"]|| "",
+        brands:         [r["Brand 1"],r["Brand 2"],r["Brand 3"],r["Brand 4"],r["Brand 5"]].filter(b => b?.toString().trim()),
+        unit:        r["Unit"]         || "",
+        remarks:     r["Remarks"]      || "",
+        itemType:    activeTab,
+      })).filter(r => r.materialName?.trim());
+      setBulkRows(rows);
     };
-    reader.readAsText(file);
+    reader.readAsArrayBuffer(file);
     e.target.value = "";
   };
 
-  const filtered = items.filter(i => i.materialName?.toLowerCase().includes(search.toLowerCase()) || i.category?.toLowerCase().includes(search.toLowerCase()));
-  const totalPages = Math.ceil(filtered.length / PER_PAGE) || 1;
-  const paginated  = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
+  const handleBulkSave = async () => {
+    if (!bulkRows.length) return showToast("No valid rows to upload", "error");
+    setBulkSaving(true);
+    try {
+      const res  = await fetch(`${API}/api/procurement/items/bulk`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows: bulkRows }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      if (data.skipped > 0)
+        showToast(`${data.inserted} added, ${data.skipped} skipped (duplicates)`);
+      else
+        showToast(`${data.inserted} items added`);
+      setShowBulk(false); setBulkRows([]); setBulkFile("");
+      fetchAll();
+    } catch (err) { showToast(err.message, "error"); }
+    setBulkSaving(false);
+  };
+
+  /* brands helpers */
+  const addBrand    = () => { if (form.brands.length < 5) setForm(f => ({ ...f, brands: [...f.brands, ""] })); };
+  const updateBrand = (i, v) => setForm(f => { const b = [...f.brands]; b[i] = v; return { ...f, brands: b }; });
+  const removeBrand = (i) => setForm(f => ({ ...f, brands: f.brands.filter((_, idx) => idx !== i) }));
+
+  /* specification helpers (no limit) */
+  const addSpec    = () => setForm(f => ({ ...f, specifications: [...f.specifications, ""] }));
+  const updateSpec = (i, v) => setForm(f => { const s = [...f.specifications]; s[i] = v; return { ...f, specifications: s }; });
+  const removeSpec = (i) => setForm(f => ({ ...f, specifications: f.specifications.filter((_, idx) => idx !== i) }));
+
+  const [filterCategory, setFilterCategory] = useState("");
+  const [filterItem,     setFilterItem]     = useState("");
+
+  /* filtered list */
+  const tabItems = items.filter(i => (i.itemType || "Supply") === activeTab);
+
+  // unique values for filter dropdowns (from current tab)
+  const uniqueCategories = [...new Set(tabItems.map(i => i.category).filter(Boolean))].sort();
+  const uniqueItems      = [...new Set(tabItems.map(i => i.materialName).filter(Boolean))].sort();
+
+  const filtered = tabItems.filter(i => {
+    const matchSearch   = !search       || i.materialName?.toLowerCase().includes(search.toLowerCase()) || i.category?.toLowerCase().includes(search.toLowerCase()) || i.itemCode?.toLowerCase().includes(search.toLowerCase());
+    const matchCategory = !filterCategory || i.category === filterCategory;
+    const matchItem     = !filterItem     || i.materialName === filterItem;
+    return matchSearch && matchCategory && matchItem;
+  });
+
+  const hasFilters  = filterCategory || filterItem;
+  const totalPages  = Math.ceil(filtered.length / PER_PAGE) || 1;
+  const paginated   = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
+  const isSITC      = activeTab === "SITC";
+
+  const catOptions = categories.map(c => ({ label: c.categoryName, value: c.categoryName }));
+  const uomOptions = uoms.map(u => ({ label: `${u.uomName} (${u.uomCode})`, value: u.uomCode }));
 
   return (
     <div className="p-6 w-full">
 
       {/* Toast */}
       {toast && (
-        <div className={`fixed top-5 right-5 z-50 px-4 py-3 rounded-xl text-sm font-medium shadow-lg transition-all
+        <div className={`fixed top-5 right-5 z-50 px-4 py-3 rounded-xl text-sm font-medium shadow-lg
           ${toast.type === "error" ? "bg-red-50 text-red-700 border border-red-200" : "bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>
           {toast.msg}
         </div>
@@ -133,11 +359,30 @@ export default function ItemList() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => csvRef.current.click()}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all">
-            <Upload size={15} /> Bulk Upload
+          {/* Export dropdown */}
+          <div className="relative">
+            <button onClick={() => { setShowExport(s => !s); setShowBulk(false); }}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all">
+              <Download size={14} /> Export <ChevronDown size={12} />
+            </button>
+            {showExport && (
+              <div className="absolute right-0 top-full mt-1 z-20 bg-white rounded-xl shadow-lg border border-slate-100 py-1 min-w-36">
+                <button onClick={exportExcel}
+                  className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                  <FileSpreadsheet size={14} className="text-green-600" /> Excel (.xlsx)
+                </button>
+                <button onClick={exportPDF}
+                  className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                  <FileText size={14} className="text-red-500" /> PDF
+                </button>
+              </div>
+            )}
+          </div>
+          {/* Bulk Upload */}
+          <button onClick={() => { setShowBulk(s => !s); setShowExport(false); }}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all">
+            <Upload size={14} /> Bulk Upload
           </button>
-          <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleBulkCSV} />
           <button onClick={openAdd}
             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-700 transition-all">
             <Plus size={15} /> Add Item
@@ -145,162 +390,445 @@ export default function ItemList() {
         </div>
       </div>
 
-      {/* Search */}
-      <div className="relative mb-4">
-        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-        <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Search by name or category…"
-          className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm outline-none focus:border-slate-400 bg-white text-slate-700" />
+      {/* Bulk Upload Panel */}
+      {showBulk && (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 mb-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-bold text-slate-700">Bulk Upload — {activeTab} Items</h3>
+            <button onClick={() => { setShowBulk(false); setBulkRows([]); setBulkFile(""); }}
+              className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-xl border border-slate-100">
+              <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
+                <span className="text-xs font-black text-indigo-600">1</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-slate-700">Download Template</p>
+                <p className="text-xs text-slate-500 mt-0.5 mb-3">Fill item details using the Excel template</p>
+                <button onClick={downloadTemplate}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-all">
+                  <FileSpreadsheet size={13} className="text-green-600" /> Download Template
+                </button>
+              </div>
+            </div>
+            <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-xl border border-slate-100">
+              <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
+                <span className="text-xs font-black text-indigo-600">2</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-slate-700">Upload Filled File</p>
+                <p className="text-xs text-slate-500 mt-0.5 mb-3">Select your filled Excel file to preview</p>
+                <button onClick={() => bulkRef.current.click()}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-all truncate max-w-full">
+                  <Upload size={13} /> {bulkFile || "Choose .xlsx file"}
+                </button>
+                <input ref={bulkRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleBulkFile} />
+              </div>
+            </div>
+          </div>
+          {bulkRows.length > 0 && (
+            <div className="mt-4">
+              <p className="text-xs font-bold text-slate-600 mb-2">{bulkRows.length} items ready to upload</p>
+              <div className="max-h-40 overflow-y-auto rounded-xl border border-slate-100 divide-y divide-slate-50">
+                {bulkRows.map((r, i) => (
+                  <div key={i} className="flex items-center gap-3 px-3 py-2 bg-slate-50 text-xs text-slate-600">
+                    <span className="font-mono text-slate-400">{i + 1}</span>
+                    <span className="font-semibold">{r.materialName}</span>
+                    <span className="text-slate-400">{r.category}</span>
+                    <span className="text-slate-400">{r.unit}</span>
+                  </div>
+                ))}
+              </div>
+              <button onClick={handleBulkSave} disabled={bulkSaving}
+                className="mt-3 flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-700 disabled:opacity-50 transition-all">
+                <Upload size={14} /> {bulkSaving ? "Uploading…" : `Upload ${bulkRows.length} Items`}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tabs */}
+      <div className="flex gap-1 mb-4 bg-slate-100 p-1 rounded-xl w-fit">
+        {TABS.map(tab => (
+          <button key={tab} onClick={() => { setActiveTab(tab); setPage(1); setFilterCategory(""); setFilterItem(""); }}
+            className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all
+              ${activeTab === tab ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+            {tab}
+          </button>
+        ))}
+      </div>
+
+      {/* Search + Filters */}
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
+        <div className="relative flex-1 min-w-48">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
+            placeholder="Search by code, name or category…"
+            className="w-full pl-9 pr-4 h-10 rounded-xl border border-slate-200 text-sm outline-none focus:border-slate-400 bg-white text-slate-700" />
+        </div>
+
+        {/* Category filter */}
+        <div className="relative">
+          <select value={filterCategory} onChange={e => { setFilterCategory(e.target.value); setPage(1); }}
+            className="h-10 pl-3 pr-8 rounded-xl border border-slate-200 text-sm outline-none focus:border-slate-400 bg-white text-slate-600 min-w-40 appearance-none cursor-pointer">
+            <option value="">All Categories</option>
+            {uniqueCategories.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+        </div>
+
+        {/* Item filter */}
+        <div className="relative">
+          <select value={filterItem} onChange={e => { setFilterItem(e.target.value); setPage(1); }}
+            className="h-10 pl-3 pr-8 rounded-xl border border-slate-200 text-sm outline-none focus:border-slate-400 bg-white text-slate-600 min-w-48 appearance-none cursor-pointer">
+            <option value="">All Items</option>
+            {uniqueItems.map(n => <option key={n} value={n}>{n}</option>)}
+          </select>
+          <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+        </div>
+
+        {/* Clear filters */}
+        {hasFilters && (
+          <button onClick={() => { setFilterCategory(""); setFilterItem(""); setPage(1); }}
+            className="h-10 flex items-center gap-1.5 px-3 rounded-xl border border-slate-200 text-sm text-slate-500 hover:text-red-500 hover:border-red-200 hover:bg-red-50 transition-all bg-white">
+            <X size={13} /> Clear
+          </button>
+        )}
       </div>
 
       {/* Table */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-slate-100 bg-slate-50">
-              <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">#</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Image</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Material Name</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Make</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Category</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Unit</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Qty</th>
-              <th className="px-4 py-3" />
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={8} className="text-center py-16 text-slate-400 text-sm">Loading…</td></tr>
-            ) : filtered.length === 0 ? (
-              <tr><td colSpan={8} className="text-center py-16 text-slate-300 font-semibold uppercase tracking-widest text-xs">No items found</td></tr>
-            ) : paginated.map((item, idx) => (
-              <tr key={idx} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                <td className="px-4 py-3 text-sm text-slate-400">{(page - 1) * PER_PAGE + idx + 1}</td>
-                <td className="px-4 py-3">
-                  {item.imageUrl
-                    ? <img src={item.imageUrl} alt="" className="w-9 h-9 rounded-lg object-cover border border-slate-100" />
-                    : <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center"><ImageIcon size={14} className="text-slate-400" /></div>
-                  }
-                </td>
-                <td className="px-4 py-3 text-sm font-semibold text-slate-700">{item.materialName}</td>
-                <td className="px-4 py-3 text-sm text-slate-500">{item.make || "—"}</td>
-                <td className="px-4 py-3">
-                  {item.category && <span className="px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-medium">{item.category}</span>}
-                </td>
-                <td className="px-4 py-3 text-sm text-slate-500">{item.unit || "—"}</td>
-                <td className="px-4 py-3 text-sm text-slate-500">{item.qty || "—"}</td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-1 justify-end">
-                    <button onClick={() => openEdit(item)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all"><Pencil size={14} /></button>
-                    <button onClick={() => handleDelete(item.id)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"><Trash2 size={14} /></button>
-                  </div>
-                </td>
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="bg-slate-50">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200 w-12">S.No</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200 whitespace-nowrap">Item Code</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200">Category</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200 whitespace-nowrap">Item Name</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200">Specification</th>
+                {isSITC && <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200 whitespace-nowrap" style={{minWidth:'180px',maxWidth:'220px'}}>Scope of Work</th>}
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200">Brand(s)</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200">Unit</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200">Remarks</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={isSITC ? 10 : 9} className="text-center py-16 text-slate-400 text-sm border border-slate-200">Loading…</td></tr>
+              ) : filtered.length === 0 ? (
+                <tr><td colSpan={isSITC ? 10 : 9} className="text-center py-16 text-slate-300 font-semibold uppercase tracking-widest text-xs border border-slate-200">No items found</td></tr>
+              ) : paginated.map((item, idx) => (
+                <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                  <td className="px-4 py-3 text-sm text-slate-400 text-center border border-slate-200 align-top">{(page - 1) * PER_PAGE + idx + 1}</td>
+                  <td className="px-4 py-3 text-sm font-mono text-slate-600 border border-slate-200 align-top whitespace-nowrap">{item.itemCode}</td>
+                  <td className="px-4 py-3 border border-slate-200 align-top">
+                    {item.category
+                      ? <span className="px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-medium whitespace-nowrap">{item.category}</span>
+                      : <span className="text-slate-300 text-sm">—</span>}
+                  </td>
+                  <td className="px-4 py-3 text-sm font-semibold text-slate-700 border border-slate-200 align-top whitespace-nowrap">{item.materialName}</td>
+                  <td className="px-4 py-3 border border-slate-200 align-top">
+                    {item.specifications?.length > 0
+                      ? <div className="flex flex-wrap gap-1">
+                          {item.specifications.map((s, i) => (
+                            <span key={i} className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs whitespace-nowrap">{s}</span>
+                          ))}
+                        </div>
+                      : <span className="text-slate-300 text-sm">—</span>}
+                  </td>
+                  {isSITC && (
+                    <td className="px-4 py-3 text-sm text-slate-500 border border-slate-200 align-top" style={{minWidth:'180px',maxWidth:'220px'}}>
+                      {item.scopeOfWork
+                        ? <p className="text-slate-600 text-xs leading-relaxed" style={{display:'-webkit-box',WebkitLineClamp:3,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{item.scopeOfWork}</p>
+                        : <span className="text-slate-300">—</span>}
+                    </td>
+                  )}
+                  <td className="px-4 py-3 border border-slate-200 align-top">
+                    {item.brands?.length > 0
+                      ? <div className="flex flex-wrap gap-1">
+                          {item.brands.map((b, i) => (
+                            <span key={i} className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs whitespace-nowrap">{b}</span>
+                          ))}
+                        </div>
+                      : <span className="text-slate-300 text-sm">—</span>}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-500 border border-slate-200 align-top whitespace-nowrap">{item.unit || "—"}</td>
+                  <td className="px-4 py-3 text-sm text-slate-500 border border-slate-200 align-top">{item.remarks || "—"}</td>
+                  <td className="px-4 py-3 border border-slate-200 align-top">
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => setViewItem(item)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all" title="View">
+                        <Eye size={14} />
+                      </button>
+                      <button onClick={() => openEdit(item)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all" title="Edit">
+                        <Pencil size={14} />
+                      </button>
+                      <button onClick={() => handleDelete(item.id)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all" title="Delete">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-        <div className="px-4 py-3 border-t border-slate-100 bg-slate-50">
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-slate-400">{filtered.length} item{filtered.length !== 1 ? "s" : ""} · Page {page} of {totalPages}</p>
-            {totalPages > 1 && (
-              <div className="flex items-center gap-1">
-                <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page === 1}
-                  className="px-2 py-1 rounded-lg text-xs font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 disabled:opacity-30 transition-all">‹</button>
-                {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                  let n;
-                  if (totalPages <= 5) n = i + 1;
-                  else if (page <= 3) n = i + 1;
-                  else if (page >= totalPages - 2) n = totalPages - 4 + i;
-                  else n = page - 2 + i;
-                  return (
-                    <button key={n} onClick={() => setPage(n)}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${page === n ? "bg-slate-900 text-white border-slate-900" : "text-slate-600 border-slate-200 hover:bg-slate-50"}`}>
-                      {n}
-                    </button>
-                  );
-                })}
-                <button onClick={() => setPage(p => Math.min(totalPages, p+1))} disabled={page === totalPages}
-                  className="px-2 py-1 rounded-lg text-xs font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 disabled:opacity-30 transition-all">›</button>
-              </div>
-            )}
-          </div>
+
+        {/* Pagination */}
+        <div className="px-4 py-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+          <p className="text-xs text-slate-400">{filtered.length} item{filtered.length !== 1 ? "s" : ""} · Page {page} of {totalPages}</p>
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1">
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+                className="px-2 py-1 rounded-lg text-xs font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 disabled:opacity-30 transition-all">‹</button>
+              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                let n;
+                if (totalPages <= 5) n = i + 1;
+                else if (page <= 3) n = i + 1;
+                else if (page >= totalPages - 2) n = totalPages - 4 + i;
+                else n = page - 2 + i;
+                return (
+                  <button key={n} onClick={() => setPage(n)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all
+                      ${page === n ? "bg-slate-900 text-white border-slate-900" : "text-slate-600 border-slate-200 hover:bg-slate-50"}`}>
+                    {n}
+                  </button>
+                );
+              })}
+              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+                className="px-2 py-1 rounded-lg text-xs font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 disabled:opacity-30 transition-all">›</button>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* CSV hint */}
-      <p className="mt-3 text-xs text-slate-400">Bulk CSV format: <span className="font-mono">Material Name, Make, Description, Category, Unit, Qty</span></p>
+      {/* ── VIEW MODAL ── */}
+      {viewItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between px-6 py-4 border-b border-slate-100">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center shrink-0 mt-0.5">
+                  <Package size={18} className="text-slate-500" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-base font-bold text-slate-800">{viewItem.materialName}</h2>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                      viewItem.itemType === "SITC"
+                        ? "bg-purple-50 text-purple-700"
+                        : "bg-blue-50 text-blue-700"
+                    }`}>{viewItem.itemType || "Supply"}</span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <p className="text-xs text-slate-400 font-mono">{viewItem.itemCode}</p>
+                    {viewItem.category && (
+                      <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-xs">{viewItem.category}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <button onClick={() => setViewItem(null)} className="text-slate-400 hover:text-slate-600 mt-1"><X size={18} /></button>
+            </div>
 
-      {/* ── MODAL ── */}
+            <div className="px-6 py-5 space-y-5 max-h-[70vh] overflow-y-auto">
+              {/* Image */}
+              <div className="flex items-center justify-center bg-slate-50 rounded-xl h-40 border border-slate-100">
+                {viewItem.imageUrl
+                  ? <img src={viewItem.imageUrl} alt="" className="h-full object-contain rounded-xl" />
+                  : <div className="flex flex-col items-center gap-2 text-slate-300">
+                      <ImageIcon size={32} />
+                      <p className="text-xs">No image</p>
+                    </div>
+                }
+              </div>
+
+              {/* Unit + Remarks row */}
+              <div className="grid grid-cols-2 gap-3">
+                {viewItem.unit && (
+                  <div className="bg-slate-50 rounded-xl p-3">
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Unit</p>
+                    <p className="text-sm font-semibold text-slate-700">{viewItem.unit}</p>
+                  </div>
+                )}
+                {viewItem.remarks && (
+                  <div className="bg-slate-50 rounded-xl p-3">
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Remarks</p>
+                    <p className="text-sm text-slate-700">{viewItem.remarks}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Scope of Work (SITC only) */}
+              {viewItem.itemType === "SITC" && viewItem.scopeOfWork && (
+                <div className="bg-purple-50 rounded-xl p-4 border border-purple-100">
+                  <p className="text-xs font-semibold text-purple-500 uppercase tracking-wide mb-2">Scope of Work</p>
+                  <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{viewItem.scopeOfWork}</p>
+                </div>
+              )}
+
+              {/* Specifications */}
+              {viewItem.specifications?.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Specifications</p>
+                  <div className="flex flex-wrap gap-2">
+                    {viewItem.specifications.map((s, i) => (
+                      <span key={i} className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-medium border border-blue-100">{s}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Brands */}
+              {viewItem.brands?.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Brand(s)</p>
+                  <div className="flex flex-wrap gap-2">
+                    {viewItem.brands.map((b, i) => (
+                      <span key={i} className="px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-medium border border-slate-200">{b}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── ADD / EDIT MODAL ── */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-              <h2 className="text-base font-bold text-slate-800">{editId ? "Edit Item" : "Add Item"}</h2>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 transition-colors"><X size={18} /></button>
+              <h2 className="text-base font-bold text-slate-800">
+                {editId ? "Edit Item" : `Add ${activeTab} Item`}
+              </h2>
+              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
             </div>
 
-            <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
+            <div className="px-6 py-5 space-y-4 max-h-[72vh] overflow-y-auto">
 
-              {/* Image upload */}
+              {/* Image */}
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-2 uppercase tracking-wide">Material Image</label>
+                <label className="block text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">Image</label>
                 <div onClick={() => fileRef.current.click()}
                   className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-slate-200 rounded-xl p-5 cursor-pointer hover:border-slate-400 hover:bg-slate-50 transition-all">
                   {form.imagePreview
                     ? <img src={form.imagePreview} alt="" className="h-24 object-contain rounded-lg" />
-                    : <><ImageIcon size={28} className="text-slate-300" /><p className="text-xs text-slate-400">Click to upload image</p></>
+                    : <><ImageIcon size={26} className="text-slate-300" /><p className="text-xs text-slate-400">Click to upload</p></>
                   }
                 </div>
                 <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleImage} />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
+
+                {/* Category */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wide">Category</label>
+                  <SearchableSelect
+                    options={catOptions}
+                    value={form.category}
+                    onChange={v => setForm(f => ({ ...f, category: v }))}
+                    placeholder="Select category…" />
+                </div>
+
+                {/* Unit */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wide">Unit</label>
+                  <SearchableSelect
+                    options={uomOptions}
+                    value={form.unit}
+                    onChange={v => setForm(f => ({ ...f, unit: v }))}
+                    placeholder="Select unit…" />
+                </div>
+
+                {/* Item Name */}
                 <div className="col-span-2">
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Material Name <span className="text-red-400">*</span></label>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wide">Item Name <span className="text-red-400">*</span></label>
                   <input value={form.materialName} onChange={e => setForm(f => ({ ...f, materialName: e.target.value }))}
                     placeholder="e.g. Cement OPC 53 Grade"
                     className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-400 text-slate-700" />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Make / Brand</label>
-                  <input value={form.make} onChange={e => setForm(f => ({ ...f, make: e.target.value }))}
-                    placeholder="e.g. Ultratech"
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-400 text-slate-700" />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Category</label>
-                  <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-400 text-slate-600 bg-white">
-                    <option value="">Select…</option>
-                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Unit</label>
-                  <select value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-400 text-slate-600 bg-white">
-                    <option value="">Select…</option>
-                    {uoms.map(u => <option key={u.uomCode || u.uomName} value={u.uomCode}>{u.uomName} ({u.uomCode})</option>)}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Qty</label>
-                  <input type="number" value={form.qty} onChange={e => setForm(f => ({ ...f, qty: e.target.value }))}
-                    placeholder="0"
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-400 text-slate-700" />
-                </div>
-
+                {/* Specifications */}
                 <div className="col-span-2">
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Description</label>
-                  <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                    rows={3} placeholder="Optional description…"
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-400 text-slate-700 resize-none" />
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Specifications</label>
+                    <button onClick={addSpec} className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1">
+                      <Plus size={12} /> Add
+                    </button>
+                  </div>
+                  {form.specifications.length === 0
+                    ? <p className="text-xs text-slate-400 italic">Click "Add" to add specifications (e.g. OPC-43, OPC-53…)</p>
+                    : <div className="space-y-2">
+                        {form.specifications.map((s, i) => (
+                          <div key={i} className="flex items-center gap-2">
+                            <input value={s} onChange={e => updateSpec(i, e.target.value)}
+                              placeholder={`Specification ${i + 1}`}
+                              className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-slate-400 text-slate-700" />
+                            <button onClick={() => removeSpec(i)}
+                              className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all">
+                              <X size={13} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                  }
                 </div>
+
+                {/* Scope of Work (SITC only) */}
+                {isSITC && (
+                  <div className="col-span-2">
+                    <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wide">Scope of Work</label>
+                    <textarea value={form.scopeOfWork} onChange={e => setForm(f => ({ ...f, scopeOfWork: e.target.value }))}
+                      rows={2} placeholder="Scope of work…"
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-400 text-slate-700 resize-none" />
+                  </div>
+                )}
+
+                {/* Brands */}
+                <div className="col-span-2">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Brand(s) <span className="text-slate-400 font-normal normal-case">(max 5)</span></label>
+                    {form.brands.length < 5 && (
+                      <button onClick={addBrand} className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1">
+                        <Plus size={12} /> Add Brand
+                      </button>
+                    )}
+                  </div>
+                  {form.brands.length === 0
+                    ? <p className="text-xs text-slate-400 italic">Click "Add Brand" to add brands</p>
+                    : <div className="space-y-2">
+                        {form.brands.map((b, i) => (
+                          <div key={i} className="flex items-center gap-2">
+                            <input value={b} onChange={e => updateBrand(i, e.target.value)}
+                              placeholder={`Brand ${i + 1}`}
+                              className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-slate-400 text-slate-700" />
+                            <button onClick={() => removeBrand(i)}
+                              className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all">
+                              <X size={13} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                  }
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wide">Remarks</label>
+                  <input value={form.remarks} onChange={e => setForm(f => ({ ...f, remarks: e.target.value }))}
+                    placeholder="Optional…"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-400 text-slate-700" />
+                </div>
+
               </div>
             </div>
 

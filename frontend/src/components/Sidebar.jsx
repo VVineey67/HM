@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, Store, ShieldCheck, Image as ImageIcon,
   LogOut, Briefcase, ChevronDown, ChevronRight,
   Info, Box, CalendarCheck, IndianRupee, ClipboardList,
-  FileSpreadsheet, Settings2, ChevronsUpDown,
+  FileSpreadsheet, Settings2, ChevronsUpDown, PackagePlus,
 } from "lucide-react";
 
 const toSubId = (parentId, subLabel) =>
@@ -13,8 +13,10 @@ const toSubId = (parentId, subLabel) =>
 const globalMenu = [
   { id: "about",       label: "Team Bootes",      icon: Info           },
   { id: "boq_prepare", label: "BOQ Prepare",       icon: FileSpreadsheet },
+  { id: "create",      label: "Create",            icon: PackagePlus,
+    sub: ["Intake", "Order"] },
   { id: "proc_setup",  label: "Procurement Setup", icon: Settings2,
-    sub: ["Company List","Site List","Vendor List","UOM","Item List","Term Condition","Payment Terms","Government Laws"] },
+    sub: ["Company List","Site List","Vendor List","UOM","Category List","Item List","Term Condition","Payment Terms","Government Laws"] },
 ];
 
 const projectMenu = [

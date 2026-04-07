@@ -34,12 +34,22 @@ const clearCache = (projectId) => { delete _cache[projectId]; };
 
 /* ── Fetch all rows bypassing PostgREST 1000-row max_rows limit ── */
 const TABLES_WITH_DATE = ["attendance", "guard_attendance"];
+const TABLE_SCHEMA = {
+  attendance:       "attendance",
+  guard_attendance: "attendance",
+  staff_contacts:   "attendance",
+  guard_contacts:   "attendance",
+};
+const schemaFrom = (table) => {
+  const schema = TABLE_SCHEMA[table];
+  return schema ? supabase.schema(schema).from(table) : supabase.from(table);
+};
 
 const fetchAll = async (table, filters = {}) => {
   const PAGE = 1000;
   let all = [], from = 0;
   while (true) {
-    let q = supabase.from(table).select("*");
+    let q = schemaFrom(table).select("*");
     if (TABLES_WITH_DATE.includes(table)) q = q.order("date", { ascending: true });
     else q = q.order("created_at", { ascending: true });
     q = q.range(from, from + PAGE - 1);
@@ -155,7 +165,7 @@ router.post("/add/:projectId/:sheetName", async (req, res) => {
     const data = req.body;
 
     if (sheetName === "Staff") {
-      const { error } = await supabase.from("attendance").insert({
+      const { error } = await supabase.schema("attendance").from("attendance").insert({
         project_id:  projectId,
         date:        data.date        || null,
         site_code:   data.siteCode    || data.site || projectId,
@@ -171,7 +181,7 @@ router.post("/add/:projectId/:sheetName", async (req, res) => {
       if (error) throw error;
 
     } else if (sheetName === "Guard") {
-      const { error } = await supabase.from("guard_attendance").insert({
+      const { error } = await supabase.schema("attendance").from("guard_attendance").insert({
         project_id: projectId,
         date:       data.date        || null,
         site_code:  data.siteCode    || data.site || projectId,
@@ -189,7 +199,7 @@ router.post("/add/:projectId/:sheetName", async (req, res) => {
     } else if (sheetName === "SC" || sheetName === "Contact") {
       // Duplicate EmpID check
       if (data.empId) {
-        const { data: existing } = await supabase
+        const { data: existing } = await supabase.schema("attendance")
           .from("staff_contacts")
           .select("id")
           .eq("project_id", projectId)
@@ -197,7 +207,7 @@ router.post("/add/:projectId/:sheetName", async (req, res) => {
         if (existing?.length > 0)
           return res.status(400).json({ error: "Duplicate Employee ID", detail: `EmpID "${data.empId}" is already registered` });
       }
-      const { error } = await supabase.from("staff_contacts").insert({
+      const { error } = await supabase.schema("attendance").from("staff_contacts").insert({
         project_id:   projectId,
         emp_id:       data.empId       || "",
         joining_date: data.joiningDate || null,
@@ -211,7 +221,7 @@ router.post("/add/:projectId/:sheetName", async (req, res) => {
       if (error) throw error;
 
     } else if (sheetName === "GC") {
-      const { error } = await supabase.from("guard_contacts").insert({
+      const { error } = await supabase.schema("attendance").from("guard_contacts").insert({
         project_id:   projectId,
         name:         data.name        || "",
         joining_date: data.joiningDate || null,
@@ -241,7 +251,7 @@ router.patch("/update/:projectId/:sheetName/:id", async (req, res) => {
     const data = req.body;
 
     if (sheetName === "Staff") {
-      const { error } = await supabase.from("attendance").update({
+      const { error } = await supabase.schema("attendance").from("attendance").update({
         date:        data.date        || null,
         site_code:   data.siteCode    || data.site || projectId,
         name:        data.name        || "",
@@ -256,7 +266,7 @@ router.patch("/update/:projectId/:sheetName/:id", async (req, res) => {
       if (error) throw error;
 
     } else if (sheetName === "Guard") {
-      const { error } = await supabase.from("guard_attendance").update({
+      const { error } = await supabase.schema("attendance").from("guard_attendance").update({
         date:      data.date        || null,
         site_code: data.siteCode    || data.site || projectId,
         name:      data.name        || "",
@@ -271,7 +281,7 @@ router.patch("/update/:projectId/:sheetName/:id", async (req, res) => {
       if (error) throw error;
 
     } else if (sheetName === "SC" || sheetName === "Contact") {
-      const { error } = await supabase.from("staff_contacts").update({
+      const { error } = await supabase.schema("attendance").from("staff_contacts").update({
         emp_id:       data.empId       || "",
         joining_date: data.joiningDate || null,
         email:        data.emailId     || data.email || "",
@@ -284,7 +294,7 @@ router.patch("/update/:projectId/:sheetName/:id", async (req, res) => {
       if (error) throw error;
 
     } else if (sheetName === "GC") {
-      const { error } = await supabase.from("guard_contacts").update({
+      const { error } = await supabase.schema("attendance").from("guard_contacts").update({
         name:         data.name        || "",
         joining_date: data.joiningDate || null,
         designation:  data.designation || "Security Guard",
@@ -314,7 +324,7 @@ router.delete("/delete/:projectId/:sheetName/:id", async (req, res) => {
     const tableMap = { Staff: "attendance", Guard: "guard_attendance", SC: "staff_contacts", Contact: "staff_contacts", GC: "guard_contacts" };
     const table = tableMap[sheetName];
     if (!table) return res.status(400).json({ error: `Unknown sheet: ${sheetName}` });
-    const { error } = await supabase.from(table).delete().eq("id", id);
+    const { error } = await schemaFrom(table).delete().eq("id", id);
     if (error) throw error;
     res.json({ success: true });
   } catch (err) {
@@ -394,7 +404,7 @@ router.post("/bulk-upload/:projectId/:type", upload.single("file"), async (req, 
     if (!rows.length)      return res.status(400).json({ error: "No valid rows found in CSV" });
 
     const tableMap = { staff: "attendance", guard: "guard_attendance", contact: "staff_contacts", sc: "staff_contacts", gc: "guard_contacts" };
-    const { error } = await supabase.from(tableMap[type]).insert(rows);
+    const { error } = await schemaFrom(tableMap[type]).insert(rows);
     if (error) throw error;
 
     res.json({ success: true, rowsAdded: rows.length });

@@ -1,0 +1,848 @@
+import React, { useState, useEffect, useRef } from "react";
+import {
+  FileText, CreditCard, Scale, Plus, Download, Upload, X, Search,
+  ChevronDown, Pencil, Trash2, FileSpreadsheet, AlignLeft, History,
+  ChevronRight, Clock, User, CheckCircle, Eye,
+} from "lucide-react";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import * as XLSX from "xlsx";
+import ReactQuill from "react-quill-new";
+import "react-quill-new/dist/quill.snow.css";
+
+const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
+const PER_PAGE = 9;
+
+/* ── Per-type config ── */
+const TYPE_CONFIG = {
+  TC: {
+    label: "Terms & Conditions",
+    desc:  "Global T&C templates used across all POs",
+    prefix: "TC",
+    Icon:  FileText,
+    iconBg:    "bg-yellow-50",
+    iconColor: "text-yellow-600",
+    badgeCls:  "bg-yellow-50 text-yellow-700 border border-yellow-200",
+    numBg:     "bg-yellow-100",
+    numColor:  "text-yellow-700",
+    borderAccent: "border-l-yellow-400",
+    headerBg:  "from-yellow-50 to-white",
+    accentRing: "ring-yellow-200",
+  },
+  PAY: {
+    label: "Payment Terms",
+    desc:  "Payment schedule and milestone templates",
+    prefix: "PAY",
+    Icon:  CreditCard,
+    iconBg:    "bg-emerald-50",
+    iconColor: "text-emerald-600",
+    badgeCls:  "bg-emerald-50 text-emerald-700 border border-emerald-200",
+    numBg:     "bg-emerald-100",
+    numColor:  "text-emerald-700",
+    borderAccent: "border-l-emerald-400",
+    headerBg:  "from-emerald-50 to-white",
+    accentRing: "ring-emerald-200",
+  },
+  GOV: {
+    label: "Government Laws",
+    desc:  "Applicable government regulations and compliance",
+    prefix: "GOV",
+    Icon:  Scale,
+    iconBg:    "bg-indigo-50",
+    iconColor: "text-indigo-600",
+    badgeCls:  "bg-indigo-50 text-indigo-700 border border-indigo-200",
+    numBg:     "bg-indigo-100",
+    numColor:  "text-indigo-700",
+    borderAccent: "border-l-indigo-400",
+    headerBg:  "from-indigo-50 to-white",
+    accentRing: "ring-indigo-200",
+  },
+};
+
+const emptyForm = { title: "", category: "", content: "" };
+
+/* ── Compatibility logic between old array of strings and new HTML string ── */
+const getHTML = (points) => {
+  if (!points || !points.length) return "";
+  
+  // Normalize non-breaking spaces from rich text editor to standard spaces so the browser wraps text naturally
+  const normalize = (html) => html.replace(/&nbsp;/ig, ' ').replace(/\u00A0/g, ' ');
+
+  if (points.length === 1 && (points[0].includes('<') || points[0] === "")) return normalize(points[0]);
+  // backwards compatible formatting
+  return `<ol>${points.map(p => `<li>${normalize(p)}</li>`).join('')}</ol>`;
+};
+
+const stripHTMLToText = (html) => {
+  if (!html) return "";
+  const tmp = document.createElement("DIV");
+  // preserve spacing for exports but avoid hardcoded bullets
+  let text = html.replace(/<\/p>/gi, '\n')
+                 .replace(/<\/li>/gi, '\n')
+                 .replace(/<li>/gi, '');
+  tmp.innerHTML = text;
+  return (tmp.textContent || tmp.innerText || "").trim().replace(/\n\s*\n/g, '\n');
+};
+
+const joinPoints = (pts) => stripHTMLToText(getHTML(pts)); // for plain-text exports
+
+const QUILL_MODULES = {
+  toolbar: [
+    ['bold', 'italic', 'underline', 'strike'],
+    [{ 'color': [] }, { 'background': [] }],
+    [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+    [{ 'indent': '-1'}, { 'indent': '+1' }],
+    ['clean']
+  ]
+};
+
+/* ── Format date ── */
+const fmtDate = (iso) => {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return d.toLocaleString("en-IN", {
+    day: "2-digit", month: "short", year: "numeric",
+    hour: "2-digit", minute: "2-digit", hour12: true,
+  });
+};
+
+/* ── Get current user from localStorage ── */
+const getCurrentUser = () => {
+  try {
+    const u = JSON.parse(localStorage.getItem("bms_user") || "{}");
+    return u.name || u.email || u.username || "Unknown";
+  } catch { return "Unknown"; }
+};
+
+export default function ClausesMaster({ type }) {
+  const cfg = TYPE_CONFIG[type] || TYPE_CONFIG.TC;
+  const { label, desc, prefix, Icon, iconBg, iconColor, badgeCls, numBg, numColor, borderAccent, headerBg, accentRing } = cfg;
+
+  const [clauses,    setClauses]    = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [loading,    setLoading]    = useState(true);
+  const [search,     setSearch]     = useState("");
+  const [filterCat,  setFilterCat]  = useState("");
+  const [page,       setPage]       = useState(1);
+
+  const [showModal, setShowModal] = useState(false);
+  const [form,      setForm]      = useState(emptyForm);
+  const [editId,    setEditId]    = useState(null);
+  const [saving,    setSaving]    = useState(false);
+  const [toast,     setToast]     = useState(null);
+
+  const [showExport, setShowExport] = useState(false);
+  const [showBulk,   setShowBulk]   = useState(false);
+  const [bulkRows,   setBulkRows]   = useState([]);
+  const [bulkFile,   setBulkFile]   = useState("");
+  const [bulkSaving, setBulkSaving] = useState(false);
+
+  /* ── Version history state ── */
+  const [historyClause,   setHistoryClause]   = useState(null);
+  const [versions,        setVersions]        = useState([]);
+  const [versionsLoading, setVersionsLoading] = useState(false);
+  const [expandedVersion, setExpandedVersion] = useState(null);
+
+  /* ── View clause state ── */
+  const [viewClause, setViewClause] = useState(null);
+
+  const bulkRef   = useRef();
+  const exportRef = useRef();
+  const textareaRef = useRef();
+
+  /* ── Fetch ── */
+  useEffect(() => { fetchAll(); }, [type]);
+
+  const fetchAll = async () => {
+    setLoading(true); setPage(1);
+    try {
+      const [cRes, catRes] = await Promise.all([
+        fetch(`${API}/api/procurement/clauses?type=${type}`).then(r => r.json()),
+        fetch(`${API}/api/procurement/categories`).then(r => r.json()),
+      ]);
+      setClauses(cRes.clauses || []);
+      setCategories(catRes.categories || []);
+    } catch { setClauses([]); }
+    setLoading(false);
+  };
+
+  const showToast = (msg, kind = "success") => {
+    setToast({ msg, kind });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  /* ── Modal open ── */
+  const openAdd  = () => { setForm(emptyForm); setEditId(null); setShowModal(true); };
+  const openEdit = (c) => {
+    setForm({ title: c.title, category: c.category || "", content: getHTML(c.points) });
+    setEditId(c.id);
+    setShowModal(true);
+  };
+
+  /* ── Save ── */
+  const handleSave = async () => {
+    if (!form.title.trim())        return showToast("Title required", "error");
+    const cleanTxt = stripHTMLToText(form.content);
+    if (!cleanTxt.trim())          return showToast("Enter at least one point/line", "error");
+    setSaving(true);
+    try {
+      const editorName = getCurrentUser();
+      const url    = editId ? `${API}/api/procurement/clauses/${editId}` : `${API}/api/procurement/clauses`;
+      const method = editId ? "PUT" : "POST";
+      const res    = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          type, category: form.category, title: form.title.trim(),
+          points: [form.content], editedBy: editorName,
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || "Save failed");
+      showToast(editId ? "Updated successfully" : "Clause added");
+      setShowModal(false);
+      fetchAll();
+    } catch (err) { showToast(err.message, "error"); }
+    setSaving(false);
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm("Delete this clause?")) return;
+    try {
+      await fetch(`${API}/api/procurement/clauses/${id}`, { method: "DELETE" });
+      showToast("Deleted"); fetchAll();
+    } catch { showToast("Delete failed", "error"); }
+  };
+
+  /* ── Version history ── */
+  const openHistory = async (c) => {
+    setHistoryClause(c);
+    setVersions([]);
+    setExpandedVersion(null);
+    setVersionsLoading(true);
+    try {
+      const res = await fetch(`${API}/api/procurement/clauses/${c.id}/versions`);
+      const data = await res.json();
+      setVersions(data.versions || []);
+      // Auto-expand latest (last) version
+      if (data.versions?.length) setExpandedVersion(data.versions[data.versions.length - 1].version);
+    } catch { setVersions([]); }
+    setVersionsLoading(false);
+  };
+
+  const handleDeleteVersion = async (versionId, e) => {
+    e.stopPropagation();
+    if (!confirm("Delete this version?")) return;
+    try {
+      const res = await fetch(`${API}/api/procurement/clauses/versions/${versionId}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Delete failed");
+      showToast("Version deleted");
+      openHistory(historyClause);
+    } catch {
+      showToast("Delete version failed", "error");
+    }
+  };
+
+  /* ── Bulk ── */
+  const downloadTemplate = () => {
+    const hdr = { Category: "Civil", Title: "Standard Terms", Content: "Line 1 of content\nLine 2 of content\nLine 3 of content" };
+    const ws = XLSX.utils.json_to_sheet([hdr]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, type);
+    XLSX.writeFile(wb, `${prefix}_template.xlsx`);
+  };
+
+  const handleBulkFile = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setBulkFile(file.name);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const wb   = XLSX.read(ev.target.result, { type: "array" });
+      const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+      const rows = data.map(r => {
+        const str = (r["Content"] || "").toString();
+        const htmlPts = str.split("\n").map(l => l.trim()).filter(Boolean).map(l => `<li>${l}</li>`).join("");
+        const pointsArray = htmlPts ? [`<ol>${htmlPts}</ol>`] : [];
+        return { category: r["Category"] || "", title: r["Title"] || "", points: pointsArray };
+      }).filter(r => r.title.trim());
+      setBulkRows(rows);
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = "";
+  };
+
+  const handleBulkSave = async () => {
+    if (!bulkRows.length) return showToast("No valid rows", "error");
+    setBulkSaving(true);
+    try {
+      const res  = await fetch(`${API}/api/procurement/clauses/bulk`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body:   JSON.stringify({ rows: bulkRows, type }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Bulk failed");
+      showToast(`${data.inserted} added, ${data.skipped} skipped`);
+      setShowBulk(false); setBulkRows([]); setBulkFile("");
+      fetchAll();
+    } catch (err) { showToast(err.message, "error"); }
+    setBulkSaving(false);
+  };
+
+  /* ── Export ── */
+  const exportExcel = () => {
+    const rows = filtered.map((c, idx) => ({
+      "S.No": idx + 1, Code: c.code, Category: c.category || "", Title: c.title,
+      Content: joinPoints(c.points),
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, type);
+    XLSX.writeFile(wb, `${prefix}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    setShowExport(false);
+  };
+
+  const exportPDF = () => {
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    doc.setFontSize(14); doc.setFont(undefined, "bold"); doc.text(label, 14, 14);
+    doc.setFontSize(9); doc.setFont(undefined, "normal"); doc.setTextColor(100);
+    doc.text(`Exported: ${new Date().toLocaleDateString("en-IN")}  ·  Total: ${filtered.length}`, 14, 21);
+    doc.setTextColor(0);
+    autoTable(doc, {
+      startY: 27,
+      head:   [["Code", "Category", "Title", "Content"]],
+      body:   filtered.map(c => [c.code, c.category || "—", c.title, joinPoints(c.points)]),
+      styles:            { fontSize: 8, cellPadding: 3, valign: "top", overflow: "linebreak" },
+      headStyles:        { fillColor: [15, 23, 42], textColor: 255, fontStyle: "bold", fontSize: 8 },
+      alternateRowStyles:{ fillColor: [248, 250, 252] },
+      columnStyles: { 0:{cellWidth:18}, 1:{cellWidth:28}, 2:{cellWidth:50}, 3:{cellWidth:"auto"} },
+      margin: { left: 14, right: 14 },
+    });
+    doc.save(`${prefix}_${new Date().toISOString().slice(0, 10)}.pdf`);
+    setShowExport(false);
+  };
+
+  /* ── Filter + Paginate ── */
+  const uniqueCats = [...new Set(clauses.map(c => c.category).filter(Boolean))].sort();
+  const filtered   = clauses.filter(c => {
+    const ms = !search    || c.title.toLowerCase().includes(search.toLowerCase()) || c.code.toLowerCase().includes(search.toLowerCase());
+    const mc = !filterCat || c.category === filterCat;
+    return ms && mc;
+  });
+  const totalPages = Math.ceil(filtered.length / PER_PAGE) || 1;
+  const paginated  = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
+
+  useEffect(() => {
+    const h = e => { if (exportRef.current && !exportRef.current.contains(e.target)) setShowExport(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+
+  /* ══════════ RENDER ══════════ */
+  return (
+    <div className="p-6 w-full">
+      <style>{`
+        .quill-content ul { list-style-type: disc; padding-left: 1.5rem; margin-bottom: 0.5rem; }
+        .quill-content ol { list-style-type: decimal; padding-left: 1.5rem; margin-bottom: 0.5rem; }
+        .quill-content li { margin-bottom: 0.25rem; }
+        .quill-content p { margin-bottom: 0.25rem; }
+        .quill-content strong { font-weight: bold; }
+        .quill-content em { font-style: italic; }
+        .quill-content u { text-decoration: underline; }
+      `}</style>
+
+
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed top-5 right-5 z-[70] px-4 py-3 rounded-xl text-sm font-medium shadow-lg
+          ${toast.kind === "error" ? "bg-red-50 text-red-700 border border-red-200" : "bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>
+          {toast.msg}
+        </div>
+      )}
+
+      {/* ══════════════════════════════════
+          VERSION HISTORY DRAWER
+      ══════════════════════════════════ */}
+      {historyClause && (
+        <>
+          <div className="fixed inset-0 bg-black/30 z-40 backdrop-blur-sm" onClick={() => setHistoryClause(null)} />
+          <div className="fixed top-0 right-0 h-full w-full max-w-[560px] bg-white z-50 shadow-2xl flex flex-col">
+
+            {/* Drawer Header */}
+            <div className={`px-6 py-5 border-b border-slate-100 shrink-0 bg-gradient-to-r ${headerBg}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3 min-w-0 flex-1">
+                  <div className={`w-10 h-10 rounded-xl ${iconBg} flex items-center justify-center shrink-0`}>
+                    <History size={18} className={iconColor} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs text-slate-500 mb-0.5">Version History</p>
+                    <h2 className="text-base font-bold text-slate-800 truncate">{historyClause.title}</h2>
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${badgeCls}`}>{historyClause.code}</span>
+                      {historyClause.category && (
+                        <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-medium">{historyClause.category}</span>
+                      )}
+                      <span className="text-xs text-slate-400">
+                        {versions.length} version{versions.length !== 1 ? "s" : ""}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <button onClick={() => setHistoryClause(null)}
+                  className="text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100 shrink-0 transition-all">
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+
+            {/* Drawer Body */}
+            <div className="flex-1 overflow-y-auto px-4 py-4">
+              {versionsLoading ? (
+                <div className="py-16 text-center text-slate-400 text-sm">Loading history…</div>
+              ) : versions.length === 0 ? (
+                <div className="py-16 text-center text-slate-300 text-xs font-semibold uppercase tracking-widest">No version history yet</div>
+              ) : (
+                <div className="space-y-3">
+                  {versions.map((v, idx) => {
+                    const isLatest   = idx === versions.length - 1; // last = newest
+                    const isExpanded = expandedVersion === v.version;
+                    return (
+                      <div key={v.id}
+                        className={`rounded-2xl border transition-all overflow-hidden
+                          ${isLatest ? `border-2 ${accentRing} ring-1 ${accentRing}` : "border-slate-100"}`}>
+
+                        {/* Version Header */}
+                        <div
+                          onClick={() => setExpandedVersion(isExpanded ? null : v.version)}
+                          className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-slate-50 transition-colors text-left cursor-pointer">
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            {/* Version badge */}
+                            <div className={`shrink-0 w-9 h-9 rounded-xl flex items-center justify-center font-bold text-sm
+                              ${isLatest ? `${numBg} ${numColor}` : "bg-slate-100 text-slate-500"}`}>
+                              V{v.version}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {isLatest && (
+                                  <span className={`flex items-center gap-1 text-xs font-bold ${numColor}`}>
+                                    <CheckCircle size={11} /> Current
+                                  </span>
+                                )}
+                                {v.version === 1 && !isLatest && (
+                                  <span className="text-xs text-slate-400 font-medium">Original</span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+                                <span className="flex items-center gap-1 text-xs text-slate-600">
+                                  <User size={10} className="text-slate-400" />
+                                  <span className="font-semibold">{v.editedBy}</span>
+                                </span>
+                                <span className="flex items-center gap-1 text-xs text-slate-400">
+                                  <Clock size={10} />
+                                  {fmtDate(v.editedAt)}
+                                </span>
+                              </div>
+                              {/* Title if different */}
+                              <p className="text-xs text-slate-500 truncate mt-0.5">{v.title}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0 ml-2">
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${numBg} ${numColor}`}>
+                              {v.points.length} pt{v.points.length !== 1 ? "s" : ""}
+                            </span>
+                            <button onClick={(e) => handleDeleteVersion(v.id, e)} className="p-1 rounded-md text-red-400 hover:text-red-600 hover:bg-red-50 transition-all mx-1" title="Delete Version">
+                              <Trash2 size={14} />
+                            </button>
+                            <ChevronRight size={15} className={`text-slate-400 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+                          </div>
+                        </div>
+
+                        {/* Expanded Content */}
+                        {isExpanded && (
+                          <div className="px-4 pb-4 border-t border-slate-100 bg-slate-50/50">
+                            {v.category && (
+                              <p className="text-xs text-slate-400 mt-3 mb-2">
+                                Category: <span className="font-semibold text-slate-600">{v.category}</span>
+                              </p>
+                            )}
+                            <div className="quill-content text-sm text-slate-700 leading-relaxed mt-3" dangerouslySetInnerHTML={{ __html: getHTML(v.points) }} />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Drawer Footer */}
+            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 shrink-0 flex items-center justify-between">
+              <p className="text-xs text-slate-400">
+                {versions.length > 0 ? `Last edited by ${versions[versions.length - 1]?.editedBy}` : "No edits yet"}
+              </p>
+              <button onClick={() => setHistoryClause(null)}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-100 transition-all">
+                Close
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── HEADER ── */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <div className={`w-10 h-10 rounded-xl ${iconBg} flex items-center justify-center`}>
+            <Icon size={20} className={iconColor} />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-slate-800">{label}</h1>
+            <p className="text-sm text-slate-400">{desc}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="relative" ref={exportRef}>
+            <button onClick={() => { setShowExport(s => !s); setShowBulk(false); }}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all">
+              <Download size={14} /> Export <ChevronDown size={12} />
+            </button>
+            {showExport && (
+              <div className="absolute right-0 top-full mt-1 z-20 bg-white rounded-xl shadow-lg border border-slate-100 py-1 min-w-36">
+                <button onClick={exportExcel} className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50">
+                  <FileSpreadsheet size={14} className="text-green-600" /> Excel (.xlsx)
+                </button>
+                <button onClick={exportPDF} className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50">
+                  <FileText size={14} className="text-red-500" /> PDF
+                </button>
+              </div>
+            )}
+          </div>
+          <button onClick={() => { setShowBulk(s => !s); setShowExport(false); }}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all">
+            <Upload size={14} /> Bulk Upload
+          </button>
+          <button onClick={openAdd}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-700 transition-all">
+            <Plus size={15} /> Add {type === "TC" ? "T&C" : type === "PAY" ? "Payment Term" : "Law"}
+          </button>
+        </div>
+      </div>
+
+      {/* ── BULK PANEL ── */}
+      {showBulk && (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 mb-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-bold text-slate-700">Bulk Upload — {label}</h3>
+            <button onClick={() => { setShowBulk(false); setBulkRows([]); setBulkFile(""); }} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
+          </div>
+          <p className="text-xs text-slate-500 mb-4 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            💡 Excel me <strong>Category</strong>, <strong>Title</strong>, aur <strong>Content</strong> columns hone chahiye.
+            Content column me ek ya zyada lines likhein — har line ek point banega.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <button onClick={downloadTemplate}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-all">
+              <FileSpreadsheet size={14} className="text-green-600" /> Download Template
+            </button>
+            <button onClick={() => bulkRef.current.click()}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-all">
+              <Upload size={14} /> {bulkFile || "Choose .xlsx file"}
+            </button>
+            <input ref={bulkRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleBulkFile} />
+          </div>
+          {bulkRows.length > 0 && (
+            <div className="mt-4">
+              <p className="text-xs font-bold text-slate-600 mb-2">{bulkRows.length} clauses ready to upload</p>
+              <div className="max-h-40 overflow-y-auto rounded-xl border border-slate-100 divide-y divide-slate-50">
+                {bulkRows.map((r, i) => (
+                  <div key={i} className="flex items-center gap-3 px-3 py-2.5 bg-slate-50 text-xs text-slate-600">
+                    <span className="font-mono text-slate-400 w-5 shrink-0">{i + 1}</span>
+                    <span className="font-semibold flex-1 truncate">{r.title}</span>
+                    {r.category && <span className="text-slate-400 shrink-0">{r.category}</span>}
+                    <span className={`shrink-0 px-2 py-0.5 rounded-full text-xs font-semibold ${numBg} ${numColor}`}>{r.points.length} pts</span>
+                  </div>
+                ))}
+              </div>
+              <button onClick={handleBulkSave} disabled={bulkSaving}
+                className="mt-3 flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-700 disabled:opacity-50 transition-all">
+                <Upload size={14} /> {bulkSaving ? "Uploading…" : `Upload ${bulkRows.length} Clauses`}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── SEARCH + FILTER ── */}
+      <div className="flex items-center gap-2 mb-5 flex-wrap">
+        <div className="relative flex-1 min-w-48">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
+            placeholder="Search by code or title…"
+            className="w-full pl-9 pr-4 h-10 rounded-xl border border-slate-200 text-sm outline-none focus:border-slate-400 bg-white text-slate-700" />
+        </div>
+        <div className="relative">
+          <select value={filterCat} onChange={e => { setFilterCat(e.target.value); setPage(1); }}
+            className="h-10 pl-3 pr-8 rounded-xl border border-slate-200 text-sm outline-none focus:border-slate-400 bg-white text-slate-600 min-w-44 appearance-none cursor-pointer">
+            <option value="">All Categories</option>
+            {uniqueCats.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+        </div>
+        {filterCat && (
+          <button onClick={() => { setFilterCat(""); setPage(1); }}
+            className="h-10 flex items-center gap-1.5 px-3 rounded-xl border border-slate-200 text-sm text-slate-500 hover:text-red-500 hover:border-red-200 hover:bg-red-50 transition-all bg-white">
+            <X size={13} /> Clear
+          </button>
+        )}
+        <span className="text-xs text-slate-400 ml-auto">{filtered.length} clause{filtered.length !== 1 ? "s" : ""}</span>
+      </div>
+
+      {/* ── CARDS GRID ── */}
+      {loading ? (
+        <div className="py-20 text-center text-slate-300 font-semibold uppercase tracking-widest text-xs">Loading…</div>
+      ) : filtered.length === 0 ? (
+        <div className="py-20 text-center text-slate-300 font-semibold uppercase tracking-widest text-xs">No clauses found</div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-5 items-start">
+            {paginated.map((c) => (
+              <div key={c.id}
+                className={`bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden border-l-4 ${borderAccent} ${c.code?.startsWith('TC') ? 'xl:col-span-2' : ''}`}>
+
+                {/* Card Header */}
+                <div className={`px-5 py-3.5 bg-gradient-to-r ${headerBg} border-b border-slate-100 flex items-center justify-between gap-3`}>
+                  <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
+                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold shrink-0 ${badgeCls}`}>{c.code}</span>
+                    {c.category && (
+                      <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-medium shrink-0">{c.category}</span>
+                    )}
+                    <span className="text-sm font-bold text-slate-800 truncate">{c.title}</span>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {/* View full content */}
+                    <button onClick={() => setViewClause(c)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all" title="View full content">
+                      <Eye size={14} />
+                    </button>
+                    {/* Version history */}
+                    <button onClick={() => openHistory(c)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-violet-600 hover:bg-violet-50 transition-all" title="Version history">
+                      <History size={14} />
+                    </button>
+                    <button onClick={() => openEdit(c)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-white/80 transition-all" title="Edit">
+                      <Pencil size={14} />
+                    </button>
+                    <button onClick={() => handleDelete(c.id)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all" title="Delete">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Card Content */}
+                <div className="px-5 py-4 flex-1">
+                  {c.points.length === 0 ? (
+                    <p className="text-xs text-slate-300 italic">No content</p>
+                  ) : (
+                    <div className="quill-content text-sm text-slate-700 leading-relaxed max-w-none line-clamp-5" dangerouslySetInnerHTML={{ __html: getHTML(c.points) }} />
+                  )}
+                </div>
+
+                {/* Card Footer */}
+                <div className="px-5 py-2.5 border-t border-slate-50 bg-slate-50/50 flex items-center justify-between">
+                  <span className="text-xs text-slate-400">
+                    {c.points.length} point{c.points.length !== 1 ? "s" : ""}
+                  </span>
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => setViewClause(c)}
+                      className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-700 transition-colors font-medium">
+                      <Eye size={11} /> View
+                    </button>
+                    <button onClick={() => openHistory(c)}
+                      className="flex items-center gap-1 text-xs text-slate-400 hover:text-violet-600 transition-colors font-medium">
+                      <History size={11} /> History
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-1 mt-2">
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 disabled:opacity-30 transition-all">‹ Prev</button>
+              {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+                let n;
+                if (totalPages <= 7)             n = i + 1;
+                else if (page <= 4)              n = i + 1;
+                else if (page >= totalPages - 3) n = totalPages - 6 + i;
+                else                             n = page - 3 + i;
+                return (
+                  <button key={n} onClick={() => setPage(n)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all
+                      ${page === n ? "bg-slate-900 text-white border-slate-900" : "text-slate-600 border-slate-200 hover:bg-slate-50"}`}>
+                    {n}
+                  </button>
+                );
+              })}
+              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 disabled:opacity-30 transition-all">Next ›</button>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ══════════════════════════════
+          VIEW CLAUSE MODAL
+      ══════════════════════════════ */}
+      {viewClause && (
+        <>
+          <div className="fixed inset-0 bg-black/30 z-40 backdrop-blur-sm" onClick={() => setViewClause(null)} />
+          <div className="fixed top-0 right-0 h-full w-full max-w-[560px] bg-white z-50 shadow-2xl flex flex-col">
+            {/* Header */}
+            <div className={`px-6 py-5 border-b border-slate-100 shrink-0 bg-gradient-to-r ${headerBg}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3 min-w-0 flex-1">
+                  <div className={`w-10 h-10 rounded-xl ${iconBg} flex items-center justify-center shrink-0`}>
+                    <Icon size={18} className={iconColor} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${badgeCls}`}>{viewClause.code}</span>
+                      {viewClause.category && (
+                        <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-medium">{viewClause.category}</span>
+                      )}
+                    </div>
+                    <h2 className="text-base font-bold text-slate-800 leading-snug">{viewClause.title}</h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      {viewClause.points.length} point{viewClause.points.length !== 1 ? "s" : ""} · {label}
+                    </p>
+                  </div>
+                </div>
+                <button onClick={() => setViewClause(null)}
+                  className="text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100 shrink-0">
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+
+            {/* Content — scrollable */}
+            <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-6">
+              <div className="quill-content text-sm text-slate-700 leading-relaxed max-w-none" dangerouslySetInnerHTML={{ __html: getHTML(viewClause.points) }} />
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 shrink-0 flex items-center gap-2">
+              <button onClick={() => { setViewClause(null); openEdit(viewClause); }}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-700 transition-all">
+                <Pencil size={13} /> Edit
+              </button>
+              <button onClick={() => { setViewClause(null); openHistory(viewClause); }}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-100 transition-all">
+                <History size={13} /> History
+              </button>
+              <button onClick={() => setViewClause(null)}
+                className="ml-auto px-4 py-2 rounded-xl border border-slate-200 text-slate-500 text-sm font-medium hover:bg-slate-100 transition-all">
+                Close
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ══════════════════════════════
+          ADD / EDIT MODAL
+      ══════════════════════════════ */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
+              <div className="flex items-center gap-2">
+                <div className={`w-8 h-8 rounded-lg ${iconBg} flex items-center justify-center`}>
+                  <Icon size={15} className={iconColor} />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-slate-800">
+                    {editId ? "Edit" : "Add"} {type === "TC" ? "T&C" : type === "PAY" ? "Payment Term" : "Government Law"}
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    {editId ? "A new version will be saved automatically" : `Code auto-generated (${prefix}-XXX)`}
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wide">
+                    Title <span className="text-red-400">*</span>
+                  </label>
+                  <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                    placeholder={type === "TC" ? "e.g. Standard Terms" : type === "PAY" ? "e.g. Milestone Payment" : "e.g. Labour Law"}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-400 text-slate-700" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wide">Category</label>
+                  <div className="relative">
+                    <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
+                      className="w-full h-[42px] pl-3 pr-8 rounded-xl border border-slate-200 text-sm outline-none focus:border-slate-400 bg-white text-slate-700 appearance-none cursor-pointer">
+                      <option value="">— No category —</option>
+                      {categories.map(c => <option key={c.id} value={c.categoryName}>{c.categoryName}</option>)}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                    Content <span className="text-red-400">*</span>
+                  </label>
+                </div>
+                <div className="mb-2 px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl flex items-start gap-2">
+                  <span className="text-base">💡</span>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Use the toolbar to bold text, add colors, or create standard and nested lists.
+                  </p>
+                </div>
+                <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                  <ReactQuill 
+                    theme="snow"
+                    value={form.content}
+                    onChange={(val) => setForm(f => ({ ...f, content: val }))}
+                    modules={QUILL_MODULES}
+                    className="h-64"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50 shrink-0">
+              <p className="text-xs text-slate-400 flex items-center gap-1">
+                <User size={11} /> Saving as: <span className="font-semibold text-slate-600 ml-1">{getCurrentUser()}</span>
+              </p>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setShowModal(false)}
+                  className="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-200 transition-all">
+                  Cancel
+                </button>
+                <button onClick={handleSave} disabled={saving}
+                  className="px-5 py-2 rounded-xl text-sm font-semibold bg-slate-900 text-white hover:bg-slate-700 transition-all disabled:opacity-50">
+                  {saving ? "Saving…" : editId ? "Update & Save Version" : "Add Clause"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

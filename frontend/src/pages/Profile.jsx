@@ -4,9 +4,12 @@ import {
   CheckCircle2, XCircle, Mail, Phone, Building2,
   Briefcase, Camera, FolderOpen, Trash2, Plus,
   UserCircle, Lock, Eye, EyeOff, KeyRound, SendHorizonal,
+  GitMerge, ChevronDown,
 } from "lucide-react";
 import api from "../utils/api";
 import ManageProjects from "../components/ManageProjects";
+
+const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
 const ROLE_BADGE = {
   global_admin: { label: "Global Admin", color: "bg-purple-100 text-purple-700 border border-purple-200" },
@@ -124,6 +127,13 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
   const [permLoading, setPermLoading] = useState(false);
   const [permFilter, setPermFilter]   = useState("all");
 
+  /* Projects count for header stats */
+  const [projectsCount, setProjectsCount] = useState(0);
+  useEffect(() => {
+    fetch(`${API}/api/projects`).then(r => r.json())
+      .then(d => setProjectsCount((d.projects || []).filter(p => p.isActive).length))
+      .catch(() => {});
+  }, []);
 
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
@@ -278,192 +288,309 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
 
   const badge = ROLE_BADGE[currentUser.role] || ROLE_BADGE.user;
 
+  /* Serialization */
+  const [serSites,    setSerSites]    = useState([]);
+  const [serConfigs,  setSerConfigs]  = useState([]);
+  const [serLoading,  setSerLoading]  = useState(false);
+  const [serSaving,   setSerSaving]   = useState(null); // siteId being saved
+
+  useEffect(() => {
+    if (section === "serialization" && isGlobalAdmin) fetchSerData();
+  }, [section]);
+
+  const fetchSerData = async () => {
+    setSerLoading(true);
+    try {
+      const [sitesRes, configsRes] = await Promise.all([
+        fetch(`${API}/api/procurement/sites`).then(r => r.json()),
+        fetch(`${API}/api/intakes/serialization`).then(r => r.json()),
+      ]);
+      setSerSites(sitesRes.sites || []);
+      setSerConfigs(configsRes.configs || []);
+    } catch { showToast("Failed to load data", "error"); }
+    setSerLoading(false);
+  };
+
+  const getSerConfig = (siteId) =>
+    serConfigs.find(c => c.site_id === siteId && c.doc_type === "intake") || {};
+
+  const updateSerConfig = (siteId, field, value) => {
+    setSerConfigs(prev => {
+      const exists = prev.find(c => c.site_id === siteId && c.doc_type === "intake");
+      if (exists) return prev.map(c => c.site_id === siteId && c.doc_type === "intake" ? { ...c, [field]: value } : c);
+      return [...prev, { doc_type: "intake", site_id: siteId, [field]: value }];
+    });
+  };
+
+  const saveSerConfig = async (site) => {
+    const cfg = getSerConfig(site.id);
+    if (!cfg.prefix) return showToast("Prefix is required", "error");
+    setSerSaving(site.id);
+    try {
+      const res = await fetch(`${API}/api/intakes/serialization`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          doc_type: "intake", site_id: site.id,
+          site_name: site.siteName, prefix: cfg.prefix,
+          pad_length: parseInt(cfg.pad_length) || 2,
+        }),
+      });
+      if (!res.ok) throw new Error("Save failed");
+      showToast(`Saved for ${site.siteName}`);
+      fetchSerData();
+    } catch { showToast("Failed to save", "error"); }
+    setSerSaving(null);
+  };
+
+  /* Approval Flows */
+  const APPROVAL_MODULES = [
+    { key: "intake", label: "Intake (PR)" },
+    { key: "order",  label: "Purchase Order" },
+  ];
+  const [approvalFlows,   setApprovalFlows]   = useState({});
+  const [approvalUsers,   setApprovalUsers]   = useState([]);
+  const [approvalSaving,  setApprovalSaving]  = useState(null);
+  const [approvalLoading, setApprovalLoading] = useState(false);
+
+  useEffect(() => {
+    if (section === "approval_flow" && isGlobalAdmin) fetchApprovalData();
+  }, [section]);
+
+  const fetchApprovalData = async () => {
+    setApprovalLoading(true);
+    try {
+      const [flowsRes, usersRes] = await Promise.all([
+        fetch(`${API}/api/intakes/approval-flows`).then(r => r.json()),
+        api.get("/api/users").then(r => r.data),
+      ]);
+      const flowMap = {};
+      (flowsRes.flows || []).forEach(f => { flowMap[f.module] = f; });
+      setApprovalFlows(flowMap);
+      setApprovalUsers(usersRes.users || []);
+    } catch { showToast("Failed to load", "error"); }
+    setApprovalLoading(false);
+  };
+
+  const updateApprovalFlow = (module, userId) => {
+    const user = approvalUsers.find(u => u.id === userId);
+    setApprovalFlows(prev => ({
+      ...prev,
+      [module]: { ...prev[module], approver_user_id: userId, approver_name: user?.name || "", approver_email: user?.email || "" },
+    }));
+  };
+
+  const saveApprovalFlow = async (module) => {
+    const cfg = approvalFlows[module] || {};
+    setApprovalSaving(module);
+    try {
+      const res = await fetch(`${API}/api/intakes/approval-flows`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ module, approver_user_id: cfg.approver_user_id, approver_name: cfg.approver_name, approver_email: cfg.approver_email }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      showToast(`Saved for ${APPROVAL_MODULES.find(m => m.key === module)?.label}`);
+    } catch { showToast("Failed to save", "error"); }
+    setApprovalSaving(null);
+  };
+
+  const TABS = [
+    { id: "profile",       label: "Personal info",  show: true },
+    { id: "security",      label: "Security",        show: true },
+    { id: "add_user",      label: "Add User",        show: isAdminOrAbove },
+    { id: "team",          label: "Manage Users",    show: isAdminOrAbove },
+    { id: "projects",      label: "Projects",        show: isGlobalAdmin  },
+    { id: "serialization", label: "Serialization",   show: isGlobalAdmin  },
+    { id: "approval_flow", label: "Approval Flow",   show: isGlobalAdmin  },
+  ].filter(t => t.show);
+
+  const accessLabel = currentUser.role === "global_admin" ? "Global" : currentUser.role === "admin" ? "Admin" : "Standard";
+  const roleLabel   = currentUser.role === "global_admin" ? "Global Admin" : currentUser.role === "admin" ? "Admin" : "User";
+
   /* ══ RENDER ══ */
   return (
     <div className="min-h-screen bg-[#f0f2f5] p-4 md:p-6">
       {toast && <Toast msg={toast.msg} type={toast.type} />}
       <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
 
-      <div className="flex flex-col md:flex-row gap-5 items-start h-full">
+      <div className="space-y-4">
 
-        {/* ── Left Panel ── */}
-        <div className="w-full md:w-72 shrink-0 space-y-4">
-
-          {/* Profile Card */}
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-            {/* Cover */}
-            <div className="h-24 bg-linear-to-r from-blue-600 via-indigo-500 to-purple-600" />
+        {/* ── DARK PROFILE HEADER CARD ── */}
+        <div className="rounded-2xl px-5 py-4 md:px-6 md:py-5 shadow-lg" style={{ background: "linear-gradient(135deg, #1a1f3c 0%, #2d1b69 100%)" }}>
+          <div className="flex items-center gap-4">
 
             {/* Avatar */}
-            <div className="flex flex-col items-center -mt-12 pb-6 px-5">
-              <div className="relative group">
-                {/* Avatar circle */}
-                <div className="w-24 h-24 rounded-full border-4 border-white shadow-lg overflow-hidden bg-linear-to-br from-blue-500 to-purple-600 flex items-center justify-center shrink-0">
-                  {avatarLoading ? (
-                    <Loader2 size={28} className="text-white animate-spin" />
-                  ) : avatar ? (
-                    <img src={avatar} alt="avatar" className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-white font-black text-3xl select-none">
-                      {currentUser.name?.charAt(0)?.toUpperCase() || "?"}
-                    </span>
-                  )}
-                </div>
-
-                {/* Hover overlay — Update + Delete (loading ke waqt nahi dikhega) */}
-                <div className={`absolute inset-0 rounded-full bg-black/55 flex items-center justify-center gap-3 transition-opacity
-                  ${avatarLoading ? "opacity-0 pointer-events-none" : "opacity-0 group-hover:opacity-100"}`}>
-                  <button
-                    onClick={() => fileRef.current.click()}
-                    title="Update photo"
-                    className="flex flex-col items-center gap-0.5"
-                  >
-                    <Camera size={18} className="text-white" />
-                    <span className="text-[9px] text-white font-bold">Update</span>
-                  </button>
-                  {avatar && (
-                    <button
-                      onClick={deleteAvatar}
-                      title="Remove photo"
-                      className="flex flex-col items-center gap-0.5"
-                    >
-                      <Trash2 size={18} className="text-red-400" />
-                      <span className="text-[9px] text-red-400 font-bold">Delete</span>
-                    </button>
-                  )}
-                </div>
-
-                {/* Camera badge — always visible */}
-                <div className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-blue-600 border-2 border-white flex items-center justify-center shadow pointer-events-none">
-                  <Camera size={12} className="text-white" />
-                </div>
+            <div className="relative group shrink-0">
+              <div className="w-20 h-20 rounded-2xl border-2 border-white/20 overflow-hidden shadow-lg flex items-center justify-center"
+                style={{ background: "linear-gradient(135deg, #6366f1, #8b5cf6)" }}>
+                {avatarLoading ? (
+                  <Loader2 size={24} className="text-white animate-spin" />
+                ) : avatar ? (
+                  <img src={avatar} alt="avatar" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-white font-black text-3xl select-none">
+                    {currentUser.name?.charAt(0)?.toUpperCase() || "?"}
+                  </span>
+                )}
               </div>
-
-              <h3 className="mt-3 font-black text-base text-slate-800 text-center leading-tight">
-                {currentUser.name || "—"}
-              </h3>
-              <span className={`mt-1.5 text-[11px] font-bold px-3 py-0.5 rounded-full ${badge.color}`}>
-                {badge.label}
-              </span>
-              <p className="text-xs text-slate-400 mt-1.5 text-center truncate max-w-full px-2">
-                {currentUser.email}
-              </p>
-
-              {/* Info pills */}
-              <div className="mt-3 w-full space-y-1.5">
-                {currentUser.designation && (
-                  <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-xl">
-                    <Briefcase size={13} className="text-blue-500 shrink-0" />
-                    <span className="text-xs text-slate-600 truncate">{currentUser.designation}</span>
-                  </div>
+              <div className={`absolute inset-0 rounded-2xl bg-black/60 flex items-center justify-center gap-2 transition-opacity
+                ${avatarLoading ? "opacity-0 pointer-events-none" : "opacity-0 group-hover:opacity-100"}`}>
+                <button onClick={() => fileRef.current.click()} className="flex flex-col items-center gap-0.5">
+                  <Camera size={16} className="text-white" />
+                  <span className="text-[9px] text-white font-bold">Edit</span>
+                </button>
+                {avatar && (
+                  <button onClick={deleteAvatar} className="flex flex-col items-center gap-0.5">
+                    <Trash2 size={16} className="text-red-300" />
+                    <span className="text-[9px] text-red-300 font-bold">Del</span>
+                  </button>
                 )}
-                {currentUser.department && (
-                  <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-xl">
-                    <Building2 size={13} className="text-purple-500 shrink-0" />
-                    <span className="text-xs text-slate-600 truncate">{currentUser.department}</span>
-                  </div>
-                )}
-                {currentUser.contact_no && (
-                  <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-xl">
-                    <Phone size={13} className="text-green-500 shrink-0" />
-                    <span className="text-xs text-slate-600 truncate">{currentUser.contact_no}</span>
-                  </div>
-                )}
+              </div>
+              <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-indigo-500 border-2 border-white/20 flex items-center justify-center pointer-events-none">
+                <Camera size={11} className="text-white" />
               </div>
             </div>
-          </div>
 
-          {/* Nav */}
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-2">
-            {NAV.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => { setSection(item.id); setPermUser(null); setSecStep(1); }}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all text-left mb-0.5 last:mb-0
-                  ${section === item.id
-                    ? "bg-linear-to-r from-blue-600 to-purple-600 text-white shadow-sm"
-                    : "text-slate-600 hover:bg-slate-50"
-                  }`}
-              >
-                <item.icon size={17} />
-                {item.label}
-              </button>
-            ))}
+            {/* Name + Role + Email */}
+            <div className="flex-1 min-w-0">
+              <h2 className="text-lg font-black text-white leading-tight">{currentUser.name || "—"}</h2>
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                <span className="flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-0.5 rounded-full"
+                  style={{ background: "rgba(139,92,246,0.3)", color: "#c4b5fd", border: "1px solid rgba(139,92,246,0.4)" }}>
+                  <span className="w-1.5 h-1.5 rounded-full bg-violet-400 inline-block" />
+                  {roleLabel}
+                </span>
+                <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
+                  Active
+                </span>
+              </div>
+              <p className="text-xs text-white/40 mt-1 truncate">{currentUser.email}</p>
+            </div>
+
           </div>
         </div>
 
-          {/* ── Right Content ── */}
-          <div className="flex-1 min-w-0">
+        {/* ── TAB NAV ── */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 px-4 py-1.5 flex gap-1 overflow-x-auto">
+          {TABS.map(t => (
+            <button key={t.id}
+              onClick={() => { setSection(t.id); setPermUser(null); setSecStep(1); }}
+              className={`px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all
+                ${section === t.id
+                  ? "bg-indigo-600 text-white shadow-sm"
+                  : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"
+                }`}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* ── CONTENT ── */}
+        <div>
 
             {/* ─── MY PROFILE ─── */}
             {section === "profile" && (
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-                <div className="mb-6">
-                  <h2 className="text-lg font-black text-slate-800">My Profile</h2>
-                  <p className="text-sm text-slate-500">Update your personal information</p>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+                {/* Left: Current info */}
+                <div className="lg:col-span-1">
+                  <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 h-full">
+                    <p className={lbl + " mb-5"}>Current Info</p>
+                    <div className="space-y-4">
+                      {[
+                        { icon: UserCircle, label: "Full Name",   value: currentUser.name,        color: "text-indigo-500", bg: "bg-indigo-50" },
+                        { icon: Mail,       label: "Email",        value: currentUser.email,       color: "text-blue-500",   bg: "bg-blue-50"   },
+                        { icon: Phone,      label: "Contact",      value: currentUser.contact_no,  color: "text-green-500",  bg: "bg-green-50"  },
+                        { icon: Briefcase,  label: "Designation",  value: currentUser.designation, color: "text-orange-500", bg: "bg-orange-50" },
+                        { icon: Building2,  label: "Department",   value: currentUser.department,  color: "text-purple-500", bg: "bg-purple-50" },
+                      ].map(({ icon: Icon, label: l, value, color, bg }) => (
+                        <div key={l} className="flex items-center gap-3">
+                          <div className={`w-9 h-9 rounded-xl ${bg} flex items-center justify-center shrink-0`}>
+                            <Icon size={15} className={color} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{l}</p>
+                            <p className="text-sm font-semibold text-slate-700 truncate mt-0.5">{value || "—"}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
-                <form onSubmit={saveProfile} className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <span className={lbl}>Full Name</span>
-                      <input className={inp} value={profile.name}
-                        onChange={(e) => setProfile((p) => ({ ...p, name: e.target.value }))} required />
+                {/* Right: Edit form */}
+                <div className="lg:col-span-2">
+                  <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
+                        <UserCircle size={18} className="text-indigo-600" />
+                      </div>
+                      <div>
+                        <h2 className="text-base font-black text-slate-800">Edit Profile</h2>
+                        <p className="text-xs text-slate-500">Update your personal information</p>
+                      </div>
                     </div>
-                    <div>
-                      <span className={lbl}>Email Address</span>
-                      <input className={`${inp} opacity-50 cursor-not-allowed`}
-                        value={currentUser.email || ""} disabled />
-                    </div>
-                    <div>
-                      <span className={lbl}>Contact Number</span>
-                      <input className={inp} value={profile.contact_no}
-                        onChange={(e) => setProfile((p) => ({ ...p, contact_no: e.target.value }))}
-                        placeholder="+91 98765 43210" />
-                    </div>
-                    <div>
-                      <span className={lbl}>Designation</span>
-                      <input className={inp} value={profile.designation}
-                        onChange={(e) => setProfile((p) => ({ ...p, designation: e.target.value }))}
-                        placeholder="Project Manager" />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <span className={lbl}>Department</span>
-                      <input className={inp} value={profile.department}
-                        onChange={(e) => setProfile((p) => ({ ...p, department: e.target.value }))}
-                        placeholder="Engineering" />
-                    </div>
-                  </div>
-                  <div className="pt-1">
-                    <button type="submit" disabled={loading} className={btnPrimary}>
-                      {loading ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                      Save Changes
-                    </button>
-                  </div>
-                </form>
 
-                {/* Overview cards */}
-                <div className="mt-7 pt-6 border-t border-slate-100">
-                  <p className={lbl}>Current Info</p>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-2">
-                    {[
-                      { icon: Mail,      label: "Email",       value: currentUser.email       },
-                      { icon: Phone,     label: "Contact",     value: currentUser.contact_no  },
-                      { icon: Briefcase, label: "Designation", value: currentUser.designation },
-                      { icon: Building2, label: "Department",  value: currentUser.department  },
-                    ].map(({ icon: Icon, label: l, value }) => (
-                      <div key={l} className="rounded-xl bg-slate-50 border border-slate-100 p-3 flex items-start gap-2">
-                        <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
-                          <Icon size={13} className="text-blue-500" />
+                    <form onSubmit={saveProfile} className="space-y-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <span className={lbl}>Full Name *</span>
+                          <div className="relative">
+                            <UserCircle size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                            <input className={`${inp} pl-10`} value={profile.name}
+                              onChange={(e) => setProfile((p) => ({ ...p, name: e.target.value }))} required />
+                          </div>
                         </div>
-                        <div className="min-w-0">
-                          <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">{l}</p>
-                          <p className="text-xs font-semibold text-slate-700 mt-0.5 truncate">{value || "—"}</p>
+                        <div>
+                          <span className={lbl}>Email Address</span>
+                          <div className="relative">
+                            <Mail size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none" />
+                            <input className={`${inp} pl-10 opacity-50 cursor-not-allowed`}
+                              value={currentUser.email || ""} disabled />
+                          </div>
+                        </div>
+                        <div>
+                          <span className={lbl}>Contact Number</span>
+                          <div className="relative">
+                            <Phone size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                            <input className={`${inp} pl-10`} value={profile.contact_no}
+                              onChange={(e) => setProfile((p) => ({ ...p, contact_no: e.target.value }))}
+                              placeholder="+91 98765 43210" />
+                          </div>
+                        </div>
+                        <div>
+                          <span className={lbl}>Designation</span>
+                          <div className="relative">
+                            <Briefcase size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                            <input className={`${inp} pl-10`} value={profile.designation}
+                              onChange={(e) => setProfile((p) => ({ ...p, designation: e.target.value }))}
+                              placeholder="Project Manager" />
+                          </div>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <span className={lbl}>Department</span>
+                          <div className="relative">
+                            <Building2 size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                            <input className={`${inp} pl-10`} value={profile.department}
+                              onChange={(e) => setProfile((p) => ({ ...p, department: e.target.value }))}
+                              placeholder="Engineering" />
+                          </div>
                         </div>
                       </div>
-                    ))}
+
+                      <div className="pt-2 flex items-center gap-4 border-t border-slate-50">
+                        <button type="submit" disabled={loading} className={btnPrimary}>
+                          {loading ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                          Save Changes
+                        </button>
+                        <p className="text-xs text-slate-400">Email address cannot be changed</p>
+                      </div>
+                    </form>
                   </div>
                 </div>
+
               </div>
             )}
 
@@ -779,8 +906,180 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
               <ManageProjects onProjectsUpdate={onProjectsUpdate} />
             )}
 
-          </div>
+            {/* ─── SERIALIZATION ─── */}
+            {section === "serialization" && isGlobalAdmin && (
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
+                    <KeyRound size={17} className="text-indigo-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-black text-slate-800">Serialization</h2>
+                    <p className="text-xs text-slate-500">Configure document number series per site</p>
+                  </div>
+                </div>
+
+                {serLoading ? (
+                  <div className="flex justify-center py-10">
+                    <Loader2 size={22} className="animate-spin text-indigo-400" />
+                  </div>
+                ) : serSites.length === 0 ? (
+                  <p className="text-sm text-slate-400 text-center py-8">No sites registered. Add sites first from Procurement Setup → Site List.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {/* Header row */}
+                    <div className="grid grid-cols-12 gap-3 px-4 pb-1">
+                      <div className="col-span-3"><span className={lbl}>Site</span></div>
+                      <div className="col-span-2"><span className={lbl}>Doc Type</span></div>
+                      <div className="col-span-3"><span className={lbl}>Prefix / Format</span></div>
+                      <div className="col-span-2"><span className={lbl}>Pad Length</span></div>
+                      <div className="col-span-2"><span className={lbl}>Preview</span></div>
+                    </div>
+                    {serSites.map(site => {
+                      const cfg    = getSerConfig(site.id);
+                      const next   = (cfg.current_number || 0) + 1;
+                      const padded = String(next).padStart(parseInt(cfg.pad_length) || 2, "0");
+                      const preview = cfg.prefix ? `${cfg.prefix}${padded}` : "—";
+                      return (
+                        <div key={site.id} className="grid grid-cols-12 gap-3 items-center p-4 rounded-xl border border-slate-100 bg-slate-50 hover:border-indigo-200 transition-all">
+                          <div className="col-span-3">
+                            <p className="text-sm font-semibold text-slate-700">{site.siteName}</p>
+                            {site.siteCode && <p className="text-xs text-slate-400 font-mono">{site.siteCode}</p>}
+                          </div>
+                          <div className="col-span-2">
+                            <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-100">Intake</span>
+                          </div>
+                          <div className="col-span-3">
+                            <input
+                              className={inp}
+                              value={cfg.prefix || ""}
+                              onChange={e => updateSerConfig(site.id, "prefix", e.target.value)}
+                              placeholder={`e.g. PR/${site.siteCode || "SITE"}/`}
+                            />
+                          </div>
+                          <div className="col-span-2">
+                            <select
+                              className={inp}
+                              value={cfg.pad_length || 2}
+                              onChange={e => updateSerConfig(site.id, "pad_length", parseInt(e.target.value))}>
+                              {[1,2,3,4].map(n => <option key={n} value={n}>{n} digit{n>1?"s":""} ({"0".repeat(n-1)}1)</option>)}
+                            </select>
+                          </div>
+                          <div className="col-span-2 flex items-center justify-between gap-2">
+                            <span className="text-xs font-mono font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-100 truncate">
+                              {preview}
+                            </span>
+                            <button
+                              onClick={() => saveSerConfig(site)}
+                              disabled={serSaving === site.id}
+                              className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-all">
+                              {serSaving === site.id ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                              Save
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ─── APPROVAL FLOW ─── */}
+            {section === "approval_flow" && isGlobalAdmin && (
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-9 h-9 rounded-xl bg-violet-50 flex items-center justify-center shrink-0">
+                    <GitMerge size={17} className="text-violet-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-black text-slate-800">Approval Flow</h2>
+                    <p className="text-xs text-slate-500">Set who can approve each module's documents</p>
+                  </div>
+                </div>
+
+                {approvalLoading ? (
+                  <div className="flex justify-center py-10">
+                    <Loader2 size={22} className="animate-spin text-violet-400" />
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Column headers */}
+                    <div className="grid grid-cols-12 gap-3 px-4 pb-1">
+                      <div className="col-span-3"><span className={lbl}>Module</span></div>
+                      <div className="col-span-2"><span className={lbl}>Flow</span></div>
+                      <div className="col-span-4"><span className={lbl}>Approver</span></div>
+                      <div className="col-span-3"><span className={lbl}>Currently Set</span></div>
+                    </div>
+
+                    {APPROVAL_MODULES.map(mod => {
+                      const cfg = approvalFlows[mod.key] || {};
+                      return (
+                        <div key={mod.key} className="grid grid-cols-12 gap-3 items-center p-4 rounded-xl border border-slate-100 bg-slate-50 hover:border-violet-200 transition-all">
+                          <div className="col-span-3">
+                            <p className="text-sm font-semibold text-slate-700">{mod.label}</p>
+                          </div>
+                          <div className="col-span-2">
+                            <div className="flex flex-col gap-1 text-xs text-slate-500">
+                              <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-blue-400 inline-block"/>Submitted</span>
+                              <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-violet-400 inline-block"/>Approve/Reject</span>
+                              <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block"/>Assign &amp; Work</span>
+                            </div>
+                          </div>
+                          <div className="col-span-4">
+                            <div className="relative">
+                              <select
+                                className={inp + " appearance-none pr-8"}
+                                value={cfg.approver_user_id || ""}
+                                onChange={e => updateApprovalFlow(mod.key, e.target.value)}>
+                                <option value="">— No approver set —</option>
+                                {approvalUsers.map(u => (
+                                  <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
+                                ))}
+                              </select>
+                              <ChevronDown size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                            </div>
+                          </div>
+                          <div className="col-span-3 flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              {cfg.approver_name ? (
+                                <>
+                                  <p className="text-xs font-semibold text-slate-700 truncate">{cfg.approver_name}</p>
+                                  <p className="text-[10px] text-slate-400 truncate">{cfg.approver_email}</p>
+                                </>
+                              ) : (
+                                <p className="text-xs text-slate-300">Not configured</p>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => saveApprovalFlow(mod.key)}
+                              disabled={approvalSaving === mod.key}
+                              className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600 text-white text-xs font-semibold hover:bg-violet-700 disabled:opacity-50 transition-all">
+                              {approvalSaving === mod.key ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                              Save
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    <div className="mt-4 p-4 rounded-xl bg-violet-50 border border-violet-100">
+                      <p className="text-xs font-semibold text-violet-700 mb-1">How it works</p>
+                      <ul className="text-xs text-violet-600 space-y-1 list-disc list-inside">
+                        <li>User raises an intake → status: <strong>Submitted</strong></li>
+                        <li>Configured approver sees it → can <strong>Approve</strong> or <strong>Reject</strong></li>
+                        <li>After approval → approver assigns to a team member → status: <strong>In Review</strong></li>
+                        <li>Assigned person starts working → status: <strong>Working</strong></li>
+                        <li>Quotations collected → Comparative generated → PR <strong>Closed</strong></li>
+                      </ul>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
         </div>
+      </div>
     </div>
   );
 }

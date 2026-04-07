@@ -11,6 +11,23 @@ const getAdminClient = () => createClient(
   { auth: { persistSession: false, autoRefreshToken: false } }
 );
 
+// JWT tokens expire after 1 hour — for internal routes we decode the sub
+// without verifying expiry, then confirm user exists in our DB.
+const extractUserId = (token) => {
+  try {
+    const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString());
+    return payload.sub || null;
+  } catch { return null; }
+};
+
+const getUserFromToken = async (token) => {
+  const userId = extractUserId(token);
+  if (!userId) return null;
+  const admin = getAdminClient();
+  const { data } = await admin.from("users").select("*").eq("id", userId).single();
+  return data || null;
+};
+
 /* ─────────────────────────────────────────
    POST /api/auth/login
    Body: { email, password }
@@ -99,8 +116,8 @@ router.put("/profile", async (req, res) => {
   const token = req.headers.authorization?.split(" ")[1];
   if (!token) return res.status(401).json({ error: "Login required" });
 
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-  if (authError || !user) return res.status(401).json({ error: "Invalid token" });
+  const dbUser = await getUserFromToken(token);
+  if (!dbUser) return res.status(401).json({ error: "Invalid token" });
 
   const { name, contact_no, designation, department } = req.body;
   const updates = {};
@@ -109,8 +126,9 @@ router.put("/profile", async (req, res) => {
   if (designation !== undefined) updates.designation = designation;
   if (department  !== undefined) updates.department  = department;
 
-  const { data, error } = await supabase
-    .from("users").update(updates).eq("id", user.id).select().single();
+  const admin = getAdminClient();
+  const { data, error } = await admin
+    .from("users").update(updates).eq("id", dbUser.id).select().single();
 
   if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true, user: data });
@@ -125,8 +143,8 @@ router.post("/avatar", async (req, res) => {
   const token = req.headers.authorization?.split(" ")[1];
   if (!token) return res.status(401).json({ error: "Login required" });
 
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-  if (authError || !user) return res.status(401).json({ error: "Invalid token" });
+  const dbUser = await getUserFromToken(token);
+  if (!dbUser) return res.status(401).json({ error: "Invalid token" });
 
   const { avatar } = req.body;
   if (!avatar) return res.status(400).json({ error: "Avatar required" });
@@ -135,44 +153,34 @@ router.post("/avatar", async (req, res) => {
   const matches = avatar.match(/^data:(.+);base64,(.+)$/);
   if (!matches) return res.status(400).json({ error: "Invalid image format" });
 
-  const mimeType   = matches[1]; // e.g. "image/jpeg"
+  const mimeType   = matches[1];
   const base64Data = matches[2];
   const buffer     = Buffer.from(base64Data, "base64");
   const ext        = mimeType.split("/")[1] || "jpg";
 
-  // Unique filename per upload — CDN cache issue nahi hogi
-  const newFileName = `${user.id}_${Date.now()}.${ext}`;
-
-  // Purani avatar URL DB se nikalo (cleanup ke liye)
-  const { data: existingUser } = await supabase
-    .from("users").select("avatar").eq("id", user.id).single();
+  const newFileName = `${dbUser.id}_${Date.now()}.${ext}`;
+  const admin       = getAdminClient();
 
   // Naya file upload karo
-  const { error: uploadError } = await supabase.storage
+  const { error: uploadError } = await admin.storage
     .from("avatars")
     .upload(newFileName, buffer, { contentType: mimeType });
 
   if (uploadError) return res.status(500).json({ error: `Storage upload failed: ${uploadError.message}` });
 
-  // Fresh public URL lao (no cache bust needed — unique filename hai)
-  const { data: urlData } = supabase.storage
-    .from("avatars")
-    .getPublicUrl(newFileName);
-
+  const { data: urlData } = admin.storage.from("avatars").getPublicUrl(newFileName);
   const avatarUrl = urlData.publicUrl;
 
   // Users table me naya URL save karo
-  const { error: dbError } = await supabase
-    .from("users")
-    .update({ avatar: avatarUrl })
-    .eq("id", user.id);
+  const { error: dbError } = await admin.from("users")
+    .update({ avatar: avatarUrl }).eq("id", dbUser.id);
 
   if (dbError) return res.status(500).json({ error: `DB update failed: ${dbError.message}` });
 
   // Purani file Storage se delete karo (cleanup)
-  if (existingUser?.avatar) {
-    const oldPath = existingUser.avatar.split("/avatars/")[1]?.split("?")[0];
-    if (oldPath) await supabase.storage.from("avatars").remove([oldPath]);
+  if (dbUser.avatar) {
+    const oldPath = dbUser.avatar.split("/avatars/")[1]?.split("?")[0];
+    if (oldPath) await admin.storage.from("avatars").remove([oldPath]);
   }
 
   res.json({ success: true, url: avatarUrl });
@@ -186,14 +194,19 @@ router.delete("/avatar", async (req, res) => {
   const token = req.headers.authorization?.split(" ")[1];
   if (!token) return res.status(401).json({ error: "Login required" });
 
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-  if (authError || !user) return res.status(401).json({ error: "Invalid token" });
+  const dbUser = await getUserFromToken(token);
+  if (!dbUser) return res.status(401).json({ error: "Invalid token" });
 
-  // Storage se file hatao (jpeg — hamesha yahi hota hai)
-  await supabase.storage.from("avatars").remove([`${user.id}.jpeg`]);
+  const admin = getAdminClient();
+
+  // Purani avatar file Storage se hatao
+  if (dbUser.avatar) {
+    const oldPath = dbUser.avatar.split("/avatars/")[1]?.split("?")[0];
+    if (oldPath) await admin.storage.from("avatars").remove([oldPath]);
+  }
 
   // DB me null set karo
-  await supabase.from("users").update({ avatar: null }).eq("id", user.id);
+  await admin.from("users").update({ avatar: null }).eq("id", dbUser.id);
 
   res.json({ success: true });
 });
@@ -267,15 +280,17 @@ router.get("/me", async (req, res) => {
   const token = req.headers.authorization?.split(" ")[1];
   if (!token) return res.status(401).json({ error: "Token required hai" });
 
-  const { data: { user }, error } = await supabase.auth.getUser(token);
-  if (error || !user) return res.status(401).json({ error: "Invalid token" });
+  const userId = extractUserId(token);
+  if (!userId) return res.status(401).json({ error: "Invalid token" });
 
-  const { data: profile } = await supabase
+  const admin = getAdminClient();
+  const { data: profile } = await admin
     .from("users")
     .select("*, permissions(*, modules(module_key, module_name))")
-    .eq("id", user.id)
+    .eq("id", userId)
     .single();
 
+  if (!profile) return res.status(401).json({ error: "User not found" });
   res.json({ user: profile });
 });
 

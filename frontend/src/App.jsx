@@ -53,6 +53,10 @@ import ConsumptionRecord from "./pages/Store/ConsumptionRecord";
 import StockAvailable from "./pages/Store/StockAvailable";
 import GRNDocs from "./pages/Store/GRNDocs";
 
+// Global Create
+import GlobalCreateOrder from "./pages/Create/CreateOrder";
+import IntakeList from "./pages/Create/IntakeList";
+
 // Procurement
 import ItemList from "./pages/Procurement/ItemList";
 import VendorList from "./pages/Procurement/VendorList";
@@ -64,6 +68,7 @@ import PaymentTerms from "./pages/Procurement/PaymentTerms";
 import GovernmentLaws from "./pages/Procurement/GovernmentLaws";
 import SiteList from "./pages/Procurement/SiteList";
 import UOMList from "./pages/Procurement/UOMList";
+import CategoryList from "./pages/Procurement/CategoryList";
 
 // Images
 import AllImages from "./pages/Images/AllImages";
@@ -196,6 +201,10 @@ function App() {
     if (activeTab === "about") return <About />;
     if (activeTab === "profile") return <Profile onProfileUpdate={handleProfileUpdate} onProjectsUpdate={handleProjectsUpdate} />;
 
+    // Global Create tabs
+    if (activeTab === "create__intake") return <IntakeList />;
+    if (activeTab === "create__order")  return <GlobalCreateOrder />;
+
     // Global procurement setup tabs — no project needed
     if (activeTab === "proc_setup__item_list") return <ItemList />;
     if (activeTab === "proc_setup__vendor_list") return <VendorList />;
@@ -205,6 +214,7 @@ function App() {
     if (activeTab === "proc_setup__government_laws") return <GovernmentLaws />;
     if (activeTab === "proc_setup__site_list") return <SiteList />;
     if (activeTab === "proc_setup__uom") return <UOMList />;
+    if (activeTab === "proc_setup__category_list") return <CategoryList />;
  
     if (!selectedProject) {
       return (

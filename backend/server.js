@@ -11,6 +11,7 @@ const procurementRoutes = require("./src/routes/procurement");
 const authRoutes        = require("./src/routes/auth");
 const usersRoutes       = require("./src/routes/users");
 const projectsRoutes    = require("./src/routes/projects");
+const intakesRoutes     = require("./src/routes/intakes");
 
 const app = express();
 
@@ -32,6 +33,7 @@ app.use("/api/procurement", procurementRoutes);
 app.use("/api/auth",        authRoutes);
 app.use("/api/users",       usersRoutes);
 app.use("/api/projects",    projectsRoutes);
+app.use("/api/intakes",     intakesRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, "0.0.0.0", () => console.log(`✅ Backend on port ${PORT}`));
