@@ -209,6 +209,7 @@ export default function CategoryList() {
           }),
         });
         const result = await res.json();
+        if (!res.ok) { showToast(result.error || "Bulk upload failed", "error"); setBulking(false); return; }
         const added   = result.count   || 0;
         const skipped = result.skipped || 0;
         if (added === 0) showToast(`All ${skipped} rows already exist — nothing added`, "error");

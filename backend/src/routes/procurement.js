@@ -843,8 +843,8 @@ router.post("/categories/bulk", async (req, res) => {
     const { rows } = req.body;
     // fetch existing names to deduplicate
     const { data: existing } = await supabase.from("categories").select("category_name, category_code");
-    const existingNames = new Set((existing || []).map(r => r.category_name.trim().toLowerCase()));
-    const existingCodes = new Set((existing || []).map(r => r.category_code.trim().toUpperCase()));
+    const existingNames = new Set((existing || []).map(r => (r.category_name || "").trim().toLowerCase()));
+    const existingCodes = new Set((existing || []).map(r => (r.category_code || "").trim().toUpperCase()));
     // get existing nums to auto-assign new codes
     const nums = (existing || []).map(r => parseInt((r.category_code || "").replace("CAT-", "")) || 0);
     let nextNum = nums.length ? Math.max(...nums) + 1 : 1;
