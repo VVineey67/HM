@@ -411,6 +411,34 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
       const availKeys = MODULE_PERM_CONFIG[m.module_key] || DEFAULT_MODULE_PERMS;
       return { ...m, ...Object.fromEntries(availKeys.map(k => [k, checked])) };
     }));
+    // Bulk update Profile Section Perms too
+    const nextProfilePerms = {};
+    Object.keys(DEFAULT_PROFILE_PERMS).forEach(k => { nextProfilePerms[k] = { view: checked, edit: checked }; });
+    setNewUserProfilePerms(nextProfilePerms);
+  };
+
+  const applyRoleDefaults = (role) => {
+    if (role === "user") return; // Keep manual for user
+
+    // Handle App Tab Permissions
+    setNewUserModules(prev => prev.map(m => {
+      const availKeys = MODULE_PERM_CONFIG[m.module_key] || DEFAULT_MODULE_PERMS;
+      const updates = {};
+      availKeys.forEach(k => {
+        if (role === "super_admin") updates[k] = k !== "can_delete";
+        if (role === "admin")       updates[k] = k === "can_view";
+      });
+      return { ...m, ...updates };
+    }));
+
+    // Handle Profile Management Access
+    const nextProfilePerms = {};
+    Object.keys(DEFAULT_PROFILE_PERMS).forEach(k => {
+      if (role === "super_admin") nextProfilePerms[k] = { view: true, edit: true };
+      if (role === "admin")       nextProfilePerms[k] = { view: true, edit: false };
+    });
+    setNewUserProfilePerms(nextProfilePerms);
+    setAllPermsSelected(role === "super_admin");
   };
 
   const fetchTeam = async () => {
@@ -1063,7 +1091,11 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
                       <div>
                         <span className={lbl}>Role</span>
                         <select className={inp} value={newUser.role}
-                          onChange={(e) => setNewUser((p) => ({ ...p, role: e.target.value }))}>
+                          onChange={(e) => {
+                            const newRole = e.target.value;
+                            setNewUser((p) => ({ ...p, role: newRole }));
+                            applyRoleDefaults(newRole);
+                          }}>
                           <option value="user">User</option>
                           {(isGlobalAdmin || currentUser.role === "super_admin") && <option value="admin">Admin</option>}
                           {isGlobalAdmin && <option value="super_admin">Super Admin</option>}
@@ -1193,7 +1225,29 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
 
                             {/* App Tab Permissions */}
                             <div>
-                                <p className={lbl + " mb-3"}>App Tab Permissions</p>
+                                <div className="flex items-center justify-between mb-3">
+                                    <p className={lbl}>App Tab Permissions</p>
+                                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                                        <input type="checkbox"
+                                            checked={permissions.length > 0 && permissions.every(m => {
+                                                const availKeys = MODULE_PERM_CONFIG[m.module_key] || DEFAULT_MODULE_PERMS;
+                                                return availKeys.every(k => m[k]);
+                                            })}
+                                            onChange={e => {
+                                                const checked = e.target.checked;
+                                                setPermissions(prev => prev.map(m => {
+                                                    const availKeys = MODULE_PERM_CONFIG[m.module_key] || DEFAULT_MODULE_PERMS;
+                                                    return { ...m, ...Object.fromEntries(availKeys.map(k => [k, checked])) };
+                                                }));
+                                                // Also sync profile perms for consistency
+                                                const next = {};
+                                                Object.keys(DEFAULT_PROFILE_PERMS).forEach(k => { next[k] = { view: checked, edit: checked }; });
+                                                setEditingProfilePerms(next);
+                                            }}
+                                            className="w-4 h-4 rounded accent-blue-600" />
+                                        <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">Select All Modules</span>
+                                    </label>
+                                </div>
                                 <GroupedPermissions modules={permissions} onChange={updatePerm} />
                             </div>
                           </div>

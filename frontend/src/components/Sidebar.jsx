@@ -125,7 +125,12 @@ const Sidebar = ({
   const isTabVisible = (tabId) => {
     if (tabId === "about" || tabId === "profile") return true; // always visible
     if (isGlobalAdmin) return true;
-    if (!userTabPermissions || !userTabPermissions.hasAny) return true; // old user, no perms set
+    
+    // If permissions haven't loaded yet (null), keep gated tabs hidden
+    if (!userTabPermissions) return false; 
+    
+    // If no permission map or specifically no any permissions, hide all gated
+    if (!userTabPermissions.hasAny || !userTabPermissions.map) return false;
     const moduleKey = TAB_MODULE_KEY[tabId];
     if (!moduleKey) return true;
     const perm = userTabPermissions.map?.[moduleKey];

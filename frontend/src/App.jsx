@@ -99,7 +99,15 @@ function App() {
 
   // Tab-level permissions for sidebar filtering
   // { hasAny: bool, map: { module_key: { can_view, can_edit, ... } } }
-  const [userTabPermissions, setUserTabPermissions] = useState(null);
+  const [userTabPermissions, setUserTabPermissions] = useState(() => {
+    // If we have currentUser with app_permissions in localStorage, load it instantly
+    if (currentUser?.app_permissions) {
+      const permMap = {};
+      currentUser.app_permissions.forEach(p => { permMap[p.module_key] = p; });
+      return { hasAny: currentUser.app_permissions.length > 0, map: permMap };
+    }
+    return null;
+  });
 
   // Restore tab + project from URL on load
   const [activeTab, setActiveTab] = useState(() => {
