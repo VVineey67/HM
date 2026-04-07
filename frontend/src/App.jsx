@@ -9,7 +9,8 @@ const parseHash = () => {
   return {
     tab:     params.get("tab")     || "about",
     project: params.get("project") || null,
-    isReset: params.get("type")    === "recovery",
+    isReset:  params.get("type") === "recovery" || params.get("type") === "invite",
+    isInvite: params.get("type") === "invite",
   };
 };
 
@@ -80,8 +81,9 @@ import Attendance from "./pages/Attendance/Attendance";
 const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
 function App() {
-  // Detect Supabase password-recovery redirect
-  const [isResetMode, setIsResetMode] = useState(() => parseHash().isReset);
+  // Detect Supabase password-recovery / invite redirect
+  const [isResetMode, setIsResetMode]   = useState(() => parseHash().isReset);
+  const [isInviteMode, setIsInviteMode] = useState(() => parseHash().isInvite);
 
   const loggedIn = !!localStorage.getItem("bms_token");
   const [isLoggedIn, setIsLoggedIn] = useState(() => loggedIn);
@@ -94,6 +96,10 @@ function App() {
   });
   // projects = [{ name: "All Project" }, ...active projects from DB]
   const [projects, setProjects] = useState([{ name: "All Project" }]);
+
+  // Tab-level permissions for sidebar filtering
+  // { hasAny: bool, map: { module_key: { can_view, can_edit, ... } } }
+  const [userTabPermissions, setUserTabPermissions] = useState(null);
 
   // Restore tab + project from URL on load
   const [activeTab, setActiveTab] = useState(() => {
@@ -129,9 +135,21 @@ function App() {
     }
   };
 
-  // Fetch projects whenever logged in
+  const fetchUserPermissions = async () => {
+    const token = localStorage.getItem("bms_token");
+    if (!token) return;
+    try {
+      const res  = await fetch(`${API}/api/auth/my-permissions`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json();
+      const permMap = {};
+      (data.permissions || []).forEach(p => { permMap[p.module_key] = p; });
+      setUserTabPermissions({ hasAny: data.has_any_permissions, map: permMap });
+    } catch { /* silent — don't break the app */ }
+  };
+
+  // Fetch projects + permissions whenever logged in
   useEffect(() => {
-    if (isLoggedIn) fetchProjects();
+    if (isLoggedIn) { fetchProjects(); fetchUserPermissions(); }
   }, [isLoggedIn]);
 
   const handleLogin = (user) => {
@@ -261,7 +279,7 @@ function App() {
     }
   };
  
-  if (isResetMode) return <ResetPassword onComplete={() => { setIsResetMode(false); window.history.replaceState(null, "", "/"); }} />;
+  if (isResetMode) return <ResetPassword isInvite={isInviteMode} onComplete={() => { setIsResetMode(false); setIsInviteMode(false); window.history.replaceState(null, "", "/"); }} />;
   if (!isLoggedIn) return <Login onLogin={handleLogin} />;
  
   return (
@@ -300,6 +318,7 @@ function App() {
           onClose={() => setMobileOpen(false)}
           currentUser={currentUser}
           projects={projects}
+          userTabPermissions={userTabPermissions}
         />
       </div>
  

@@ -56,14 +56,15 @@ router.post("/login", async (req, res) => {
   res.json({
     token: data.session.access_token,
     user: {
-      id:          profile.id,
-      name:        profile.name,
-      email:       profile.email,
-      role:        profile.role,
-      designation: profile.designation,
-      department:  profile.department,
-      contact_no:  profile.contact_no  || "",
-      avatar:      profile.avatar      || null,
+      id:                  profile.id,
+      name:                profile.name,
+      email:               profile.email,
+      role:                profile.role,
+      designation:         profile.designation,
+      department:          profile.department,
+      contact_no:          profile.contact_no         || "",
+      avatar:              profile.avatar             || null,
+      profile_permissions: profile.profile_permissions || null,
     },
   });
 });
@@ -292,6 +293,42 @@ router.get("/me", async (req, res) => {
 
   if (!profile) return res.status(401).json({ error: "User not found" });
   res.json({ user: profile });
+});
+
+/* ─────────────────────────────────────────
+   GET /api/auth/my-permissions
+   Current user apni tab permissions fetch kare
+   Header: Authorization: Bearer <token>
+───────────────────────────────────────── */
+router.get("/my-permissions", async (req, res) => {
+  const token = req.headers.authorization?.split(" ")[1];
+  if (!token) return res.status(401).json({ error: "Token required" });
+
+  const userId = extractUserId(token);
+  if (!userId) return res.status(401).json({ error: "Invalid token" });
+
+  const admin = getAdminClient();
+  const { data: modules } = await admin.from("modules").select("*").eq("is_active", true).order("id");
+  const { data: perms }   = await admin.from("permissions").select("*").eq("user_id", userId);
+
+  const result = (modules || []).map(mod => {
+    const perm = (perms || []).find(p => p.module_id === mod.id) || {};
+    return {
+      module_id:             mod.id,
+      module_key:            mod.module_key,
+      module_name:           mod.module_name,
+      can_view:              perm.can_view              || false,
+      can_add:               perm.can_add               || false,
+      can_edit:              perm.can_edit              || false,
+      can_delete:            perm.can_delete            || false,
+      can_bulk_upload:       perm.can_bulk_upload       || false,
+      can_export:            perm.can_export            || false,
+      can_download_document: perm.can_download_document || false,
+      has_explicit_entry:    !!perms?.find(p => p.module_id === mod.id),
+    };
+  });
+
+  res.json({ permissions: result, has_any_permissions: (perms || []).length > 0 });
 });
 
 module.exports = router;

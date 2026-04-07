@@ -198,13 +198,19 @@
 .table-section { margin-top:6px; }
 
 /* Filters */
-.filters-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:14px; padding:14px 16px; background:var(--bg-primary); border:1px solid var(--border-light); border-radius:var(--radius-lg); box-shadow:var(--shadow-sm); }
+.filters-row { display:flex; gap:10px; align-items:center; flex-wrap:nowrap; overflow-x:auto; margin-bottom:14px; padding:12px 16px; background:var(--bg-primary); border:1px solid var(--border-light); border-radius:var(--radius-lg); box-shadow:var(--shadow-sm); }
+.filters-row > :last-child { margin-left:auto; flex-shrink:0; }
 .filter-search { font-size:13.5px; padding:9px 14px; height:40px; width:190px; border:1px solid var(--border-light); border-radius:var(--radius-md); background:var(--bg-secondary); color:var(--text-primary); outline:none; transition:all .2s; }
 .filter-search:focus { border-color:var(--info); background:var(--bg-primary); box-shadow:0 0 0 3px rgba(37,99,235,.1); }
 .filter-select { font-size:13.5px; padding:9px 32px 9px 12px; height:40px; width:148px; border:1px solid var(--border-light); border-radius:var(--radius-md); background:var(--bg-secondary); color:var(--text-primary); outline:none; cursor:pointer; appearance:none; -webkit-appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 10px center; }
 .filter-select:focus { border-color:var(--info); background:var(--bg-primary); }
 .filter-date { font-size:13.5px; padding:9px 12px; height:40px; width:148px; border:1px solid var(--border-light); border-radius:var(--radius-md); background:var(--bg-secondary); color:var(--text-primary); outline:none; }
 .filter-spacer { flex:1; }
+.date-filter-group { display:flex; align-items:center; gap:0; background:var(--bg-secondary); border:1px solid var(--border-light); border-radius:var(--radius-md); height:40px; padding:0 10px; flex-shrink:0; }
+.date-filter-sep { color:var(--text-muted); padding:0 4px; font-size:13px; }
+.date-filter-group .filter-date { border:none; background:transparent; padding:0; width:120px; height:auto; font-size:13px; color:var(--text-primary); }
+.filter-clear-btn { background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:14px; padding:0 2px 0 6px; line-height:1; margin-left:2px; }
+.filter-clear-btn:hover { color:var(--text-primary); }
 
 /* Active Filter Banner */
 .active-filter-banner { display:flex; align-items:center; gap:10px; padding:10px 16px; background:linear-gradient(145deg,#eff6ff,#dbeafe); border-radius:var(--radius-md); font-size:14px; color:var(--info); margin-bottom:14px; font-weight:700; border:1px solid #bfdbfe; text-transform:capitalize; }

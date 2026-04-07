@@ -59,6 +59,46 @@ const Tip = ({ label, show, children }) => {
 };
 
 /* ════════════════════════════ */
+// Map of sidebar tab ID → module_key in DB
+const TAB_MODULE_KEY = {
+  boq_prepare:                    "boq_prepare",
+  create__intake:                 "intake",
+  create__order:                  "order",
+  proc_setup__company_list:       "company_list",
+  proc_setup__site_list:          "site_list",
+  proc_setup__vendor_list:        "vendor_list",
+  proc_setup__uom:                "uom",
+  proc_setup__category_list:      "category_list",
+  proc_setup__item_list:          "item_list",
+  proc_setup__term_condition:     "term_condition",
+  proc_setup__payment_terms:      "payment_terms",
+  proc_setup__government_laws:    "government_laws",
+  dashboard:                      "dashboard",
+  view_3d:                        "view_3d",
+  confidential__loa:              "loa",
+  confidential__boq:              "boq",
+  confidential__drawings:         "drawings",
+  confidential__ra_bills:         "ra_bills",
+  finance__payment_request:       "payment_request",
+  finance__site_expense:          "site_expense",
+  finance__petty_cash:            "petty_cash",
+  finance__bills_docs:            "bills_docs",
+  work__execution_plan:           "execution_plan",
+  work__msp_plan:                 "msp_plan",
+  staff:                          "staff_attendance",
+  manpower__daily_manpower:       "daily_manpower",
+  manpower__all_record:           "manpower_all_record",
+  store__received_record:         "received_record",
+  store__local_purchase:          "local_purchase",
+  store__consumption_record:      "consumption_record",
+  store__stock_available:         "stock_available",
+  store__grn_docs:                "grn_docs",
+  procurement__create_order:      "create_order",
+  procurement__order_record:      "order_record",
+  images__all_images:             "all_images",
+  images__compare_images:         "compare_images",
+};
+
 const Sidebar = ({
   activeTab = "about",
   setActiveTab,
@@ -72,10 +112,26 @@ const Sidebar = ({
   userEmail = "jitendar@bootes.in",
   currentUser: currentUserProp = null,
   projects: projectsProp = null,
+  userTabPermissions = null,
 }) => {
   const currentUser = currentUserProp || (() => { try { return JSON.parse(localStorage.getItem("bms_user") || "{}"); } catch { return {}; } })();
   const [openSub, setOpenSub]   = useState(null);
   const [projOpen, setProjOpen] = useState(false);
+  const isGlobalAdmin = currentUser.role === "global_admin";
+
+  // Check if a tab is visible based on permissions
+  // Rule: global_admin always sees all. Others: if userTabPermissions is set and has_any_permissions,
+  // only show tabs where can_view = true. If no permissions set → show all (backward compat).
+  const isTabVisible = (tabId) => {
+    if (tabId === "about" || tabId === "profile") return true; // always visible
+    if (isGlobalAdmin) return true;
+    if (!userTabPermissions || !userTabPermissions.hasAny) return true; // old user, no perms set
+    const moduleKey = TAB_MODULE_KEY[tabId];
+    if (!moduleKey) return true;
+    const perm = userTabPermissions.map?.[moduleKey];
+    if (!perm) return true; // module not in DB → show
+    return perm.can_view === true;
+  };
 
   const projects = projectsProp || ["All Project","B-47","GDLV","BHA","SLH","HIH","RWH"];
   const collapsed = isMobile ? false : isCollapsed;
@@ -93,8 +149,14 @@ const Sidebar = ({
   };
 
   const renderItem = (item, isGlobal = false) => {
+    // Filter sub-items by permission
+    const visibleSubs = item.sub?.filter(s => isTabVisible(toSubId(item.id, s)));
+    // Hide parent if it has subs and none are visible; hide leaf item if not visible
+    if (item.sub && visibleSubs.length === 0) return null;
+    if (!item.sub && !isTabVisible(item.id)) return null;
+
     const Icon      = item.icon;
-    const isActive  = activeTab === item.id || item.sub?.some(s => toSubId(item.id, s) === activeTab);
+    const isActive  = activeTab === item.id || visibleSubs?.some(s => toSubId(item.id, s) === activeTab) || item.sub?.some(s => toSubId(item.id, s) === activeTab);
     const isOpen    = openSub === item.id;
 
     return (
@@ -144,7 +206,7 @@ const Sidebar = ({
                 {/* Vertical track line */}
                 <div className="absolute left-[5px] top-0 bottom-0 w-px bg-[#2c2c2e]" />
 
-                {item.sub.map((sub) => {
+                {(visibleSubs || item.sub).map((sub) => {
                   const subId    = toSubId(item.id, sub);
                   const isSubAct = activeTab === subId;
                   return (

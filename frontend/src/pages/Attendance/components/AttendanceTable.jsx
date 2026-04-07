@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import ExportDropdown from "./ExportDropdown";
-import { isLate, isPresent } from "../utils";
+import { isLate, isPresent, parseDateStr } from "../utils";
 
 const PER_PAGE = 20;
 
@@ -9,6 +9,8 @@ const AttendanceTable = ({ records, columns, filters, statusFilter, onEdit, onDe
   const [fv, setFv] = useState({});
   const [page, setPage] = useState(1);
   const [jumpInput, setJumpInput] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo]     = useState("");
 
           const filtered = useMemo(() => {
             let r = [...records];
@@ -24,6 +26,17 @@ const AttendanceTable = ({ records, columns, filters, statusFilter, onEdit, onDe
               if (k === "status" && v.toLowerCase() === "late") r = r.filter(x => isPresent(x.status) && isLate(x));
               else r = r.filter(x => (x[k]||"").toString().toLowerCase() === v.toLowerCase());
             });
+            if (dateFrom || dateTo) {
+              r = r.filter(x => {
+                const clean = String(x.date||"").split("T")[0].split(" ")[0];
+                const d = parseDateStr(clean);
+                if (!d) return false;
+                const t = d.getTime();
+                if (dateFrom && t < new Date(dateFrom + "T00:00:00").getTime()) return false;
+                if (dateTo   && t > new Date(dateTo   + "T23:59:59").getTime()) return false;
+                return true;
+              });
+            }
             // Sort by date ascending
             r.sort((a, b) => {
               const parse = (s) => {
@@ -39,7 +52,7 @@ const AttendanceTable = ({ records, columns, filters, statusFilter, onEdit, onDe
               return parse(a.date) - parse(b.date);
             });
             return r;
-          }, [records, statusFilter, search, fv]);  const tp = Math.ceil(filtered.length / PER_PAGE) || 1;
+          }, [records, statusFilter, search, fv, dateFrom, dateTo]);  const tp = Math.ceil(filtered.length / PER_PAGE) || 1;
   const cp = Math.min(page, tp);
   const rows = filtered.slice((cp-1)*PER_PAGE, cp*PER_PAGE);
 
@@ -50,14 +63,22 @@ const AttendanceTable = ({ records, columns, filters, statusFilter, onEdit, onDe
       <div className="filters-row">
         <input type="text" placeholder="Search name..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} className="filter-search" />
         {filters?.map((f, i) => f.type === "date" ? (
-          <React.Fragment key={i}><input type="date" className="filter-date" /><input type="date" className="filter-date" /></React.Fragment>
+          <div key={i} className="date-filter-group">
+            <input type="date" className="filter-date" value={dateFrom}
+              onChange={e => { setDateFrom(e.target.value); setPage(1); }} />
+            <span className="date-filter-sep">—</span>
+            <input type="date" className="filter-date" value={dateTo}
+              onChange={e => { setDateTo(e.target.value); setPage(1); }} />
+            {(dateFrom || dateTo) && (
+              <button className="filter-clear-btn" onClick={() => { setDateFrom(""); setDateTo(""); setPage(1); }}>✕</button>
+            )}
+          </div>
         ) : (
           <select key={i} value={fv[f.key]||"all"} onChange={e => { setFv(p => ({...p,[f.key]:e.target.value})); setPage(1); }} className="filter-select">
             <option value="all">{f.label}</option>
             {f.options.map((o, j) => <option key={j} value={o}>{o}</option>)}
           </select>
         ))}
-        <div className="filter-spacer" />
         <ExportDropdown data={filtered} filename={exportFilename} />
       </div>
       <div className="table-wrapper">

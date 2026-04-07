@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Lock, Eye, EyeOff, CheckCircle2, ArrowRight } from "lucide-react";
 import api from "../utils/api";
 
-export default function ResetPassword({ onComplete }) {
+export default function ResetPassword({ onComplete, isInvite = false }) {
   const [password, setPassword]   = useState("");
   const [confirm, setConfirm]     = useState("");
   const [showPw, setShowPw]       = useState(false);
@@ -17,8 +17,8 @@ export default function ResetPassword({ onComplete }) {
     const params = new URLSearchParams(window.location.hash.slice(1));
     const t    = params.get("access_token");
     const type = params.get("type");
-    if (t && type === "recovery") setToken(t);
-    else setError("Invalid or expired reset link. Please request a new one.");
+    if (t && (type === "recovery" || type === "invite")) setToken(t);
+    else setError("Invalid or expired link. Please request a new one.");
   }, []);
 
   const handleSubmit = async (e) => {
@@ -76,8 +76,8 @@ export default function ResetPassword({ onComplete }) {
         ) : (
           <>
             <div className="mb-7">
-              <h2 className="text-3xl font-black text-gray-900 leading-none">Set New Password</h2>
-              <p className="mt-2 text-sm text-gray-500">Choose a strong password for your account.</p>
+              <h2 className="text-3xl font-black text-gray-900 leading-none">{isInvite ? "Set Your Password" : "Set New Password"}</h2>
+              <p className="mt-2 text-sm text-gray-500">{isInvite ? "Welcome! Set a password to activate your account." : "Choose a strong password for your account."}</p>
               <div className="mt-3 h-1 w-16 bg-gradient-to-r from-blue-600 to-purple-600 rounded-full" />
             </div>
 

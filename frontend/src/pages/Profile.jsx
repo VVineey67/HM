@@ -12,9 +12,217 @@ import ManageProjects from "../components/ManageProjects";
 const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
 const ROLE_BADGE = {
-  global_admin: { label: "Global Admin", color: "bg-purple-100 text-purple-700 border border-purple-200" },
-  admin:        { label: "Admin",        color: "bg-blue-100 text-blue-700 border border-blue-200"       },
-  user:         { label: "User",         color: "bg-slate-100 text-slate-600 border border-slate-200"    },
+  global_admin: { label: "Global Admin", color: "bg-violet-100 text-violet-700 border border-violet-200" },
+  super_admin:  { label: "Super Admin",  color: "bg-purple-100 text-purple-700 border border-purple-200" },
+  admin:        { label: "Admin",        color: "bg-blue-100 text-blue-700 border border-blue-200"        },
+  user:         { label: "User",         color: "bg-slate-100 text-slate-600 border border-slate-200"     },
+};
+
+const PROFILE_SECTIONS = [
+  { key: "add_user",      label: "Add User"       },
+  { key: "manage_user",   label: "Manage Users"   },
+  { key: "add_project",   label: "Add Project"    },
+  { key: "serialization", label: "Serialization"  },
+  { key: "approval_flow", label: "Approval Flow"  },
+];
+
+const DEFAULT_PROFILE_PERMS = {
+  add_user:      { view: false, edit: false },
+  manage_user:   { view: false, edit: false },
+  add_project:   { view: false, edit: false },
+  serialization: { view: false, edit: false },
+  approval_flow: { view: false, edit: false },
+};
+
+const MODULE_PERM_KEYS = [
+  { key: "can_view",              label: "View"     },
+  { key: "can_edit",              label: "Edit"     },
+  { key: "can_bulk_upload",       label: "Bulk Up"  },
+  { key: "can_add",               label: "Doc Up"   },
+  { key: "can_delete",            label: "Delete"   },
+  { key: "can_export",            label: "Export"   },
+  { key: "can_download_document", label: "Dl Doc"   },
+];
+
+// Per-module available permissions (based on what features each tab has)
+const PERM_LABELS = {
+  can_view:              "View",
+  can_edit:              "Edit",
+  can_add:               "Upload / Add",
+  can_bulk_upload:       "Bulk Upload",
+  can_delete:            "Delete",
+  can_export:            "Export",
+  can_download_document: "Download",
+};
+
+const MODULE_PERM_CONFIG = {
+  // Read-only tabs
+  dashboard:              ["can_view"],
+  view_3d:                ["can_view"],
+  manpower_all_record:    ["can_view", "can_export"],
+  stock_available:        ["can_view", "can_export"],
+  compare_images:         ["can_view"],
+  order_record:           ["can_view", "can_export"],
+  // Simple edit tabs
+  term_condition:         ["can_view", "can_edit"],
+  payment_terms:          ["can_view", "can_edit"],
+  government_laws:        ["can_view", "can_edit"],
+  boq_prepare:            ["can_view", "can_edit", "can_delete", "can_export"],
+  // Standard tabs
+  site_list:              ["can_view", "can_edit", "can_delete", "can_export"],
+  category_list:          ["can_view", "can_edit", "can_delete", "can_export"],
+  uom:                    ["can_view", "can_edit", "can_delete", "can_export"],
+  execution_plan:         ["can_view", "can_edit", "can_delete", "can_export"],
+  msp_plan:               ["can_view", "can_edit", "can_delete", "can_export"],
+  daily_manpower:         ["can_view", "can_edit", "can_delete", "can_export"],
+  site_expense:           ["can_view", "can_edit", "can_delete", "can_export"],
+  petty_cash:             ["can_view", "can_edit", "can_delete", "can_export"],
+  payment_request:        ["can_view", "can_edit", "can_delete", "can_export"],
+  local_purchase:         ["can_view", "can_edit", "can_delete", "can_export"],
+  consumption_record:     ["can_view", "can_edit", "can_delete", "can_export"],
+  create_order:           ["can_view", "can_edit", "can_delete", "can_export"],
+  // With doc upload
+  company_list:           ["can_view", "can_edit", "can_delete", "can_export", "can_add"],
+  vendor_list:            ["can_view", "can_edit", "can_delete", "can_export", "can_add"],
+  received_record:        ["can_view", "can_edit", "can_delete", "can_export", "can_add"],
+  // With bulk upload
+  item_list:              ["can_view", "can_edit", "can_bulk_upload", "can_delete", "can_export"],
+  staff_attendance:       ["can_view", "can_edit", "can_bulk_upload", "can_delete", "can_export"],
+  // With document download
+  loa:                    ["can_view", "can_edit", "can_delete", "can_add", "can_download_document"],
+  boq:                    ["can_view", "can_edit", "can_delete", "can_add", "can_download_document"],
+  drawings:               ["can_view", "can_add",  "can_delete", "can_download_document"],
+  ra_bills:               ["can_view", "can_edit", "can_delete", "can_add", "can_download_document"],
+  bills_docs:             ["can_view", "can_add",  "can_delete", "can_download_document"],
+  grn_docs:               ["can_view", "can_add",  "can_delete", "can_download_document"],
+  all_images:             ["can_view", "can_add",  "can_delete", "can_download_document"],
+  // Intake / Order with full set
+  intake:                 ["can_view", "can_edit", "can_delete", "can_export", "can_add", "can_download_document"],
+  order:                  ["can_view", "can_edit", "can_delete", "can_export"],
+};
+const DEFAULT_MODULE_PERMS = ["can_view", "can_edit", "can_delete", "can_export"];
+
+// 2-level hierarchy matching sidebar exactly
+const MODULE_SECTIONS = [
+  {
+    section: "Global",
+    groups: [
+      { label: "BOQ Prepare",       keys: ["boq_prepare"],              single: true },
+      { label: "Create",            keys: ["intake","order"] },
+      { label: "Procurement Setup", keys: ["company_list","site_list","vendor_list","uom","category_list","item_list","term_condition","payment_terms","government_laws"] },
+    ],
+  },
+  {
+    section: "Project",
+    groups: [
+      { label: "Dashboard",         keys: ["dashboard"],                                                                    single: true },
+      { label: "3D View",           keys: ["view_3d"],                                                                   single: true },
+      { label: "Confidential",      keys: ["loa","boq","drawings","ra_bills"] },
+      { label: "Finance",           keys: ["payment_request","site_expense","petty_cash","bills_docs"] },
+      { label: "Work Activity",     keys: ["execution_plan","msp_plan"] },
+      { label: "Staff Attendance",  keys: ["staff_attendance"],                                                          single: true },
+      { label: "Manpower",          keys: ["daily_manpower","manpower_all_record"] },
+      { label: "Store",             keys: ["received_record","local_purchase","consumption_record","stock_available","grn_docs"] },
+      { label: "Procurement",       keys: ["create_order","order_record"] },
+      { label: "Images",            keys: ["all_images","compare_images"] },
+    ],
+  },
+];
+
+/* Reusable grouped permission renderer — mirrors sidebar hierarchy */
+const GroupedPermissions = ({ modules, onChange }) => {
+  const allSectionKeys = MODULE_SECTIONS.flatMap(s => s.groups.flatMap(g => g.keys));
+  const ungrouped = modules.filter(m => !allSectionKeys.includes(m.module_key));
+
+  const renderRow = (mod) => {
+    const availKeys = MODULE_PERM_CONFIG[mod.module_key] || DEFAULT_MODULE_PERMS;
+    const allChecked = availKeys.every(k => mod[k]);
+    const anyChecked = availKeys.some(k => mod[k]);
+    return (
+      <div key={mod.module_id}
+        className={`flex items-center gap-3 px-4 py-2.5 border-b border-slate-50 last:border-0 transition-colors ${anyChecked ? "bg-blue-50/40" : "hover:bg-slate-50"}`}>
+        <span className="w-36 shrink-0 text-sm font-medium text-slate-700 truncate">{mod.module_name}</span>
+        {/* Per-row All toggle */}
+        <label className="flex items-center gap-1 cursor-pointer select-none shrink-0 border-r border-slate-200 pr-3 mr-1">
+          <input type="checkbox" checked={allChecked}
+            ref={el => { if (el) el.indeterminate = anyChecked && !allChecked; }}
+            onChange={e => availKeys.forEach(k => onChange(mod.module_id, k, e.target.checked))}
+            className="w-3.5 h-3.5 rounded accent-blue-600" />
+          <span className="text-xs font-semibold text-slate-500">All</span>
+        </label>
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
+          {availKeys.map(key => (
+            <label key={key} className="flex items-center gap-1.5 cursor-pointer select-none">
+              <input type="checkbox" checked={mod[key] || false}
+                onChange={e => onChange(mod.module_id, key, e.target.checked)}
+                className="w-3.5 h-3.5 rounded accent-blue-600" />
+              <span className="text-xs text-slate-500">{PERM_LABELS[key]}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-5">
+      {MODULE_SECTIONS.map(({ section, groups }) => {
+        const sectionHasMods = groups.some(g => modules.some(m => g.keys.includes(m.module_key)));
+        if (!sectionHasMods) return null;
+        return (
+          <div key={section}>
+            {/* Section divider */}
+            <div className="flex items-center gap-2 mb-2.5">
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{section}</span>
+              <div className="flex-1 h-px bg-slate-200" />
+            </div>
+
+            <div className="space-y-2 pl-2">
+              {groups.map(group => {
+                const groupMods = modules.filter(m => group.keys.includes(m.module_key));
+                if (groupMods.length === 0) return null;
+
+                if (group.single) {
+                  /* Single leaf tab — no group header, just the first matching row */
+                  return (
+                    <div key={group.label} className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+                      {renderRow(groupMods[0])}
+                    </div>
+                  );
+                }
+
+                /* Multi-tab group with header */
+                const anyChecked = groupMods.some(m =>
+                  (MODULE_PERM_CONFIG[m.module_key] || DEFAULT_MODULE_PERMS).some(k => m[k])
+                );
+                return (
+                  <div key={group.label} className={`rounded-xl border overflow-hidden ${anyChecked ? "border-blue-200" : "border-slate-200"}`}>
+                    <div className={`px-4 py-2 ${anyChecked ? "bg-blue-50 border-b border-blue-100" : "bg-slate-100 border-b border-slate-200"}`}>
+                      <span className="text-xs font-bold text-slate-600">{group.label}</span>
+                    </div>
+                    <div className="bg-white">{groupMods.map(renderRow)}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+
+      {/* Ungrouped — unknown module_keys */}
+      {ungrouped.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-2.5">
+            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Other</span>
+            <div className="flex-1 h-px bg-slate-200" />
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white overflow-hidden pl-2">
+            {ungrouped.map(renderRow)}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };
 
 const inp = "w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-800 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition-all";
@@ -54,29 +262,25 @@ const Toast = ({ msg, type }) => (
   </div>
 );
 
-const PermRow = ({ perm, onChange }) => {
-  const checks = ["can_view", "can_add", "can_edit", "can_delete"];
-  return (
-    <div className="flex items-center gap-3 py-2.5 border-b border-slate-50 last:border-0">
-      <span className="w-36 text-sm font-medium text-slate-700">{perm.module_name}</span>
-      {checks.map((k) => (
-        <label key={k} className="flex items-center gap-1 cursor-pointer">
-          <input type="checkbox" checked={perm[k]}
-            onChange={(e) => onChange(perm.module_id, k, e.target.checked)}
-            className="w-4 h-4 rounded accent-blue-600" />
-          <span className="text-xs text-slate-500 capitalize">{k.replace("can_", "")}</span>
-        </label>
-      ))}
-    </div>
-  );
-};
+const PermRow = ({ perm, onChange }) => (
+  <div className="flex items-center gap-1 py-2.5 border-b border-slate-50 last:border-0">
+    <span className="w-32 shrink-0 text-sm font-medium text-slate-700 truncate">{perm.module_name}</span>
+    {MODULE_PERM_KEYS.map(({ key }) => (
+      <div key={key} className="w-14 flex justify-center shrink-0">
+        <input type="checkbox" checked={perm[key] || false}
+          onChange={(e) => onChange(perm.module_id, key, e.target.checked)}
+          className="w-4 h-4 rounded accent-blue-600" />
+      </div>
+    ))}
+  </div>
+);
 
 /* ════════════════════════════════════════
    MAIN PROFILE COMPONENT
 ════════════════════════════════════════ */
 export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
   const currentUser      = JSON.parse(localStorage.getItem("bms_user") || "{}");
-  const isAdminOrAbove   = ["global_admin", "admin"].includes(currentUser.role);
+  const isAdminOrAbove   = ["global_admin", "super_admin", "admin"].includes(currentUser.role);
   const isGlobalAdmin    = currentUser.role === "global_admin";
 
   const NAV = [
@@ -117,7 +321,11 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
   const [showConfirmPw, setShowConfirmPw] = useState(false);
 
   /* Add user */
-  const [newUser, setNewUser]   = useState({ name: "", email: "", contact_no: "", designation: "", department: "", role: "user" });
+  const [newUser, setNewUser]             = useState({ name: "", email: "", contact_no: "", designation: "", department: "", role: "user" });
+  const [newUserProfilePerms, setNewUserProfilePerms] = useState(DEFAULT_PROFILE_PERMS);
+  const [newUserModules, setNewUserModules]   = useState([]);
+  const [modulesLoading, setModulesLoading]   = useState(false);
+  const [allPermsSelected, setAllPermsSelected] = useState(false);
 
   /* Team / permissions */
   const [members, setMembers]         = useState([]);
@@ -143,6 +351,41 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
   useEffect(() => {
     if (section === "team" && isAdminOrAbove) fetchTeam();
   }, [section]);
+
+  useEffect(() => {
+    if (section === "add_user" && newUserModules.length === 0) fetchModulesForNewUser();
+  }, [section]);
+
+  const fetchModulesForNewUser = async () => {
+    setModulesLoading(true);
+    try {
+      const { data } = await api.get("/api/users/modules/list");
+      setNewUserModules((data.modules || []).map(m => ({
+        module_id:             m.id,
+        module_key:            m.module_key,
+        module_name:           m.module_name,
+        can_view:              false,
+        can_add:               false,
+        can_edit:              false,
+        can_delete:            false,
+        can_bulk_upload:       false,
+        can_export:            false,
+        can_download_document: false,
+      })));
+    } catch { /* silent */ }
+    finally { setModulesLoading(false); }
+  };
+
+  const updateNewUserModule = (moduleId, key, value) =>
+    setNewUserModules(prev => prev.map(m => m.module_id === moduleId ? { ...m, [key]: value } : m));
+
+  const handleAllPerms = (checked) => {
+    setAllPermsSelected(checked);
+    setNewUserModules(prev => prev.map(m => {
+      const availKeys = MODULE_PERM_CONFIG[m.module_key] || DEFAULT_MODULE_PERMS;
+      return { ...m, ...Object.fromEntries(availKeys.map(k => [k, checked])) };
+    }));
+  };
 
   const fetchTeam = async () => {
     setTeamLoading(true);
@@ -245,8 +488,15 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
     e.preventDefault();
     setLoading(true);
     try {
-      await api.post("/api/users", newUser);
+      const { data } = await api.post("/api/users", { ...newUser, profile_permissions: newUserProfilePerms });
+      const userId = data.user?.id;
+      if (userId && newUserModules.some(m => MODULE_PERM_KEYS.some(k => m[k.key]))) {
+        await api.put(`/api/users/${userId}/permissions`, { permissions: newUserModules });
+      }
       setNewUser({ name: "", email: "", contact_no: "", designation: "", department: "", role: "user" });
+      setNewUserProfilePerms(DEFAULT_PROFILE_PERMS);
+      setAllPermsSelected(false);
+      setNewUserModules(prev => prev.map(m => ({ ...m, can_view: false, can_add: false, can_edit: false, can_delete: false, can_bulk_upload: false, can_export: false, can_download_document: false })));
       showToast(`Invite sent to ${newUser.email}`);
     } catch (err) { showToast(err.response?.data?.error || "Failed to add member", "error"); }
     finally { setLoading(false); }
@@ -259,6 +509,28 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
       setMembers((prev) => prev.map((m) => m.id === member.id ? { ...m, is_active: !m.is_active } : m));
       showToast(`${member.name} ${member.is_active ? "deactivated" : "activated"}`);
     } catch { showToast("Failed to update member", "error"); }
+  };
+
+  /* ── Change role ── */
+  const [editingRoleId, setEditingRoleId] = useState(null);
+  const changeRole = async (member, newRole) => {
+    if (newRole === member.role) { setEditingRoleId(null); return; }
+    try {
+      await api.put(`/api/users/${member.id}`, { role: newRole });
+      setMembers(prev => prev.map(m => m.id === member.id ? { ...m, role: newRole } : m));
+      showToast(`${member.name} ka role update hua`);
+    } catch (err) { showToast(err.response?.data?.error || "Failed to update role", "error"); }
+    setEditingRoleId(null);
+  };
+
+  /* ── Remove user (global_admin only) ── */
+  const removeUser = async (member) => {
+    if (!window.confirm(`"${member.name}" ko permanently delete karna chahte ho? Yeh action undo nahi ho sakta.`)) return;
+    try {
+      await api.delete(`/api/users/${member.id}`);
+      setMembers(prev => prev.filter(m => m.id !== member.id));
+      showToast(`${member.name} removed`);
+    } catch (err) { showToast(err.response?.data?.error || "Failed to remove user", "error"); }
   };
 
   /* ── Permissions ── */
@@ -395,18 +667,19 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
     setApprovalSaving(null);
   };
 
+  const pp = currentUser.profile_permissions || {};
   const TABS = [
     { id: "profile",       label: "Personal info",  show: true },
     { id: "security",      label: "Security",        show: true },
-    { id: "add_user",      label: "Add User",        show: isAdminOrAbove },
-    { id: "team",          label: "Manage Users",    show: isAdminOrAbove },
-    { id: "projects",      label: "Projects",        show: isGlobalAdmin  },
-    { id: "serialization", label: "Serialization",   show: isGlobalAdmin  },
-    { id: "approval_flow", label: "Approval Flow",   show: isGlobalAdmin  },
+    { id: "add_user",      label: "Add User",        show: isGlobalAdmin || !!pp.add_user?.view      },
+    { id: "team",          label: "Manage Users",    show: isGlobalAdmin || !!pp.manage_user?.view   },
+    { id: "projects",      label: "Projects",        show: isGlobalAdmin || !!pp.add_project?.view   },
+    { id: "serialization", label: "Serialization",   show: isGlobalAdmin || !!pp.serialization?.view },
+    { id: "approval_flow", label: "Approval Flow",   show: isGlobalAdmin || !!pp.approval_flow?.view },
   ].filter(t => t.show);
 
-  const accessLabel = currentUser.role === "global_admin" ? "Global" : currentUser.role === "admin" ? "Admin" : "Standard";
-  const roleLabel   = currentUser.role === "global_admin" ? "Global Admin" : currentUser.role === "admin" ? "Admin" : "User";
+  const accessLabel = currentUser.role === "global_admin" ? "Global" : currentUser.role === "super_admin" ? "Super" : currentUser.role === "admin" ? "Admin" : "Standard";
+  const roleLabel   = ROLE_BADGE[currentUser.role]?.label || "User";
 
   /* ══ RENDER ══ */
   return (
@@ -719,46 +992,107 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
             )}
 
             {/* ─── ADD USER ─── */}
-            {section === "add_user" && isAdminOrAbove && (
+            {section === "add_user" && (isGlobalAdmin || !!pp.add_user?.view) && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
                 <h2 className="text-lg font-black text-slate-800 mb-1">Add User</h2>
                 <p className="text-sm text-slate-500 mb-6">An invite email will be sent to set their password.</p>
-                <form onSubmit={addMember} className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <span className={lbl}>Full Name *</span>
-                      <input className={inp} value={newUser.name}
-                        onChange={(e) => setNewUser((p) => ({ ...p, name: e.target.value }))} required />
-                    </div>
-                    <div>
-                      <span className={lbl}>Email Address *</span>
-                      <input type="email" className={inp} value={newUser.email}
-                        onChange={(e) => setNewUser((p) => ({ ...p, email: e.target.value }))} required />
-                    </div>
-                    <div>
-                      <span className={lbl}>Contact Number</span>
-                      <input className={inp} value={newUser.contact_no}
-                        onChange={(e) => setNewUser((p) => ({ ...p, contact_no: e.target.value }))} />
-                    </div>
-                    <div>
-                      <span className={lbl}>Designation</span>
-                      <input className={inp} value={newUser.designation}
-                        onChange={(e) => setNewUser((p) => ({ ...p, designation: e.target.value }))} />
-                    </div>
-                    <div>
-                      <span className={lbl}>Department</span>
-                      <input className={inp} value={newUser.department}
-                        onChange={(e) => setNewUser((p) => ({ ...p, department: e.target.value }))} />
-                    </div>
-                    <div>
-                      <span className={lbl}>Role</span>
-                      <select className={inp} value={newUser.role}
-                        onChange={(e) => setNewUser((p) => ({ ...p, role: e.target.value }))}>
-                        <option value="user">User</option>
-                        {isGlobalAdmin && <option value="admin">Admin</option>}
-                      </select>
+                <form onSubmit={addMember} className="space-y-6">
+
+                  {/* ── Section 1: Basic Info + Role ── */}
+                  <div>
+                    <p className={lbl + " mb-3"}>Basic Information</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <span className={lbl}>Full Name *</span>
+                        <input className={inp} value={newUser.name}
+                          onChange={(e) => setNewUser((p) => ({ ...p, name: e.target.value }))} required />
+                      </div>
+                      <div>
+                        <span className={lbl}>Email Address *</span>
+                        <input type="email" className={inp} value={newUser.email}
+                          onChange={(e) => setNewUser((p) => ({ ...p, email: e.target.value }))} required />
+                      </div>
+                      <div>
+                        <span className={lbl}>Contact Number</span>
+                        <input className={inp} value={newUser.contact_no}
+                          onChange={(e) => setNewUser((p) => ({ ...p, contact_no: e.target.value }))} />
+                      </div>
+                      <div>
+                        <span className={lbl}>Designation</span>
+                        <input className={inp} value={newUser.designation}
+                          onChange={(e) => setNewUser((p) => ({ ...p, designation: e.target.value }))} />
+                      </div>
+                      <div>
+                        <span className={lbl}>Department</span>
+                        <input className={inp} value={newUser.department}
+                          onChange={(e) => setNewUser((p) => ({ ...p, department: e.target.value }))} />
+                      </div>
+                      <div>
+                        <span className={lbl}>Role</span>
+                        <select className={inp} value={newUser.role}
+                          onChange={(e) => setNewUser((p) => ({ ...p, role: e.target.value }))}>
+                          <option value="user">User</option>
+                          {(isGlobalAdmin || currentUser.role === "super_admin") && <option value="admin">Admin</option>}
+                          {isGlobalAdmin && <option value="super_admin">Super Admin</option>}
+                        </select>
+                      </div>
                     </div>
                   </div>
+
+                  {/* ── Section 2: Profile Management Access ── */}
+                  <div className="border-t border-slate-100 pt-5">
+                    <p className={lbl + " mb-3"}>Profile Management Access</p>
+                    <div className="rounded-xl border border-slate-100 bg-slate-50 overflow-hidden">
+                      {/* header */}
+                      <div className="flex items-center gap-3 px-4 py-2 border-b border-slate-100 bg-slate-100/60">
+                        <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">Section</span>
+                        <span className="w-14 text-center text-[10px] font-bold uppercase tracking-widest text-slate-400">View</span>
+                        <span className="w-14 text-center text-[10px] font-bold uppercase tracking-widest text-slate-400">Edit</span>
+                      </div>
+                      {PROFILE_SECTIONS.map(sec => (
+                        <div key={sec.key} className="flex items-center gap-3 px-4 py-2.5 border-b border-slate-50 last:border-0">
+                          <span className="flex-1 text-sm font-medium text-slate-700">{sec.label}</span>
+                          {["view", "edit"].map(k => (
+                            <div key={k} className="w-14 flex justify-center">
+                              <input type="checkbox"
+                                checked={newUserProfilePerms[sec.key]?.[k] || false}
+                                onChange={e => {
+                                  setNewUserProfilePerms(prev => ({
+                                    ...prev,
+                                    [sec.key]: { ...prev[sec.key], [k]: e.target.checked }
+                                  }));
+                                }}
+                                className="w-4 h-4 rounded accent-blue-600" />
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* ── Section 3: App Tab Permissions ── */}
+                  <div className="border-t border-slate-100 pt-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className={lbl}>App Tab Permissions</p>
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input type="checkbox" checked={allPermsSelected}
+                          onChange={e => handleAllPerms(e.target.checked)}
+                          className="w-4 h-4 rounded accent-blue-600" />
+                        <span className="text-xs font-bold text-slate-600 uppercase tracking-widest">All Access</span>
+                      </label>
+                    </div>
+
+                    {modulesLoading ? (
+                      <div className="flex justify-center py-6">
+                        <Loader2 size={20} className="animate-spin text-blue-400" />
+                      </div>
+                    ) : newUserModules.length === 0 ? (
+                      <p className="text-sm text-slate-400 text-center py-4">No modules configured yet.</p>
+                    ) : (
+                      <GroupedPermissions modules={newUserModules} onChange={updateNewUserModule} />
+                    )}
+                  </div>
+
                   <button type="submit" disabled={loading} className={btnPrimary}>
                     {loading ? <Loader2 size={16} className="animate-spin" /> : <UserPlus size={16} />}
                     Send Invite
@@ -768,7 +1102,7 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
             )}
 
             {/* ─── MANAGE USERS ─── */}
-            {section === "team" && isAdminOrAbove && (
+            {section === "team" && (isGlobalAdmin || !!pp.manage_user?.view) && (
               <div className="space-y-4">
                 {permUser ? (
                   /* Permissions panel */
@@ -790,40 +1124,14 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
                       </div>
                     ) : (
                       <>
-                        {/* Filter: All or specific tab */}
-                        <div className="mb-4">
-                          <span className={lbl}>Filter by Tab</span>
-                          <select
-                            className={inp}
-                            value={permFilter}
-                            onChange={(e) => setPermFilter(e.target.value)}
-                          >
-                            <option value="all">All Tabs</option>
-                            {permissions.map((p) => (
-                              <option key={p.module_id} value={p.module_id}>{p.module_name}</option>
-                            ))}
-                          </select>
-                        </div>
-
-                        {/* Header row */}
-                        <div className="mb-2 flex items-center gap-3 px-1">
-                          <span className="w-36 text-[10px] font-bold uppercase tracking-widest text-slate-400">Tab / Module</span>
-                          {["View", "Add", "Edit", "Delete"].map((k) => (
-                            <span key={k} className="text-[10px] font-bold uppercase tracking-widest text-slate-400 w-12 text-center">{k}</span>
-                          ))}
-                        </div>
-                        <div className="rounded-xl border border-slate-100 px-4 bg-slate-50">
-                          {permissions
-                            .filter((p) => permFilter === "all" || p.module_id === permFilter)
-                            .map((perm) => (
-                              <PermRow key={perm.module_id} perm={perm} onChange={updatePerm} />
-                            ))
-                          }
-                          {permissions.length === 0 && (
-                            <p className="py-6 text-center text-sm text-slate-400">No modules found</p>
-                          )}
-                        </div>
-                        <div className="mt-4">
+                        {permissions.length === 0 ? (
+                          <p className="py-6 text-center text-sm text-slate-400">No modules found</p>
+                        ) : (
+                          <div className="mb-4">
+                            <GroupedPermissions modules={permissions} onChange={updatePerm} />
+                          </div>
+                        )}
+                        <div className="mt-2">
                           <button onClick={savePerms} disabled={permLoading} className={btnPrimary}>
                             {permLoading ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                             Save Permissions
@@ -873,7 +1181,26 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
                                   </div>
                                   <p className="text-xs text-slate-500 truncate">{m.email}</p>
                                   <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${mb.color}`}>{mb.label}</span>
+                                    {/* Role — click to edit (only global_admin can change) */}
+                                    {isGlobalAdmin && m.id !== currentUser.id && editingRoleId === m.id ? (
+                                      <select
+                                        autoFocus
+                                        className="text-[11px] font-bold px-1.5 py-0.5 rounded-lg border border-blue-300 bg-white text-slate-700 outline-none"
+                                        defaultValue={m.role}
+                                        onChange={e => changeRole(m, e.target.value)}
+                                        onBlur={() => setEditingRoleId(null)}>
+                                        <option value="user">User</option>
+                                        <option value="admin">Admin</option>
+                                        <option value="super_admin">Super Admin</option>
+                                      </select>
+                                    ) : (
+                                      <span
+                                        onClick={() => isGlobalAdmin && m.id !== currentUser.id && setEditingRoleId(m.id)}
+                                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${mb.color} ${isGlobalAdmin && m.id !== currentUser.id ? "cursor-pointer hover:opacity-70" : ""}`}
+                                        title={isGlobalAdmin && m.id !== currentUser.id ? "Click to change role" : ""}>
+                                        {mb.label}
+                                      </span>
+                                    )}
                                     {m.designation && <span className="text-[10px] text-slate-400">{m.designation}</span>}
                                   </div>
                                 </div>
@@ -884,11 +1211,19 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
                                   Permissions
                                 </button>
                                 {m.id !== currentUser.id && (
-                                  <button onClick={() => toggleActive(m)}
-                                    className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors
-                                      ${m.is_active ? "text-red-500 hover:bg-red-50" : "text-green-600 hover:bg-green-50"}`}>
-                                    {m.is_active ? "Deactivate" : "Activate"}
-                                  </button>
+                                  <>
+                                    <button onClick={() => toggleActive(m)}
+                                      className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors
+                                        ${m.is_active ? "text-amber-600 hover:bg-amber-50" : "text-green-600 hover:bg-green-50"}`}>
+                                      {m.is_active ? "Deactivate" : "Activate"}
+                                    </button>
+                                    {isGlobalAdmin && (
+                                      <button onClick={() => removeUser(m)}
+                                        className="text-xs font-semibold text-red-500 hover:text-red-700 px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors">
+                                        Remove
+                                      </button>
+                                    )}
+                                  </>
                                 )}
                               </div>
                             </div>
@@ -902,12 +1237,12 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
             )}
 
             {/* ─── MANAGE PROJECTS ─── */}
-            {section === "projects" && isGlobalAdmin && (
+            {section === "projects" && (isGlobalAdmin || !!pp.add_project?.view) && (
               <ManageProjects onProjectsUpdate={onProjectsUpdate} />
             )}
 
             {/* ─── SERIALIZATION ─── */}
-            {section === "serialization" && isGlobalAdmin && (
+            {section === "serialization" && (isGlobalAdmin || !!pp.serialization?.view) && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
                 <div className="flex items-center gap-3 mb-6">
                   <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
@@ -986,7 +1321,7 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
             )}
 
             {/* ─── APPROVAL FLOW ─── */}
-            {section === "approval_flow" && isGlobalAdmin && (
+            {section === "approval_flow" && (isGlobalAdmin || !!pp.approval_flow?.view) && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
                 <div className="flex items-center gap-3 mb-6">
                   <div className="w-9 h-9 rounded-xl bg-violet-50 flex items-center justify-center shrink-0">

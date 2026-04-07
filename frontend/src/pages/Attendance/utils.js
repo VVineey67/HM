@@ -59,14 +59,20 @@ export const formatDate = (s) => {
   return s;
 };
 
-// ─── Is Today — supports ISO "2026-04-05" and "DD-Mon-YY" ─
+// Export parseDateStr so AttendanceTable can use it for date range filtering
+export { parseDateStr };
+
+// ─── Is Today — robust: strips time component, handles ISO + legacy ─
 export const isToday = (dateStr) => {
   if (!dateStr) return false;
+  // Strip time/timezone component if present (e.g. "2026-04-07T00:00:00+00:00" → "2026-04-07")
+  const clean = String(dateStr).trim().split("T")[0].split(" ")[0];
+  const d = parseDateStr(clean);
+  if (!d) return false;
   const t = new Date();
-  const iso = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}-${String(t.getDate()).padStart(2,"0")}`;
-  if (dateStr.trim() === iso) return true;
-  const legacy = `${String(t.getDate()).padStart(2,"0")}-${MONTHS[t.getMonth()]}-${String(t.getFullYear()).slice(-2)}`;
-  return dateStr.trim() === legacy;
+  return d.getFullYear() === t.getFullYear() &&
+         d.getMonth()    === t.getMonth()    &&
+         d.getDate()     === t.getDate();
 };
 
 // ─── Format time → "9:30 AM" ─────────────────────────────
