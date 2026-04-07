@@ -811,7 +811,7 @@ router.post("/uom/bulk", async (req, res) => {
 
 /* helper: fetch all existing categories and return next auto code */
 const getNextCategoryCode = async () => {
-  const { data } = await supabase.from("categories").select("category_code");
+  const { data } = await supabase.schema("procurement").from("categories").select("category_code");
   const nums = (data || [])
     .map(r => parseInt((r.category_code || "").replace("CAT-", "")) || 0);
   const next = nums.length ? Math.max(...nums) + 1 : 1;
@@ -842,7 +842,7 @@ router.post("/categories/bulk", async (req, res) => {
   try {
     const { rows } = req.body;
     // fetch existing names to deduplicate
-    const { data: existing } = await supabase.from("categories").select("category_name, category_code");
+    const { data: existing } = await supabase.schema("procurement").from("categories").select("category_name, category_code");
     const existingNames = new Set((existing || []).map(r => (r.category_name || "").trim().toLowerCase()));
     const existingCodes = new Set((existing || []).map(r => (r.category_code || "").trim().toUpperCase()));
     // get existing nums to auto-assign new codes
@@ -872,7 +872,7 @@ router.post("/categories/bulk", async (req, res) => {
       };
     });
 
-    const { error } = await supabase.from("categories").insert(inserts);
+    const { error } = await supabase.schema("procurement").from("categories").insert(inserts);
     if (error) throw error;
     res.json({ success: true, count: inserts.length, skipped: rows.length - inserts.length });
   } catch (err) {
@@ -885,8 +885,8 @@ router.post("/categories", async (req, res) => {
   try {
     const { categoryName, description, status, createdById, createdByName } = req.body;
     const categoryCode = await getNextCategoryCode();
-    const { data, error } = await supabase.from("categories")
-      .insert({ 
+    const { data, error } = await supabase.schema("procurement").from("categories")
+      .insert({
         category_code: categoryCode, category_name: categoryName || "", description: description || "", status: status || "Active",
         created_by_id: createdById || null,
         created_by_name: createdByName || null,
@@ -903,7 +903,7 @@ router.post("/categories", async (req, res) => {
 router.put("/categories/:id", async (req, res) => {
   try {
     const { categoryName, description, status } = req.body;
-    const { error } = await supabase.from("categories")
+    const { error } = await supabase.schema("procurement").from("categories")
       .update({ category_name: categoryName || "", description: description || "", status: status || "Active" })
       .eq("id", req.params.id);
     if (error) throw error;
@@ -916,7 +916,7 @@ router.put("/categories/:id", async (req, res) => {
 
 router.delete("/categories/:id", async (req, res) => {
   try {
-    const { error } = await supabase.from("categories").delete().eq("id", req.params.id);
+    const { error } = await supabase.schema("procurement").from("categories").delete().eq("id", req.params.id);
     if (error) throw error;
     res.json({ success: true });
   } catch (err) {
