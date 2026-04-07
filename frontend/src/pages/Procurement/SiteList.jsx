@@ -42,8 +42,22 @@ export default function SiteList() {
   const [page, setPage]             = useState(1);
   const csvRef                      = useRef();
   const bulkMenuRef                 = useRef();
+  const [permissions, setPermissions] = useState({});
+  const [isGlobalAdmin, setIsGlobalAdmin] = useState(false);
 
-  useEffect(() => { fetchSites(); }, []);
+  useEffect(() => {
+    const u = JSON.parse(localStorage.getItem("bms_user") || "{}");
+    setIsGlobalAdmin(u.role === "global_admin");
+    const p = u.app_permissions?.find(ap => ap.module_key === "site_list") || {};
+    setPermissions(p);
+    fetchSites();
+  }, []);
+
+  const canAdd = isGlobalAdmin || !!permissions.can_add;
+  const canEdit = isGlobalAdmin || !!permissions.can_edit;
+  const canDelete = isGlobalAdmin || !!permissions.can_delete;
+  const canExport = isGlobalAdmin || !!permissions.can_export;
+  const canBulk = isGlobalAdmin || !!permissions.can_bulk_upload;
 
   // Close bulk menu on outside click
   useEffect(() => {
@@ -255,7 +269,7 @@ export default function SiteList() {
 
         <div className="flex items-center gap-2">
 
-          {/* Export dropdown */}
+          {canExport && (
           <div className="relative" ref={exportMenuRef}>
             <button onClick={() => setShowExportMenu(v => !v)}
               className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all">
@@ -275,8 +289,10 @@ export default function SiteList() {
               </div>
             )}
           </div>
+          )}
 
           {/* Bulk Upload dropdown */}
+          {canBulk && (
           <div className="relative" ref={bulkMenuRef}>
             <button onClick={() => setShowBulkMenu(v => !v)} disabled={bulking}
               className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all disabled:opacity-50">
@@ -296,13 +312,16 @@ export default function SiteList() {
               </div>
             )}
           </div>
+          )}
           <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleBulkCSV} />
 
           {/* Add Site */}
-          <button onClick={openAdd}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-700 transition-all">
-            <Plus size={15} /> Add Site
-          </button>
+          {canAdd && (
+            <button onClick={openAdd}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-700 transition-all">
+              <Plus size={15} /> Add Site
+            </button>
+          )}
         </div>
       </div>
 
@@ -348,8 +367,12 @@ export default function SiteList() {
                     <td className="px-4 py-3 text-slate-600 text-xs border border-slate-200 align-top leading-relaxed">{s.siteAddress}</td>
                     <td className="px-4 py-3 border border-slate-200 align-top">
                       <div className="flex items-center gap-1 justify-end">
-                        <button onClick={() => openEdit(s)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all"><Pencil size={13} /></button>
-                        <button onClick={() => handleDelete(s.id)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"><Trash2 size={13} /></button>
+                        {canEdit && (
+                          <button onClick={() => openEdit(s)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all"><Pencil size={13} /></button>
+                        )}
+                        {canDelete && (
+                          <button onClick={() => handleDelete(s.id)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"><Trash2 size={13} /></button>
+                        )}
                       </div>
                     </td>
                   </tr>

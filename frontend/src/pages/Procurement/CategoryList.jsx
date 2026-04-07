@@ -37,8 +37,22 @@ export default function CategoryList() {
   const exportMenuRef = useRef();
   const bulkMenuRef   = useRef();
   const csvRef        = useRef();
+  const [permissions, setPermissions] = useState({});
+  const [isGlobalAdmin, setIsGlobalAdmin] = useState(false);
 
-  useEffect(() => { fetchCategories(); }, []);
+  useEffect(() => {
+    const u = JSON.parse(localStorage.getItem("bms_user") || "{}");
+    setIsGlobalAdmin(u.role === "global_admin");
+    const p = u.app_permissions?.find(ap => ap.module_key === "category_list") || {};
+    setPermissions(p);
+    fetchCategories();
+  }, []);
+
+  const canAdd = isGlobalAdmin || !!permissions.can_add;
+  const canEdit = isGlobalAdmin || !!permissions.can_edit;
+  const canDelete = isGlobalAdmin || !!permissions.can_delete;
+  const canExport = isGlobalAdmin || !!permissions.can_export;
+  const canBulk = isGlobalAdmin || !!permissions.can_bulk_upload;
 
   useEffect(() => {
     const handler = (e) => {
@@ -236,7 +250,7 @@ export default function CategoryList() {
 
         <div className="flex items-center gap-2">
 
-          {/* Export dropdown */}
+          {canExport && (
           <div className="relative" ref={exportMenuRef}>
             <button onClick={() => setShowExportMenu(v => !v)}
               className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all">
@@ -256,8 +270,9 @@ export default function CategoryList() {
               </div>
             )}
           </div>
+          )}
 
-          {/* Bulk Upload dropdown */}
+          {canBulk && (
           <div className="relative" ref={bulkMenuRef}>
             <button onClick={() => setShowBulkMenu(v => !v)} disabled={bulking}
               className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all disabled:opacity-50">
@@ -277,13 +292,16 @@ export default function CategoryList() {
               </div>
             )}
           </div>
+          )}
           <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleBulkCSV} />
 
           {/* Add Category */}
-          <button onClick={openAdd}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-700 transition-all">
-            <Plus size={15} /> Add Category
-          </button>
+          {canAdd && (
+            <button onClick={openAdd}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-700 transition-all">
+              <Plus size={15} /> Add Category
+            </button>
+          )}
         </div>
       </div>
 
@@ -339,8 +357,12 @@ export default function CategoryList() {
                   </td>
                   <td className="px-3 py-3 border border-slate-200">
                     <div className="flex items-center justify-center gap-1">
-                      <button onClick={() => openEdit(c)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all"><Pencil size={13} /></button>
-                      <button onClick={() => handleDelete(c.id)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"><Trash2 size={13} /></button>
+                      {canEdit && (
+                        <button onClick={() => openEdit(c)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all"><Pencil size={13} /></button>
+                      )}
+                      {canDelete && (
+                        <button onClick={() => handleDelete(c.id)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"><Trash2 size={13} /></button>
+                      )}
                     </div>
                   </td>
                 </tr>

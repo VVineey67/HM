@@ -572,10 +572,12 @@ export default function ManageProjects({ isGlobalAdmin, permissions = {}, onProj
               </div>
             </div>
             <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl">
-              <button onClick={() => { setShowView(false); openEdit(viewData); }}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-white transition-all">
-                <Pencil size={13} /> Edit
-              </button>
+              {canEdit && (
+                <button onClick={() => { setShowView(false); openEdit(viewData); }}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-white transition-all">
+                  <Pencil size={13} /> Edit
+                </button>
+              )}
               <button onClick={() => setShowView(false)}
                 className="px-4 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-700 transition-all">
                 Close

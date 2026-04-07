@@ -119,7 +119,7 @@ const getCurrentUser = () => {
 
 export default function ClausesMaster({ type }) {
   const cfg = TYPE_CONFIG[type] || TYPE_CONFIG.TC;
-  const { label, desc, prefix, Icon, iconBg, iconColor, badgeCls, numBg, numColor, borderAccent, headerBg, accentRing } = cfg;
+  const { label, desc, prefix, Icon: CfgIcon, iconBg, iconColor, badgeCls, numBg, numColor, borderAccent, headerBg, accentRing } = cfg;
 
   const [clauses,    setClauses]    = useState([]);
   const [categories, setCategories] = useState([]);
@@ -153,8 +153,23 @@ export default function ClausesMaster({ type }) {
   const exportRef = useRef();
   const textareaRef = useRef();
 
-  /* ── Fetch ── */
-  useEffect(() => { fetchAll(); }, [type]);
+  const [permissions, setPermissions] = useState({});
+  const [isGlobalAdmin, setIsGlobalAdmin] = useState(false);
+
+  useEffect(() => {
+    const u = JSON.parse(localStorage.getItem("bms_user") || "{}");
+    setIsGlobalAdmin(u.role === "global_admin");
+    const mkey = type === "TC" ? "term_condition" : type === "PAY" ? "payment_terms" : "government_laws";
+    const p = u.app_permissions?.find(ap => ap.module_key === mkey) || {};
+    setPermissions(p);
+    fetchAll();
+  }, [type]);
+
+  const canAdd = isGlobalAdmin || !!permissions.can_add;
+  const canEdit = isGlobalAdmin || !!permissions.can_edit;
+  const canDelete = isGlobalAdmin || !!permissions.can_delete;
+  const canExport = isGlobalAdmin || !!permissions.can_export;
+  const canBulk = isGlobalAdmin || !!permissions.can_bulk_upload;
 
   const fetchAll = async () => {
     setLoading(true); setPage(1);
@@ -461,9 +476,11 @@ export default function ClausesMaster({ type }) {
                             <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${numBg} ${numColor}`}>
                               {v.points.length} pt{v.points.length !== 1 ? "s" : ""}
                             </span>
-                            <button onClick={(e) => handleDeleteVersion(v.id, e)} className="p-1 rounded-md text-red-400 hover:text-red-600 hover:bg-red-50 transition-all mx-1" title="Delete Version">
-                              <Trash2 size={14} />
-                            </button>
+                            {canDelete && (
+                              <button onClick={(e) => handleDeleteVersion(v.id, e)} className="p-1 rounded-md text-red-400 hover:text-red-600 hover:bg-red-50 transition-all mx-1" title="Delete Version">
+                                <Trash2 size={14} />
+                              </button>
+                            )}
                             <ChevronRight size={15} className={`text-slate-400 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
                           </div>
                         </div>
@@ -504,7 +521,7 @@ export default function ClausesMaster({ type }) {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <div className={`w-10 h-10 rounded-xl ${iconBg} flex items-center justify-center`}>
-            <Icon size={20} className={iconColor} />
+            <CfgIcon size={20} className={iconColor} />
           </div>
           <div>
             <h1 className="text-xl font-bold text-slate-800">{label}</h1>
@@ -512,6 +529,7 @@ export default function ClausesMaster({ type }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {canExport && (
           <div className="relative" ref={exportRef}>
             <button onClick={() => { setShowExport(s => !s); setShowBulk(false); }}
               className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all">
@@ -528,14 +546,19 @@ export default function ClausesMaster({ type }) {
               </div>
             )}
           </div>
+          )}
+          {canBulk && (
           <button onClick={() => { setShowBulk(s => !s); setShowExport(false); }}
             className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all">
             <Upload size={14} /> Bulk Upload
           </button>
+          )}
+          {canAdd && (
           <button onClick={openAdd}
             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-700 transition-all">
             <Plus size={15} /> Add {type === "TC" ? "T&C" : type === "PAY" ? "Payment Term" : "Law"}
           </button>
+          )}
         </div>
       </div>
 
@@ -629,26 +652,30 @@ export default function ClausesMaster({ type }) {
                     )}
                     <span className="text-sm font-bold text-slate-800 truncate">{c.title}</span>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    {/* View full content */}
-                    <button onClick={() => setViewClause(c)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all" title="View full content">
-                      <Eye size={14} />
-                    </button>
-                    {/* Version history */}
-                    <button onClick={() => openHistory(c)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-violet-600 hover:bg-violet-50 transition-all" title="Version history">
-                      <History size={14} />
-                    </button>
-                    <button onClick={() => openEdit(c)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-white/80 transition-all" title="Edit">
-                      <Pencil size={14} />
-                    </button>
-                    <button onClick={() => handleDelete(c.id)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all" title="Delete">
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {/* View full content */}
+                      <button onClick={() => setViewClause(c)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all" title="View full content">
+                        <Eye size={14} />
+                      </button>
+                      {/* Version history */}
+                      <button onClick={() => openHistory(c)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-violet-600 hover:bg-violet-50 transition-all" title="Version history">
+                        <History size={14} />
+                      </button>
+                      {canEdit && (
+                        <button onClick={() => openEdit(c)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-white/80 transition-all" title="Edit">
+                          <Pencil size={14} />
+                        </button>
+                      )}
+                      {canDelete && (
+                        <button onClick={() => handleDelete(c.id)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all" title="Delete">
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
                 </div>
 
                 {/* Card Content */}
@@ -718,7 +745,7 @@ export default function ClausesMaster({ type }) {
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3 min-w-0 flex-1">
                   <div className={`w-10 h-10 rounded-xl ${iconBg} flex items-center justify-center shrink-0`}>
-                    <Icon size={18} className={iconColor} />
+                    <CfgIcon size={18} className={iconColor} />
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -747,10 +774,12 @@ export default function ClausesMaster({ type }) {
 
             {/* Footer */}
             <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 shrink-0 flex items-center gap-2">
-              <button onClick={() => { setViewClause(null); openEdit(viewClause); }}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-700 transition-all">
-                <Pencil size={13} /> Edit
-              </button>
+              {canEdit && (
+                <button onClick={() => { setViewClause(null); openEdit(viewClause); }}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-700 transition-all">
+                  <Pencil size={13} /> Edit
+                </button>
+              )}
               <button onClick={() => { setViewClause(null); openHistory(viewClause); }}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-100 transition-all">
                 <History size={13} /> History
@@ -773,7 +802,7 @@ export default function ClausesMaster({ type }) {
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
               <div className="flex items-center gap-2">
                 <div className={`w-8 h-8 rounded-lg ${iconBg} flex items-center justify-center`}>
-                  <Icon size={15} className={iconColor} />
+                  <CfgIcon size={15} className={iconColor} />
                 </div>
                 <div>
                   <h2 className="text-base font-bold text-slate-800">

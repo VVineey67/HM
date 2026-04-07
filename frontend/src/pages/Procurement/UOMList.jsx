@@ -34,8 +34,22 @@ export default function UOMList() {
   const exportMenuRef = useRef();
   const bulkMenuRef   = useRef();
   const csvRef        = useRef();
+  const [permissions, setPermissions] = useState({});
+  const [isGlobalAdmin, setIsGlobalAdmin] = useState(false);
 
-  useEffect(() => { fetchUoms(); }, []);
+  useEffect(() => {
+    const u = JSON.parse(localStorage.getItem("bms_user") || "{}");
+    setIsGlobalAdmin(u.role === "global_admin");
+    const p = u.app_permissions?.find(ap => ap.module_key === "uom_list") || {};
+    setPermissions(p);
+    fetchUoms();
+  }, []);
+
+  const canAdd = isGlobalAdmin || !!permissions.can_add;
+  const canEdit = isGlobalAdmin || !!permissions.can_edit;
+  const canDelete = isGlobalAdmin || !!permissions.can_delete;
+  const canExport = isGlobalAdmin || !!permissions.can_export;
+  const canBulk = isGlobalAdmin || !!permissions.can_bulk_upload;
 
   useEffect(() => {
     const handler = (e) => {
@@ -204,55 +218,58 @@ export default function UOMList() {
         </div>
 
         <div className="flex items-center gap-2">
+          {canExport && (
+            <div className="relative" ref={exportMenuRef}>
+              <button onClick={() => setShowExportMenu(v => !v)}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all">
+                <Download size={15} /> Export <ChevronDown size={13} />
+              </button>
+              {showExportMenu && (
+                <div className="absolute right-0 top-full mt-1.5 w-44 bg-white rounded-xl shadow-xl border border-slate-100 z-30 overflow-hidden">
+                  <button onClick={exportExcel}
+                    className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-emerald-700 hover:bg-emerald-50 transition-colors text-left">
+                    <FileSpreadsheet size={14} /> Excel (.xlsx)
+                  </button>
+                  <div className="border-t border-slate-100" />
+                  <button onClick={exportPDF}
+                    className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-red-600 hover:bg-red-50 transition-colors text-left">
+                    <FileText size={14} /> PDF
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
-          {/* Export dropdown */}
-          <div className="relative" ref={exportMenuRef}>
-            <button onClick={() => setShowExportMenu(v => !v)}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all">
-              <Download size={15} /> Export <ChevronDown size={13} />
-            </button>
-            {showExportMenu && (
-              <div className="absolute right-0 top-full mt-1.5 w-44 bg-white rounded-xl shadow-xl border border-slate-100 z-30 overflow-hidden">
-                <button onClick={exportExcel}
-                  className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-emerald-700 hover:bg-emerald-50 transition-colors text-left">
-                  <FileSpreadsheet size={14} /> Excel (.xlsx)
-                </button>
-                <div className="border-t border-slate-100" />
-                <button onClick={exportPDF}
-                  className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-red-600 hover:bg-red-50 transition-colors text-left">
-                  <FileText size={14} /> PDF
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Bulk Upload dropdown */}
-          <div className="relative" ref={bulkMenuRef}>
-            <button onClick={() => setShowBulkMenu(v => !v)} disabled={bulking}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all disabled:opacity-50">
-              <Upload size={15} /> {bulking ? "Uploading…" : "Bulk Upload"} <ChevronDown size={13} />
-            </button>
-            {showBulkMenu && (
-              <div className="absolute right-0 top-full mt-1.5 w-52 bg-white rounded-xl shadow-xl border border-slate-100 z-30 overflow-hidden">
-                <button onClick={downloadTemplate}
-                  className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left">
-                  <Download size={14} className="text-slate-400" /> Download Template
-                </button>
-                <div className="border-t border-slate-100" />
-                <button onClick={() => { setShowBulkMenu(false); csvRef.current.click(); }}
-                  className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left">
-                  <Upload size={14} className="text-slate-400" /> Upload CSV
-                </button>
-              </div>
-            )}
-          </div>
+          {canBulk && (
+            <div className="relative" ref={bulkMenuRef}>
+              <button onClick={() => setShowBulkMenu(v => !v)} disabled={bulking}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all disabled:opacity-50">
+                <Upload size={15} /> {bulking ? "Uploading…" : "Bulk Upload"} <ChevronDown size={13} />
+              </button>
+              {showBulkMenu && (
+                <div className="absolute right-0 top-full mt-1.5 w-52 bg-white rounded-xl shadow-xl border border-slate-100 z-30 overflow-hidden">
+                  <button onClick={downloadTemplate}
+                    className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left">
+                    <Download size={14} className="text-slate-400" /> Download Template
+                  </button>
+                  <div className="border-t border-slate-100" />
+                  <button onClick={() => { setShowBulkMenu(false); csvRef.current.click(); }}
+                    className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left">
+                    <Upload size={14} className="text-slate-400" /> Upload CSV
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
           <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleBulkCSV} />
 
           {/* Add UOM */}
-          <button onClick={openAdd}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-700 transition-all">
-            <Plus size={15} /> Add UOM
-          </button>
+          {canAdd && (
+            <button onClick={openAdd}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-700 transition-all">
+              <Plus size={15} /> Add UOM
+            </button>
+          )}
         </div>
       </div>
 
@@ -291,8 +308,12 @@ export default function UOMList() {
                   </td>
                   <td className="px-4 py-3 border border-slate-200">
                     <div className="flex items-center gap-1">
-                      <button onClick={() => openEdit(u)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all"><Pencil size={13} /></button>
-                      <button onClick={() => handleDelete(u.id)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"><Trash2 size={13} /></button>
+                      {canEdit && (
+                        <button onClick={() => openEdit(u)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all"><Pencil size={13} /></button>
+                      )}
+                      {canDelete && (
+                        <button onClick={() => handleDelete(u.id)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"><Trash2 size={13} /></button>
+                      )}
                     </div>
                   </td>
                 </tr>
