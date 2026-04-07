@@ -45,7 +45,7 @@ router.post("/login", async (req, res) => {
   const { data: profile, error: profileErr } = await admin
     .from("users")
     .select("*")
-    .eq("email", email)
+    .ilike("email", email) // Changed .eq to .ilike for case-insensitive match
     .single();
 
   if (profileErr || !profile) {
