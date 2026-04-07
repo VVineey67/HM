@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
   ShieldCheck, UserPlus, Users, Save, Loader2,
-  CheckCircle2, XCircle, Mail, Phone, Building2,
+  CheckCircle2, XCircle, X, Mail, Phone, Building2,
   Briefcase, Camera, FolderOpen, Trash2, Plus,
   UserCircle, Lock, Eye, EyeOff, KeyRound, SendHorizonal,
-  GitMerge, ChevronDown, Pencil, LayoutDashboard
+  GitMerge, ChevronDown, Pencil, LayoutDashboard, ShieldAlert
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import api from "../utils/api";
@@ -133,29 +133,50 @@ const GroupedPermissions = ({ modules, onChange }) => {
   const allSectionKeys = MODULE_SECTIONS.flatMap(s => s.groups.flatMap(g => g.keys));
   const ungrouped = modules.filter(m => !allSectionKeys.includes(m.module_key));
 
+  const toggleAllGlobal = (key, val) => {
+    modules.forEach(m => {
+      const avail = MODULE_PERM_CONFIG[m.module_key] || DEFAULT_MODULE_PERMS;
+      if (avail.includes(key)) onChange(m.module_id, key, val);
+    });
+  };
+
+  const toggleAllSection = (groupKeys, val) => {
+    modules.filter(m => groupKeys.includes(m.module_key)).forEach(m => {
+      const avail = MODULE_PERM_CONFIG[m.module_key] || DEFAULT_MODULE_PERMS;
+      avail.forEach(k => onChange(m.module_id, k, val));
+    });
+  };
+
   const renderRow = (mod) => {
     const availKeys = MODULE_PERM_CONFIG[mod.module_key] || DEFAULT_MODULE_PERMS;
     const allChecked = availKeys.every(k => mod[k]);
     const anyChecked = availKeys.some(k => mod[k]);
     return (
       <div key={mod.module_id}
-        className={`flex items-center gap-3 px-4 py-2.5 border-b border-slate-50 last:border-0 transition-colors ${anyChecked ? "bg-blue-50/40" : "hover:bg-slate-50"}`}>
-        <span className="w-36 shrink-0 text-sm font-medium text-slate-700 truncate">{mod.module_name}</span>
+        className={`flex items-center gap-4 px-5 py-3 border-b border-slate-50 last:border-0 transition-colors ${anyChecked ? "bg-blue-50/30" : "hover:bg-slate-50/80"}`}>
+        <div className="w-48 shrink-0">
+          <p className="text-[13px] font-bold text-slate-700 truncate">{mod.module_name}</p>
+          <p className="text-[9px] font-medium text-slate-400 uppercase tracking-widest mt-0.5">{mod.module_key}</p>
+        </div>
+        
         {/* Per-row All toggle */}
-        <label className="flex items-center gap-1 cursor-pointer select-none shrink-0 border-r border-slate-200 pr-3 mr-1">
-          <input type="checkbox" checked={allChecked}
-            ref={el => { if (el) el.indeterminate = anyChecked && !allChecked; }}
-            onChange={e => availKeys.forEach(k => onChange(mod.module_id, k, e.target.checked))}
-            className="w-3.5 h-3.5 rounded accent-blue-600" />
-          <span className="text-xs font-semibold text-slate-500">All</span>
-        </label>
-        <div className="flex flex-wrap gap-x-4 gap-y-1">
+        <div className="w-16 shrink-0 flex justify-center border-r border-slate-100 pr-2 mr-1">
+          <label className="flex flex-col items-center gap-1 cursor-pointer select-none">
+            <input type="checkbox" checked={allChecked}
+              ref={el => { if (el) el.indeterminate = anyChecked && !allChecked; }}
+              onChange={e => availKeys.forEach(k => onChange(mod.module_id, k, e.target.checked))}
+              className="w-4 h-4 rounded-md accent-blue-600 cursor-pointer" />
+            <span className="text-[8px] font-black text-slate-400 uppercase">All</span>
+          </label>
+        </div>
+
+        <div className="flex flex-1 flex-wrap gap-x-6 gap-y-2">
           {availKeys.map(key => (
-            <label key={key} className="flex items-center gap-1.5 cursor-pointer select-none">
+            <label key={key} className="flex items-center gap-2 cursor-pointer select-none group">
               <input type="checkbox" checked={mod[key] || false}
                 onChange={e => onChange(mod.module_id, key, e.target.checked)}
-                className="w-3.5 h-3.5 rounded accent-blue-600" />
-              <span className="text-xs text-slate-500">{PERM_LABELS[key]}</span>
+                className="w-4 h-4 rounded-md accent-blue-600 cursor-pointer transition-transform group-active:scale-90" />
+              <span className="text-[11px] font-medium text-slate-500 group-hover:text-slate-700 transition-colors">{PERM_LABELS[key]}</span>
             </label>
           ))}
         </div>
@@ -164,42 +185,57 @@ const GroupedPermissions = ({ modules, onChange }) => {
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
+      {/* GLOBAL BULK ACTIONS */}
+      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 mb-6">
+        <div className="flex items-center gap-2 mb-3 px-1">
+          <div className="w-1.5 h-4 bg-blue-500 rounded-full" />
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Global Bulk Actions</p>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+          {MODULE_PERM_KEYS.map(pk => (
+            <button key={pk.key} type="button"
+              onClick={() => toggleAllGlobal(pk.key, true)}
+              className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 hover:border-blue-400 hover:text-blue-600 hover:shadow-sm transition-all text-center">
+              All {pk.label}
+            </button>
+          ))}
+          <button type="button" onClick={() => modules.forEach(m => (MODULE_PERM_CONFIG[m.module_key]||DEFAULT_MODULE_PERMS).forEach(k => onChange(m.module_id, k, false)))}
+            className="px-3 py-2 bg-red-50 border border-red-100 rounded-xl text-[10px] font-bold text-red-600 hover:bg-red-600 hover:text-white transition-all shadow-xs text-center">
+            Clear All
+          </button>
+        </div>
+      </div>
+
       {MODULE_SECTIONS.map(({ section, groups }) => {
         const sectionHasMods = groups.some(g => modules.some(m => g.keys.includes(m.module_key)));
         if (!sectionHasMods) return null;
         return (
           <div key={section}>
-            {/* Section divider */}
-            <div className="flex items-center gap-2 mb-2.5">
+            <div className="flex items-center gap-2 mb-3">
               <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{section}</span>
               <div className="flex-1 h-px bg-slate-200" />
             </div>
 
-            <div className="space-y-2 pl-2">
+            <div className="space-y-3 pl-2">
               {groups.map(group => {
                 const groupMods = modules.filter(m => group.keys.includes(m.module_key));
                 if (groupMods.length === 0) return null;
 
-                if (group.single) {
-                  /* Single leaf tab — no group header, just the first matching row */
-                  return (
-                    <div key={group.label} className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-                      {renderRow(groupMods[0])}
-                    </div>
-                  );
-                }
+                const allInGroupChecked = groupMods.every(m => (MODULE_PERM_CONFIG[m.module_key]||DEFAULT_MODULE_PERMS).every(k => m[k]));
 
-                /* Multi-tab group with header */
-                const anyChecked = groupMods.some(m =>
-                  (MODULE_PERM_CONFIG[m.module_key] || DEFAULT_MODULE_PERMS).some(k => m[k])
-                );
                 return (
-                  <div key={group.label} className={`rounded-xl border overflow-hidden ${anyChecked ? "border-blue-200" : "border-slate-200"}`}>
-                    <div className={`px-4 py-2 ${anyChecked ? "bg-blue-50 border-b border-blue-100" : "bg-slate-100 border-b border-slate-200"}`}>
-                      <span className="text-xs font-bold text-slate-600">{group.label}</span>
+                  <div key={group.label} className="space-y-1.5">
+                    <div className="flex items-center justify-between px-1">
+                      <span className="text-[11px] font-bold text-slate-500">{group.label}</span>
+                      <button type="button" onClick={() => toggleAllSection(group.keys, !allInGroupChecked)}
+                        className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md transition-all ${allInGroupChecked ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-400 hover:text-blue-600"}`}>
+                        {allInGroupChecked ? "Unselect Group" : "Select Group"}
+                      </button>
                     </div>
-                    <div className="bg-white">{groupMods.map(renderRow)}</div>
+                    <div className={`rounded-xl border overflow-hidden border-slate-200 bg-white`}>
+                      {groupMods.map(renderRow)}
+                    </div>
                   </div>
                 );
               })}
@@ -208,7 +244,6 @@ const GroupedPermissions = ({ modules, onChange }) => {
         );
       })}
 
-      {/* Ungrouped — unknown module_keys */}
       {ungrouped.length > 0 && (
         <div>
           <div className="flex items-center gap-2 mb-2.5">
@@ -224,9 +259,11 @@ const GroupedPermissions = ({ modules, onChange }) => {
   );
 };
 
-const inp = "w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-800 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition-all";
-const lbl = "text-[11px] font-bold uppercase tracking-widest text-slate-400 block mb-1.5";
-const btnPrimary = "flex items-center gap-2 rounded-xl bg-linear-to-r from-blue-600 to-purple-600 px-5 py-2.5 text-sm font-bold text-white shadow hover:shadow-md transition-all disabled:opacity-50";
+const inp = "w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all shadow-sm";
+const lbl = "text-[12px] font-bold text-slate-500 mb-1.5 ml-1 block";
+const btnPrimary = "flex items-center gap-2 rounded-2xl bg-linear-to-r from-blue-600 to-indigo-600 px-6 py-3 text-sm font-black text-white shadow-lg shadow-blue-200 hover:shadow-xl hover:-translate-y-0.5 transition-all active:scale-95 disabled:opacity-50";
+const secHeader = "flex items-center gap-2 mb-5 border-l-4 border-blue-500 pl-4 py-1";
+const secTitle = "text-xs font-black uppercase tracking-[0.2em] text-slate-400";
 
 /* Resize image to max 800px, return base64 JPEG */
 const resizeImage = (file) =>
@@ -315,9 +352,27 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
   const [loading, setLoading]   = useState(false);
   const [showAddUser, setShowAddUser] = useState(false);
 
-  /* Avatar */
+  /* Avatar & Header */
   const [avatar, setAvatar]     = useState(currentUser.avatar || null);
+  const [avatarLoading, setAvatarLoading] = useState(false);
+  
+  const uiSettings = currentUser.profile_permissions?.ui || {};
+  const [coverImage, setCoverImage] = useState(uiSettings.cover_image || null);
+  const [coverLoading, setCoverLoading] = useState(false);
+  
+  const GRADIENTS = [
+    { name: "Midnight", value: "linear-gradient(135deg, #1a1f3c 0%, #2d1b69 100%)" },
+    { name: "Ocean",    value: "linear-gradient(135deg, #0f172a 0%, #2563eb 100%)" },
+    { name: "Sunset",   value: "linear-gradient(135deg, #4c1d95 0%, #db2777 100%)" },
+    { name: "Emerald",  value: "linear-gradient(135deg, #064e3b 0%, #059669 100%)" },
+    { name: "Coal",     value: "linear-gradient(135deg, #111827 0%, #374151 100%)" },
+    { name: "Royal",    value: "linear-gradient(135deg, #1e1b4b 0%, #4338ca 100%)" },
+  ];
+  const [headerTheme, setHeaderTheme] = useState(uiSettings.header_theme || GRADIENTS[0].value);
+  const [showThemePicker, setShowThemePicker] = useState(false);
+
   const fileRef                 = useRef();
+  const coverFileRef            = useRef();
 
   /* Edit profile */
   const [profile, setProfile]   = useState({
@@ -352,6 +407,7 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
   const [permLoading, setPermLoading] = useState(false);
   const [permFilter, setPermFilter]   = useState("all");
   const [viewType, setViewType]       = useState("list");
+  const [confirmRoleChange, setConfirmRoleChange] = useState(null); // { member, newRole }
 
   /* Projects count for header stats */
   const [projectsCount, setProjectsCount] = useState(0);
@@ -419,8 +475,15 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
     finally { setModulesLoading(false); }
   };
 
-  const updateNewUserModule = (moduleId, key, value) =>
-    setNewUserModules(prev => prev.map(m => m.module_id === moduleId ? { ...m, [key]: value } : m));
+  const updateNewUserModule = (modId, key, val) =>
+    setNewUserModules(prev => prev.map(m => {
+      if (m.module_id !== modId) return m;
+      const updated = { ...m, [key]: val };
+      if (val === true && ["can_add", "can_edit", "can_delete", "can_bulk_upload", "can_export", "can_download_document"].includes(key)) {
+        updated.can_view = true;
+      }
+      return updated;
+    }));
 
   const handleAllPerms = (checked) => {
     setAllPermsSelected(checked);
@@ -467,7 +530,6 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
     finally { setTeamLoading(false); }
   };
 
-  const [avatarLoading, setAvatarLoading] = useState(false);
 
   /* ── Avatar upload ── */
   const handleAvatarChange = async (e) => {
@@ -507,7 +569,50 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
     showToast("Profile picture removed");
   };
 
-  /* ── Save profile ── */
+  const handleCoverChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setCoverLoading(true);
+    try {
+      const base64 = await resizeImage(file); // reuse helper
+      const { data } = await api.post("/api/auth/cover", { cover: base64 });
+      setCoverImage(data.url);
+      const updated = { ...currentUser, profile_permissions: { ...currentUser.profile_permissions, ui: { ...currentUser.profile_permissions?.ui, cover_image: data.url } } };
+      localStorage.setItem("bms_user", JSON.stringify(updated));
+      onProfileUpdate?.(updated);
+      showToast("Cover image updated");
+    } catch (err) {
+      showToast("Cover upload failed", "error");
+    } finally { setCoverLoading(false); }
+  };
+
+  const changeHeaderTheme = async (themeValue) => {
+    try {
+      setHeaderTheme(themeValue);
+      setCoverImage(null); // Clear image so theme is visible
+      setShowThemePicker(false);
+      
+      // Update DB: Set theme AND nullify cover image
+      await api.put("/api/auth/profile", { 
+        header_theme: themeValue,
+        cover_image: null 
+      });
+
+      const updated = { ...currentUser, profile_permissions: { ...currentUser.profile_permissions, ui: { ...currentUser.profile_permissions?.ui, header_theme: themeValue, cover_image: null } } };
+      localStorage.setItem("bms_user", JSON.stringify(updated));
+      onProfileUpdate?.(updated);
+      showToast("Theme applied effectively");
+    } catch { showToast("Failed to save theme", "error"); }
+  };
+
+  const deleteCover = async () => {
+    setCoverImage(null);
+    const updated = { ...currentUser, profile_permissions: { ...currentUser.profile_permissions, ui: { ...currentUser.profile_permissions?.ui, cover_image: null } } };
+    localStorage.setItem("bms_user", JSON.stringify(updated));
+    onProfileUpdate?.(updated);
+    try { await api.delete("/api/auth/cover"); } catch { /* silent */ }
+    showToast("Cover removed");
+  };
   const saveProfile = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -589,14 +694,26 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
 
   /* ── Change role ── */
   const [editingRoleId, setEditingRoleId] = useState(null);
-  const changeRole = async (member, newRole) => {
+  const changeRole = (member, newRole) => {
     if (newRole === member.role) { setEditingRoleId(null); return; }
-    try {
-      await api.put(`/api/users/${member.id}`, { role: newRole });
-      setMembers(prev => prev.map(m => m.id === member.id ? { ...m, role: newRole } : m));
-      showToast(`${member.name} ka role update hua`);
-    } catch (err) { showToast(err.response?.data?.error || "Failed to update role", "error"); }
+    setConfirmRoleChange({ member, newRole });
     setEditingRoleId(null);
+  };
+
+  const executeRoleChange = async (resetPermissions) => {
+    if (!confirmRoleChange) return;
+    const { member, newRole } = confirmRoleChange;
+    setLoading(true);
+    try {
+      await api.put(`/api/users/${member.id}`, { role: newRole, reset_permissions: resetPermissions });
+      setMembers(prev => prev.map(m => m.id === member.id ? { ...m, role: newRole } : m));
+      showToast(`${member.name} ka role update hua ${resetPermissions ? "with default permissions" : ""}`);
+    } catch (err) { 
+      showToast(err.response?.data?.error || "Failed to update role", "error"); 
+    } finally {
+      setLoading(false);
+      setConfirmRoleChange(null);
+    }
   };
 
   /* ── Remove user (global_admin only) ── */
@@ -625,7 +742,15 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
   };
 
   const updatePerm = (moduleId, key, value) =>
-    setPermissions((prev) => prev.map((p) => p.module_id === moduleId ? { ...p, [key]: value } : p));
+    setPermissions((prev) => prev.map((p) => {
+      if (p.module_id !== moduleId) return p;
+      const updated = { ...p, [key]: value };
+      // Smart Toggle: If Edit/Delete/Add/Export/Download/Bulk is checked, View must be checked
+      if (value === true && ["can_add", "can_edit", "can_delete", "can_bulk_upload", "can_export", "can_download_document"].includes(key)) {
+        updated.can_view = true;
+      }
+      return updated;
+    }));
 
   const savePerms = async () => {
     setPermLoading(true);
@@ -767,12 +892,86 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
     <div className="min-h-screen bg-[#f0f2f5] p-4 md:p-6">
       {toast && <Toast msg={toast.msg} type={toast.type} />}
       <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+      <input ref={coverFileRef} type="file" accept="image/*" className="hidden" onChange={handleCoverChange} />
 
       <div className="space-y-4">
 
-        {/* ── DARK PROFILE HEADER CARD ── */}
-        <div className="rounded-2xl px-5 py-4 md:px-6 md:py-5 shadow-lg" style={{ background: "linear-gradient(135deg, #1a1f3c 0%, #2d1b69 100%)" }}>
-          <div className="flex items-center gap-4">
+        {/* ── CUSTOMIZABLE PROFILE HEADER CARD ── */}
+        <div className="relative group/header transition-all duration-500 rounded-3xl shadow-xl hover:shadow-2xl overflow-visible">
+
+          {/* BACKGROUND LAYER (Handles Image & Gradient) */}
+          <div className="absolute inset-0 rounded-3xl overflow-hidden transition-all duration-500 pointer-events-none" 
+            style={{ 
+              background: coverImage ? `url(${coverImage}) center/cover no-repeat` : headerTheme,
+            }}>
+            {/* Darker Overlay for maximum readability */}
+            <div className={`absolute inset-0 transition-opacity duration-300 ${coverImage ? "bg-black/40 backdrop-blur-[1px]" : "bg-black/10"}`} />
+            
+            {/* Subtle Gradient from bottom to ensure text pop */}
+            <div className="absolute inset-0 bg-linear-to-t from-black/60 to-transparent opacity-80" />
+          </div>
+
+          {/* Theme/Image Controls (Placed outside overflow-hidden for dropdown visibility) */}
+          <div className="absolute top-5 right-5 flex items-center gap-3 opacity-0 group-hover/header:opacity-100 transition-all duration-300 z-50">
+            {/* Palette Button */}
+            <div className="relative">
+              <button 
+                onClick={() => setShowThemePicker(!showThemePicker)}
+                className="w-10 h-10 rounded-xl bg-black/20 backdrop-blur-xl border border-white/20 flex items-center justify-center text-white hover:bg-black/40 transition-all shadow-xl active:scale-90"
+                title="Change Theme"
+              >
+                <LayoutDashboard size={20} />
+              </button>
+              
+              <AnimatePresence>
+                {showThemePicker && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 15, scale: 0.9 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 15, scale: 0.9 }}
+                    className="absolute right-0 top-full mt-4 w-64 bg-white/95 backdrop-blur-2xl rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.2)] border border-slate-200/50 p-4 z-[100] origin-top-right overflow-visible"
+                    style={{ position: "absolute", right: 0 }}
+                  >
+                    <div className="flex items-center justify-between mb-4 px-1">
+                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Premium Themes</p>
+                      <button onClick={() => setShowThemePicker(false)} className="text-slate-300 hover:text-slate-500 transition-colors"><X size={14} /></button>
+                    </div>
+                    
+                    <div className="grid grid-cols-3 gap-3">
+                      {GRADIENTS.map((g) => (
+                        <button 
+                          key={g.name}
+                          onClick={() => changeHeaderTheme(g.value)}
+                          className={`h-12 rounded-2xl border-2 transition-all hover:scale-110 shadow-sm active:scale-90 ${headerTheme === g.value ? "border-indigo-500 ring-4 ring-indigo-500/10" : "border-slate-100"}`}
+                          style={{ background: g.value }}
+                          title={g.name}
+                        />
+                      ))}
+                    </div>
+                    
+                    <button 
+                      onClick={() => { setCoverImage(null); deleteCover(); setShowThemePicker(false); }}
+                      className="w-full mt-5 py-3 text-[10px] font-black text-slate-400 hover:text-red-500 transition-all uppercase tracking-[0.2em] border-t border-slate-100 flex items-center justify-center gap-2"
+                    >
+                      <Trash2 size={12} /> Reset Background
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Camera Button */}
+            <button 
+              onClick={() => coverFileRef.current.click()}
+              className="w-10 h-10 rounded-xl bg-black/20 backdrop-blur-xl border border-white/20 flex items-center justify-center text-white hover:bg-black/40 transition-all shadow-xl active:scale-90"
+              title="Upload Cover"
+            >
+              {coverLoading ? <Loader2 size={18} className="animate-spin" /> : <Camera size={20} />}
+            </button>
+          </div>
+
+          {/* CONTENT LAYER */}
+          <div className="relative flex flex-col md:flex-row items-center gap-6 z-20 p-6 md:p-10">
 
             {/* Avatar */}
             <div className="relative group shrink-0">
@@ -1562,7 +1761,7 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
               className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
               
             <motion.div initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }}
-              className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+              className="relative w-full max-w-5xl bg-white rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
               
               <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-10">
                 <div className="flex items-center gap-3">
@@ -1583,22 +1782,22 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
                 <form id="add-member-form" onSubmit={addMember} className="space-y-8">
                   {/* Basic Info */}
                   <div>
-                    <div className="flex items-center gap-2 mb-4 border-l-4 border-blue-500 pl-3">
-                      <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Basic Details</p>
+                    <div className={secHeader}>
+                      <p className={secTitle}>Basic Details</p>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                      <div><span className={lbl}>Full Name *</span><input className={inp} value={newUser.name} onChange={(e) => setNewUser((p) => ({ ...p, name: e.target.value }))} required /></div>
-                      <div><span className={lbl}>Email Address *</span><input type="email" className={inp} value={newUser.email} onChange={(e) => setNewUser((p) => ({ ...p, email: e.target.value }))} required /></div>
-                      <div><span className={lbl}>Phone Number</span><input className={inp} value={newUser.contact_no} onChange={(e) => setNewUser((p) => ({ ...p, contact_no: e.target.value }))} /></div>
-                      <div><span className={lbl}>Designation</span><input className={inp} value={newUser.designation} onChange={(e) => setNewUser((p) => ({ ...p, designation: e.target.value }))} /></div>
-                      <div><span className={lbl}>Department</span><input className={inp} value={newUser.department} onChange={(e) => setNewUser((p) => ({ ...p, department: e.target.value }))} /></div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                      <div><span className={lbl}>Full Name *</span><input className={inp} placeholder="e.g. John Doe" value={newUser.name} onChange={(e) => setNewUser((p) => ({ ...p, name: e.target.value }))} required /></div>
+                      <div><span className={lbl}>Email Address *</span><input type="email" className={inp} placeholder="john@example.com" value={newUser.email} onChange={(e) => setNewUser((p) => ({ ...p, email: e.target.value }))} required /></div>
+                      <div><span className={lbl}>Phone Number</span><input className={inp} placeholder="+91 00000 00000" value={newUser.contact_no} onChange={(e) => setNewUser((p) => ({ ...p, contact_no: e.target.value }))} /></div>
+                      <div><span className={lbl}>Designation</span><input className={inp} placeholder="Product Manager" value={newUser.designation} onChange={(e) => setNewUser((p) => ({ ...p, designation: e.target.value }))} /></div>
+                      <div><span className={lbl}>Department</span><input className={inp} placeholder="Operations" value={newUser.department} onChange={(e) => setNewUser((p) => ({ ...p, department: e.target.value }))} /></div>
                       <div>
                         <span className={lbl}>Role Access</span>
                         <select className={inp} value={newUser.role}
                           onChange={(e) => { const newRole = e.target.value; setNewUser((p) => ({ ...p, role: newRole })); applyRoleDefaults(newRole); }}>
                           {getManageableRoles(currentUser.role).includes("super_admin") && <option value="super_admin">Super Admin (Organization)</option>}
-                          {getManageableRoles(currentUser.role).includes("admin") && <option value="admin">Administrator</option>}
-                          <option value="user">Standard User</option>
+                          {getManageableRoles(currentUser.role).includes("admin") && <option value="admin">Administrator (Team)</option>}
+                          <option value="user">Standard User (Staff)</option>
                         </select>
                       </div>
                     </div>
@@ -1606,23 +1805,23 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
 
                   {/* Profile Perms */}
                   <div>
-                    <div className="flex items-center justify-between mb-4 border-l-4 border-purple-500 pl-3">
+                    <div className="flex items-center gap-2 mb-5 border-l-4 border-purple-500 pl-4 py-1">
                       <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Management Access</p>
                     </div>
-                    <div className="rounded-2xl border border-slate-100 bg-slate-50/50 overflow-hidden shadow-inner">
-                      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-slate-100 bg-slate-100/40">
-                        <span className="flex-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Platform Section</span>
-                        <span className="w-14 text-center text-[10px] font-black uppercase tracking-widest text-slate-400">View</span>
-                        <span className="w-14 text-center text-[10px] font-black uppercase tracking-widest text-slate-400">Edit</span>
+                    <div className="rounded-2xl border border-slate-100 bg-white overflow-hidden shadow-sm">
+                      <div className="flex items-center gap-4 px-6 py-4 bg-slate-50/80 border-b border-slate-100">
+                        <span className="w-48 shrink-0 text-[10px] font-black uppercase tracking-widest text-slate-400">Platform Section</span>
+                        <span className="w-20 text-center text-[10px] font-black uppercase tracking-widest text-slate-400">View</span>
+                        <span className="w-20 text-center text-[10px] font-black uppercase tracking-widest text-slate-400">Edit</span>
                       </div>
                       {PROFILE_SECTIONS.map(sec => (
-                        <div key={sec.key} className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 last:border-0 hover:bg-white transition-colors">
-                          <span className="flex-1 text-xs font-bold text-slate-700">{sec.label}</span>
+                        <div key={sec.key} className="flex items-center gap-4 px-6 py-4 border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors">
+                          <span className="w-48 shrink-0 text-[13px] font-bold text-slate-700">{sec.label}</span>
                           {["view", "edit"].map(k => (
-                            <div key={k} className="w-14 flex justify-center">
+                            <div key={k} className="w-20 flex justify-center">
                               <input type="checkbox" checked={newUserProfilePerms[sec.key]?.[k] || false}
                                 onChange={e => setNewUserProfilePerms(prev => ({ ...prev, [sec.key]: { ...prev[sec.key], [k]: e.target.checked } }))}
-                                className="w-4 h-4 rounded-md accent-purple-600 cursor-pointer" />
+                                className="w-5 h-5 rounded-md accent-purple-600 cursor-pointer shadow-sm" />
                             </div>
                           ))}
                         </div>
@@ -1655,6 +1854,54 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
           </div>
         )}
       </AnimatePresence>
+      {/* ─── ROLE CHANGE CONFIRMATION MODAL ─── */}
+      <AnimatePresence>
+        {confirmRoleChange && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setConfirmRoleChange(null)}
+              className="absolute inset-0 bg-slate-900/40 backdrop-blur-md" />
+              
+            <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-white/20">
+              
+              <div className="p-6 text-center">
+                <div className="w-16 h-16 rounded-2xl bg-amber-50 flex items-center justify-center mx-auto mb-4 border border-amber-100">
+                  <ShieldAlert size={32} className="text-amber-500" />
+                </div>
+                <h3 className="text-xl font-black text-slate-800 tracking-tight mb-2">Update User Role?</h3>
+                <p className="text-sm font-medium text-slate-500 leading-relaxed px-4">
+                  Aap <span className="font-bold text-slate-800">{confirmRoleChange.member.name}</span> ka role <span className="text-blue-600 font-bold uppercase tracking-wider">{confirmRoleChange.newRole}</span> par change kar rahe hain.
+                  <br /><br />
+                  Kya aap permissions ko bhi reset karna chahte hain?
+                </p>
+              </div>
+
+              <div className="p-4 bg-slate-50 border-t border-slate-100 flex flex-col gap-2">
+                <button 
+                  onClick={() => executeRoleChange(true)}
+                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-sm font-bold shadow-lg shadow-blue-200 transition-all active:scale-95 flex items-center justify-center gap-2"
+                >
+                  Confirm & Reset to {confirmRoleChange.newRole} Defaults
+                </button>
+                <button 
+                  onClick={() => executeRoleChange(false)}
+                  className="w-full py-3 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-2xl text-sm font-bold transition-all active:scale-95"
+                >
+                  Change Role Only (Keep Current Perms)
+                </button>
+                <button 
+                  onClick={() => setConfirmRoleChange(null)}
+                  className="w-full py-2 text-xs font-bold text-slate-400 hover:text-slate-600 transition-all"
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
         </div>
       </div>
     </div>

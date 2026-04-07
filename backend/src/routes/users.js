@@ -110,15 +110,13 @@ router.post("/", requireAuth, requireAdminOrAbove, async (req, res) => {
 /* PUT /api/users/:id */
 router.put("/:id", requireAuth, requireAdminOrAbove, async (req, res) => {
   const { id } = req.params;
-  const { name, contact_no, designation, department, role, is_active, profile_permissions } = req.body;
+  const { name, contact_no, designation, department, role, is_active, profile_permissions, reset_permissions } = req.body;
 
-  // Fetch target user's current role first to prevent unauthorized edits
   const admin = getAdminClient();
   const { data: targetUser } = await admin.from("users").select("role").eq("id", id).single();
   
   if (!targetUser) return res.status(404).json({ error: "User not found" });
 
-  // Security: Super Admin cannot edit Global Admin or other Super Admins
   if (req.user.role === "super_admin" && ["global_admin", "super_admin"].includes(targetUser.role)) {
     return res.status(403).json({ error: "Aap is level ke user ko edit nahi kar sakte" });
   }
@@ -128,26 +126,57 @@ router.put("/:id", requireAuth, requireAdminOrAbove, async (req, res) => {
   if (contact_no  !== undefined) updates.contact_no  = contact_no;
   if (designation !== undefined) updates.designation = designation;
   if (department  !== undefined) updates.department  = department;
+  if (is_active   !== undefined) updates.is_active   = is_active;
 
-  if (role !== undefined) {
+  if (role !== undefined && role !== targetUser.role) {
     if (req.user.role === "global_admin") {
-      // Global admin can set any role except making someone another global_admin (handled by DB/Policy usually)
       if (role !== "global_admin") updates.role = role;
     } else if (req.user.role === "super_admin") {
-      // Super admin can only set Admin or User
       if (["admin", "user"].includes(role)) updates.role = role;
+    }
+    
+    // Automatic Reset Logic if requested
+    if (reset_permissions && updates.role) {
+      const { data: modules } = await admin.from("modules").select("id").eq("is_active", true);
+      const rows = (modules || []).map(m => ({
+        user_id:               id,
+        module_id:             m.id,
+        can_view:              true, // Everyone gets view-only at minimum for admin/super_admin
+        can_add:               updates.role === "super_admin",
+        can_edit:              updates.role === "super_admin",
+        can_delete:            false, // Super admin starts with no delete perms by default
+        can_bulk_upload:       updates.role === "super_admin",
+        can_export:            updates.role === "super_admin",
+        can_download_document: updates.role === "super_admin",
+      }));
+      
+      if (updates.role === "user") {
+        await admin.from("permissions").delete().eq("user_id", id);
+        updates.profile_permissions = {
+          manage_user:   { view: false, edit: false },
+          add_project:   { view: false, edit: false },
+          serialization: { view: false, edit: false },
+          approval_flow: { view: false, edit: false },
+        };
+      } else {
+        await admin.from("permissions").upsert(rows, { onConflict: "user_id,module_id" });
+        updates.profile_permissions = {
+          manage_user:   { view: true, edit: updates.role === "super_admin" },
+          add_project:   { view: true, edit: updates.role === "super_admin" },
+          serialization: { view: true, edit: updates.role === "super_admin" },
+          approval_flow: { view: true, edit: updates.role === "super_admin" },
+        };
+      }
     }
   }
 
-  if (is_active !== undefined) updates.is_active = is_active;
-
-  if (profile_permissions !== undefined) {
+  if (profile_permissions !== undefined && !reset_permissions) {
     if (req.user.role === "global_admin" || req.user.role === "super_admin") {
       updates.profile_permissions = profile_permissions;
     }
   }
-  const { data, error } = await admin.from("users").update(updates).eq("id", id).select().single();
 
+  const { data, error } = await admin.from("users").update(updates).eq("id", id).select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true, user: data });
 });

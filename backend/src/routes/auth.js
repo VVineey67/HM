@@ -89,8 +89,10 @@ router.post("/login", async (req, res) => {
       role:                profile.role,
       designation:         profile.designation,
       department:          profile.department,
-      contact_no:          profile.contact_no         || "",
-      avatar:              profile.avatar             || null,
+      contact_no:          profile.contact_no          || "",
+      avatar:              profile.avatar              || null,
+      cover_image:         profile.cover_image         || null,
+      header_theme:        profile.header_theme        || null,
       profile_permissions: profile.profile_permissions || {},
       app_permissions:     app_permissions,
     },
@@ -151,13 +153,23 @@ router.put("/profile", async (req, res) => {
   if (!dbUser) return res.status(401).json({ error: "Invalid token" });
 
   const { name, contact_no, designation, department } = req.body;
+  const admin = getAdminClient();
+  const currentPerms = dbUser.profile_permissions || {};
   const updates = {};
+
   if (name        !== undefined) updates.name        = name;
   if (contact_no  !== undefined) updates.contact_no  = contact_no;
   if (designation !== undefined) updates.designation = designation;
   if (department  !== undefined) updates.department  = department;
 
-  const admin = getAdminClient();
+  // If header_theme or cover_image provided, nest them in profile_permissions.ui
+  if (req.body.header_theme !== undefined || req.body.cover_image !== undefined) {
+    const ui = currentPerms.ui || {};
+    if (req.body.header_theme !== undefined) ui.header_theme = req.body.header_theme;
+    if (req.body.cover_image !== undefined)  ui.cover_image  = req.body.cover_image;
+    updates.profile_permissions = { ...currentPerms, ui };
+  }
+
   const { data, error } = await admin
     .from("users").update(updates).eq("id", dbUser.id).select().single();
 
@@ -215,6 +227,86 @@ router.post("/avatar", async (req, res) => {
   }
 
   res.json({ success: true, url: avatarUrl });
+});
+
+/* ─────────────────────────────────────────
+   POST /api/auth/cover
+   Upload cover image to Supabase Storage (avatars bucket)
+   Body: { cover: "data:image/jpeg;base64,..." }
+   (Using same bucket 'avatars' for simplicity, but different naming)
+───────────────────────────────────────── */
+router.post("/cover", async (req, res) => {
+  const token = req.headers.authorization?.split(" ")[1];
+  if (!token) return res.status(401).json({ error: "Login required" });
+
+  const dbUser = await getUserFromToken(token);
+  if (!dbUser) return res.status(401).json({ error: "Invalid token" });
+
+  const { cover } = req.body;
+  if (!cover) return res.status(400).json({ error: "Cover image required" });
+
+  const matches = cover.match(/^data:(.+);base64,(.+)$/);
+  if (!matches) return res.status(400).json({ error: "Invalid image format" });
+
+  const mimeType   = matches[1];
+  const base64Data = matches[2];
+  const buffer     = Buffer.from(base64Data, "base64");
+  const ext        = mimeType.split("/")[1] || "jpg";
+
+  const newFileName = `cover_${dbUser.id}_${Date.now()}.${ext}`;
+  const admin       = getAdminClient();
+
+  const { error: uploadError } = await admin.storage
+    .from("avatars")
+    .upload(newFileName, buffer, { contentType: mimeType });
+
+  if (uploadError) return res.status(500).json({ error: `Storage upload failed: ${uploadError.message}` });
+
+  const { data: urlData } = admin.storage.from("avatars").getPublicUrl(newFileName);
+  const coverUrl = urlData.publicUrl;
+
+  const currentPerms = dbUser.profile_permissions || {};
+  const ui = currentPerms.ui || {};
+  ui.cover_image = coverUrl;
+
+  const { error: dbError } = await admin.from("users")
+    .update({ profile_permissions: { ...currentPerms, ui } }).eq("id", dbUser.id);
+
+  if (dbError) return res.status(500).json({ error: `DB update failed: ${dbError.message}` });
+
+  // Cleanup old cover
+  if (dbUser.cover_image) {
+    const oldPath = dbUser.cover_image.split("/avatars/")[1]?.split("?")[0];
+    if (oldPath) await admin.storage.from("avatars").remove([oldPath]);
+  }
+
+  res.json({ success: true, url: coverUrl });
+});
+
+/* ─────────────────────────────────────────
+   DELETE /api/auth/cover
+   Remove cover image from Storage + DB
+───────────────────────────────────────── */
+router.delete("/cover", async (req, res) => {
+  const token = req.headers.authorization?.split(" ")[1];
+  if (!token) return res.status(401).json({ error: "Login required" });
+
+  const dbUser = await getUserFromToken(token);
+  if (!dbUser) return res.status(401).json({ error: "Invalid token" });
+
+  const admin = getAdminClient();
+
+  if (dbUser.profile_permissions?.ui?.cover_image) {
+    const oldPath = dbUser.profile_permissions.ui.cover_image.split("/avatars/")[1]?.split("?")[0];
+    if (oldPath) await admin.storage.from("avatars").remove([oldPath]);
+  }
+
+  const currentPerms = dbUser.profile_permissions || {};
+  const ui = currentPerms.ui || {};
+  ui.cover_image = null;
+
+  await admin.from("users").update({ profile_permissions: { ...currentPerms, ui } }).eq("id", dbUser.id);
+  res.json({ success: true });
 });
 
 /* ─────────────────────────────────────────
