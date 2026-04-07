@@ -41,7 +41,7 @@ router.get("/items", async (_req, res) => {
     const { data, error } = await supabase
       .schema("procurement").from("items")
       .select("*")
-      .order("created_at", { ascending: true });
+      .order("item_code", { ascending: true });
     if (error) throw error;
     const items = (data || []).map(r => ({
       id:           r.id,
@@ -123,7 +123,7 @@ router.put("/items/:id", upload.single("image"), async (req, res) => {
       scope_of_work: scopeOfWork || "", remarks: remarks || "",
     }).eq("id", id);
     if (error) throw error;
-    res.json({ success: true });
+    res.json({ success: true, imageUrl: image_url });
   } catch (err) {
     console.error("Item update error:", err.message);
     res.status(500).json({ error: err.message });
@@ -441,7 +441,7 @@ const uploadVendorFile = async (files, key, folder) => {
 router.get("/vendors", async (_req, res) => {
   try {
     const { data, error } = await supabase
-      .schema("procurement").from("vendors").select("*").order("created_at", { ascending: true });
+      .schema("procurement").from("vendors").select("*").order("vendor_name", { ascending: true });
     if (error) throw error;
     const vendors = (data || []).map(r => ({
       id:             r.id,
@@ -641,7 +641,7 @@ router.post("/vendors/bulk", async (req, res) => {
 router.get("/sites", async (_req, res) => {
   try {
     const { data, error } = await supabase
-      .schema("procurement").from("sites").select("*").order("created_at", { ascending: true });
+      .schema("procurement").from("sites").select("*").order("site_name", { ascending: true });
     if (error) throw error;
     const sites = (data || []).map(r => ({
       id:             r.id,
@@ -730,7 +730,7 @@ router.post("/sites/bulk", async (req, res) => {
 router.get("/uom", async (_req, res) => {
   try {
     const { data, error } = await supabase
-      .schema("procurement").from("uom").select("*").order("created_at", { ascending: true });
+      .schema("procurement").from("uom").select("*").order("uom_name", { ascending: true });
     if (error) throw error;
     const uoms = (data || []).map(r => ({
       id:      r.id,
@@ -948,7 +948,7 @@ const uploadCompanyImg = async (files, key, folder) => {
 router.get("/companies", async (_req, res) => {
   try {
     const { data, error } = await supabase
-      .schema("procurement").from("companies").select("*").order("created_at", { ascending: true });
+      .schema("procurement").from("companies").select("*").order("company_name", { ascending: true });
     if (error) throw error;
     const companies = (data || []).map(r => ({
       id:          r.id,

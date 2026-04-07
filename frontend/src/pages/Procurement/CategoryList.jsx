@@ -93,7 +93,11 @@ export default function CategoryList() {
       await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       showToast(editId ? "Category updated" : "Category added");
       setShowModal(false);
-      fetchCategories();
+      if (editId) {
+        setCategories(prev => prev.map(c => c.id === editId ? { ...c, ...form } : c));
+      } else {
+        fetchCategories();
+      }
     } catch { showToast("Failed to save", "error"); }
     setSaving(false);
   };

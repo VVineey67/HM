@@ -163,10 +163,26 @@ export default function ItemList() {
 
       const url    = editId ? `${API}/api/procurement/items/${editId}` : `${API}/api/procurement/items`;
       const method = editId ? "PUT" : "POST";
-      await fetch(url, { method, body: fd });
+      const res = await fetch(url, { method, body: fd });
+      const result = await res.json();
       showToast(editId ? "Item updated" : "Item added");
       setShowModal(false);
-      fetchAll();
+      if (editId) {
+        // update in-place — preserve row position
+        setItems(prev => prev.map(it => it.id === editId ? {
+          ...it,
+          materialName:   form.materialName,
+          specifications: form.specifications.filter(s => s.trim()),
+          category:       form.category,
+          scopeOfWork:    form.scopeOfWork,
+          brands:         form.brands.filter(b => b.trim()),
+          unit:           form.unit,
+          remarks:        form.remarks,
+          imageUrl:       result.imageUrl ?? (form.image ? it.imageUrl : form.imagePreview),
+        } : it));
+      } else {
+        fetchAll(); // new item — need backend-assigned code + id
+      }
     } catch { showToast("Failed to save", "error"); }
     setSaving(false);
   };

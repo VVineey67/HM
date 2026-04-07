@@ -95,7 +95,12 @@ export default function SiteList() {
       const payload = { ...form, createdById: u.id || "", createdByName: u.name || "" };
       await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       showToast(editId ? "Site updated" : "Site added");
-      setShowModal(false); fetchSites();
+      setShowModal(false);
+      if (editId) {
+        setSites(prev => prev.map(s => s.id === editId ? { ...s, ...form } : s));
+      } else {
+        fetchSites();
+      }
     } catch { showToast("Failed to save", "error"); }
     setSaving(false);
   };

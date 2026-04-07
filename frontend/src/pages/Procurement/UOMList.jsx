@@ -90,7 +90,11 @@ export default function UOMList() {
       await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       showToast(editId ? "UOM updated" : "UOM added");
       setShowModal(false);
-      fetchUoms();
+      if (editId) {
+        setUoms(prev => prev.map(u => u.id === editId ? { ...u, ...form } : u));
+      } else {
+        fetchUoms();
+      }
     } catch { showToast("Failed to save", "error"); }
     setSaving(false);
   };
