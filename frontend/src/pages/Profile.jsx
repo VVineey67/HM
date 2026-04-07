@@ -4,7 +4,7 @@ import {
   CheckCircle2, XCircle, Mail, Phone, Building2,
   Briefcase, Camera, FolderOpen, Trash2, Plus,
   UserCircle, Lock, Eye, EyeOff, KeyRound, SendHorizonal,
-  GitMerge, ChevronDown,
+  GitMerge, ChevronDown, Pencil
 } from "lucide-react";
 import api from "../utils/api";
 import ManageProjects from "../components/ManageProjects";
@@ -540,6 +540,8 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
     setPermUser(member);
     setPermFilter("all");
     setPermLoading(true);
+    setPermissions([]); // PURANI VALUES CLEAR KARO
+    setEditingProfilePerms(DEFAULT_PROFILE_PERMS); // PROFILE PERMS BHI RESET KARO
     try {
       const { data } = await api.get(`/api/users/${member.id}/permissions`);
       setPermissions(data.permissions || []);
@@ -1225,7 +1227,7 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
                                     {(isGlobalAdmin || currentUser.role === "super_admin") && m.id !== currentUser.id && editingRoleId === m.id ? (
                                       <select
                                         autoFocus
-                                        className="text-[11px] font-bold px-1.5 py-0.5 rounded-lg border border-blue-300 bg-white text-slate-700 outline-none"
+                                        className="text-[11px] font-bold px-1.5 py-1 rounded-lg border border-blue-400 bg-white text-slate-700 outline-none shadow-sm"
                                         defaultValue={m.role}
                                         onChange={e => changeRole(m, e.target.value)}
                                         onBlur={() => setEditingRoleId(null)}>
@@ -1234,12 +1236,13 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
                                         {isGlobalAdmin && <option value="super_admin">Super Admin</option>}
                                       </select>
                                     ) : (
-                                      <span
+                                      <div
                                         onClick={() => (isGlobalAdmin || currentUser.role === "super_admin") && m.id !== currentUser.id && setEditingRoleId(m.id)}
-                                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${mb.color} ${(isGlobalAdmin || currentUser.role === "super_admin") && m.id !== currentUser.id ? "cursor-pointer hover:opacity-70" : ""}`}
-                                        title={(isGlobalAdmin || currentUser.role === "super_admin") && m.id !== currentUser.id ? "Click to change role" : ""}>
+                                        className={`flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-0.5 rounded-full transition-all ${mb.color} ${(isGlobalAdmin || currentUser.role === "super_admin") && m.id !== currentUser.id ? "cursor-pointer hover:ring-2 hover:ring-blue-100" : ""}`}
+                                        title={(isGlobalAdmin || currentUser.role === "super_admin") && m.id !== currentUser.id ? "Change Role" : ""}>
                                         {mb.label}
-                                      </span>
+                                        {(isGlobalAdmin || currentUser.role === "super_admin") && m.id !== currentUser.id && <Pencil size={10} className="opacity-50" />}
+                                      </div>
                                     )}
                                     {m.designation && <span className="text-[10px] text-slate-400">{m.designation}</span>}
                                   </div>

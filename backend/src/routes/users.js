@@ -105,29 +105,40 @@ router.put("/:id", requireAuth, requireAdminOrAbove, async (req, res) => {
   const { id } = req.params;
   const { name, contact_no, designation, department, role, is_active, profile_permissions } = req.body;
 
-  if (req.user.role === "admin" && role !== undefined)
-    return res.status(403).json({ error: "Admin role change nahi kar sakta" });
+  // Fetch target user's current role first to prevent unauthorized edits
+  const admin = getAdminClient();
+  const { data: targetUser } = await admin.from("users").select("role").eq("id", id).single();
+  
+  if (!targetUser) return res.status(404).json({ error: "User not found" });
+
+  // Security: Super Admin cannot edit Global Admin or other Super Admins
+  if (req.user.role === "super_admin" && ["global_admin", "super_admin"].includes(targetUser.role)) {
+    return res.status(403).json({ error: "Aap is level ke user ko edit nahi kar sakte" });
+  }
 
   const updates = {};
-  if (name                !== undefined) updates.name                = name;
-  if (contact_no          !== undefined) updates.contact_no          = contact_no;
-  if (designation         !== undefined) updates.designation         = designation;
-  if (department          !== undefined) updates.department          = department;
+  if (name        !== undefined) updates.name        = name;
+  if (contact_no  !== undefined) updates.contact_no  = contact_no;
+  if (designation !== undefined) updates.designation = designation;
+  if (department  !== undefined) updates.department  = department;
+
   if (role !== undefined) {
     if (req.user.role === "global_admin") {
+      // Global admin can set any role except making someone another global_admin (handled by DB/Policy usually)
       if (role !== "global_admin") updates.role = role;
     } else if (req.user.role === "super_admin") {
-      if (!["global_admin", "super_admin"].includes(role)) updates.role = role;
+      // Super admin can only set Admin or User
+      if (["admin", "user"].includes(role)) updates.role = role;
     }
   }
-  if (is_active           !== undefined) updates.is_active           = is_active;
+
+  if (is_active !== undefined) updates.is_active = is_active;
+
   if (profile_permissions !== undefined) {
     if (req.user.role === "global_admin" || req.user.role === "super_admin") {
       updates.profile_permissions = profile_permissions;
     }
   }
-
-  const admin = getAdminClient();
   const { data, error } = await admin.from("users").update(updates).eq("id", id).select().single();
 
   if (error) return res.status(500).json({ error: error.message });
