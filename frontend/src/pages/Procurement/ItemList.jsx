@@ -63,6 +63,16 @@ function SearchableSelect({ options, value, onChange, placeholder }) {
 }
 
 export default function ItemList() {
+  const user = JSON.parse(localStorage.getItem("bms_user") || "{}");
+  const isGlobalAdmin = user.role === "global_admin";
+  const myPerms = user.app_permissions?.find(p => p.module_key === "item_list") || {};
+
+  const canAdd        = isGlobalAdmin || !!myPerms.can_add;
+  const canEdit       = isGlobalAdmin || !!myPerms.can_edit;
+  const canDelete     = isGlobalAdmin || !!myPerms.can_delete;
+  const canBulkUpload = isGlobalAdmin || !!myPerms.can_bulk_upload;
+  const canExport     = isGlobalAdmin || !!myPerms.can_export;
+
   const [items, setItems]         = useState([]);
   const [categories, setCategories] = useState([]);
   const [uoms, setUoms]           = useState([]);
@@ -370,33 +380,39 @@ export default function ItemList() {
         </div>
         <div className="flex items-center gap-2">
           {/* Export dropdown */}
-          <div className="relative">
-            <button onClick={() => { setShowExport(s => !s); setShowBulk(false); }}
-              className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all">
-              <Download size={14} /> Export <ChevronDown size={12} />
-            </button>
-            {showExport && (
-              <div className="absolute right-0 top-full mt-1 z-20 bg-white rounded-xl shadow-lg border border-slate-100 py-1 min-w-36">
-                <button onClick={exportExcel}
-                  className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
-                  <FileSpreadsheet size={14} className="text-green-600" /> Excel (.xlsx)
-                </button>
-                <button onClick={exportPDF}
-                  className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
-                  <FileText size={14} className="text-red-500" /> PDF
-                </button>
-              </div>
-            )}
-          </div>
+          {canExport && (
+            <div className="relative">
+              <button onClick={() => { setShowExport(s => !s); setShowBulk(false); }}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all">
+                <Download size={14} /> Export <ChevronDown size={12} />
+              </button>
+              {showExport && (
+                <div className="absolute right-0 top-full mt-1 z-20 bg-white rounded-xl shadow-lg border border-slate-100 py-1 min-w-36">
+                  <button onClick={exportExcel}
+                    className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                    <FileSpreadsheet size={14} className="text-green-600" /> Excel (.xlsx)
+                  </button>
+                  <button onClick={exportPDF}
+                    className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                    <FileText size={14} className="text-red-500" /> PDF
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
           {/* Bulk Upload */}
-          <button onClick={() => { setShowBulk(s => !s); setShowExport(false); }}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all">
-            <Upload size={14} /> Bulk Upload
-          </button>
-          <button onClick={openAdd}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-700 transition-all">
-            <Plus size={15} /> Add Item
-          </button>
+          {canBulkUpload && (
+            <button onClick={() => { setShowBulk(s => !s); setShowExport(false); }}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all">
+              <Upload size={14} /> Bulk Upload
+            </button>
+          )}
+          {canAdd && (
+            <button onClick={openAdd}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-700 transition-all">
+              <Plus size={15} /> Add Item
+            </button>
+          )}
         </div>
       </div>
 
@@ -574,14 +590,18 @@ export default function ItemList() {
                         className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all" title="View">
                         <Eye size={14} />
                       </button>
-                      <button onClick={() => openEdit(item)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all" title="Edit">
-                        <Pencil size={14} />
-                      </button>
-                      <button onClick={() => handleDelete(item.id)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all" title="Delete">
-                        <Trash2 size={14} />
-                      </button>
+                      {canEdit && (
+                        <button onClick={() => openEdit(item)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all" title="Edit">
+                          <Pencil size={14} />
+                        </button>
+                      )}
+                      {canDelete && (
+                        <button onClick={() => handleDelete(item.id)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all" title="Delete">
+                          <Trash2 size={14} />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

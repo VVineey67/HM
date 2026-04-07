@@ -339,9 +339,34 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
   /* Projects count for header stats */
   const [projectsCount, setProjectsCount] = useState(0);
   useEffect(() => {
+    // 1. Fetch projects count for header
     fetch(`${API}/api/projects`).then(r => r.json())
       .then(d => setProjectsCount((d.projects || []).filter(p => p.isActive).length))
       .catch(() => {});
+
+    // 2. Sync current user permissions from DB (in case admin changed them)
+    const syncProfile = async () => {
+      try {
+        const u = JSON.parse(localStorage.getItem("bms_user") || "{}");
+        if (!u.id) return;
+        const res = await fetch(`${API}/api/users/${u.id}/permissions`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("bms_token")}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const updatedUser = { 
+            ...u, 
+            profile_permissions: data.profile_permissions,
+            app_permissions: data.permissions 
+          };
+          localStorage.setItem("bms_user", JSON.stringify(updatedUser));
+          onProfileUpdate?.(updatedUser);
+        }
+      } catch (err) {
+        console.error("Profile sync failed", err);
+      }
+    };
+    syncProfile();
   }, []);
 
   const showToast = (msg, type = "success") => {

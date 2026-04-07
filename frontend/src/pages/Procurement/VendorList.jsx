@@ -70,6 +70,15 @@ const MODAL_TABS = [
 ];
 
 export default function VendorList() {
+  const user = JSON.parse(localStorage.getItem("bms_user") || "{}");
+  const isGlobalAdmin = user.role === "global_admin";
+  const myPerms = user.app_permissions?.find(p => p.module_key === "vendor_list") || {};
+
+  const canAdd    = isGlobalAdmin || !!myPerms.can_add;
+  const canEdit   = isGlobalAdmin || !!myPerms.can_edit;
+  const canDelete = isGlobalAdmin || !!myPerms.can_delete;
+  const canExport = isGlobalAdmin || !!myPerms.can_export;
+
   const [vendors, setVendors]     = useState([]);
   const [loading, setLoading]     = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -285,35 +294,41 @@ export default function VendorList() {
         </div>
         <div className="flex items-center gap-2">
           {/* Export dropdown */}
-          <div className="relative">
-            <button onClick={() => { setShowExport(s => !s); setShowBulk(false); }}
-              className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all">
-              <Download size={14} /> Export <ChevronDown size={12} />
-            </button>
-            {showExport && (
-              <div className="absolute right-0 top-full mt-1 z-20 bg-white rounded-xl shadow-lg border border-slate-100 py-1 min-w-35">
-                <button onClick={exportExcel}
-                  className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
-                  <FileSpreadsheet size={14} className="text-green-600" /> Excel (.xlsx)
-                </button>
-                <button onClick={exportPDF}
-                  className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
-                  <FileText size={14} className="text-red-500" /> PDF
-                </button>
-              </div>
-            )}
-          </div>
+          {canExport && (
+            <div className="relative">
+              <button onClick={() => { setShowExport(s => !s); setShowBulk(false); }}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all">
+                <Download size={14} /> Export <ChevronDown size={12} />
+              </button>
+              {showExport && (
+                <div className="absolute right-0 top-full mt-1 z-20 bg-white rounded-xl shadow-lg border border-slate-100 py-1 min-w-35">
+                  <button onClick={exportExcel}
+                    className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                    <FileSpreadsheet size={14} className="text-green-600" /> Excel (.xlsx)
+                  </button>
+                  <button onClick={exportPDF}
+                    className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                    <FileText size={14} className="text-red-500" /> PDF
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Bulk Upload */}
-          <button onClick={() => { setShowBulk(s => !s); setShowExport(false); }}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all">
-            <Upload size={14} /> Bulk Upload
-          </button>
+          {canEdit && (
+            <button onClick={() => { setShowBulk(s => !s); setShowExport(false); }}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all">
+              <Upload size={14} /> Bulk Upload
+            </button>
+          )}
 
-          <button onClick={openAdd}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-700 transition-all">
-            <Plus size={14} /> Add Vendor
-          </button>
+          {canAdd && (
+            <button onClick={openAdd}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-700 transition-all">
+              <Plus size={14} /> Add Vendor
+            </button>
+          )}
         </div>
       </div>
 
@@ -444,14 +459,18 @@ export default function VendorList() {
                           className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all" title="View Details">
                           <Eye size={13} />
                         </button>
-                        <button onClick={() => openEdit(v)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all">
-                          <Pencil size={13} />
-                        </button>
-                        <button onClick={() => handleDelete(v.id)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all">
-                          <Trash2 size={13} />
-                        </button>
+                        {canEdit && (
+                          <button onClick={() => openEdit(v)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all">
+                            <Pencil size={13} />
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button onClick={() => handleDelete(v.id)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all">
+                            <Trash2 size={13} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

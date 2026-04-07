@@ -47,8 +47,9 @@ const requireGlobalAdmin = (req, res, next) => {
 
 /* GET /api/users */
 router.get("/", requireAuth, async (req, res) => {
+  const pp = req.user.profile_permissions || {};
   const isAuthorized = ["global_admin", "super_admin", "admin"].includes(req.user.role) || 
-                       (req.user.profile_permissions?.manage_user?.view === true);
+                       (pp.manage_user?.view === true);
 
   if (!isAuthorized) return res.status(403).json({ error: "Access denied" });
 

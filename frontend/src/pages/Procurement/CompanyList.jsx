@@ -70,6 +70,15 @@ const ImgUpload = ({ label, fieldKey, previewKey, form, setForm }) => {
 
 
 export default function CompanyList() {
+  const user = JSON.parse(localStorage.getItem("bms_user") || "{}");
+  const isGlobalAdmin = user.role === "global_admin";
+  const myPerms = user.app_permissions?.find(p => p.module_key === "company_list") || {};
+
+  const canAdd    = isGlobalAdmin || !!myPerms.can_add;
+  const canEdit   = isGlobalAdmin || !!myPerms.can_edit;
+  const canDelete = isGlobalAdmin || !!myPerms.can_delete;
+  const canExport = isGlobalAdmin || !!myPerms.can_export;
+
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading]     = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -266,30 +275,33 @@ export default function CompanyList() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {/* Export dropdown */}
-          <div className="relative" ref={exportMenuRef}>
-            <button onClick={() => setShowExportMenu(v => !v)}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all">
-              <Download size={15} /> Export <ChevronDown size={13} />
-            </button>
-            {showExportMenu && (
-              <div className="absolute right-0 top-full mt-1.5 w-44 bg-white rounded-xl shadow-xl border border-slate-100 z-30 overflow-hidden">
-                <button onClick={exportExcel}
-                  className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-emerald-700 hover:bg-emerald-50 transition-colors text-left">
-                  <FileSpreadsheet size={14} /> Excel (.xlsx)
+            {canExport && (
+              <div className="relative" ref={exportMenuRef}>
+                <button onClick={() => setShowExportMenu(v => !v)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all">
+                  <Download size={15} /> Export <ChevronDown size={13} />
                 </button>
-                <div className="border-t border-slate-100" />
-                <button onClick={exportPDF}
-                  className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-red-600 hover:bg-red-50 transition-colors text-left">
-                  <FileText size={14} /> PDF
-                </button>
+                {showExportMenu && (
+                  <div className="absolute right-0 top-full mt-1.5 w-44 bg-white rounded-xl shadow-xl border border-slate-100 z-30 overflow-hidden">
+                    <button onClick={exportExcel}
+                      className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-emerald-700 hover:bg-emerald-50 transition-colors text-left">
+                      <FileSpreadsheet size={14} /> Excel (.xlsx)
+                    </button>
+                    <div className="border-t border-slate-100" />
+                    <button onClick={exportPDF}
+                      className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-red-600 hover:bg-red-50 transition-colors text-left">
+                      <FileText size={14} /> PDF
+                    </button>
+                  </div>
+                )}
               </div>
             )}
-          </div>
-          <button onClick={openAdd}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-700 transition-all">
-            <Plus size={15} /> Add Company
-          </button>
+            {canAdd && (
+              <button onClick={openAdd}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-700 transition-all">
+                <Plus size={15} /> Add Company
+              </button>
+            )}
         </div>
       </div>
 
@@ -361,14 +373,18 @@ export default function CompanyList() {
                           className="p-1.5 rounded-lg text-slate-400 hover:text-green-600 hover:bg-green-50 transition-all">
                           <Eye size={13} />
                         </button>
-                        <button onClick={() => openEdit(c)} title="Edit"
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all">
-                          <Pencil size={13} />
-                        </button>
-                        <button onClick={() => handleDelete(c)} title="Delete"
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all">
-                          <Trash2 size={13} />
-                        </button>
+                        {canEdit && (
+                          <button onClick={() => openEdit(c)} title="Edit"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all">
+                            <Pencil size={13} />
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button onClick={() => handleDelete(c)} title="Delete"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all">
+                            <Trash2 size={13} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

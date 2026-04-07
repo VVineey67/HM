@@ -64,6 +64,22 @@ router.post("/login", async (req, res) => {
     return res.status(401).json({ error: "Email ya password galat hai" });
   }
 
+  // 4. Fetch App permissions
+  const { data: perms } = await admin.from("permissions").select("*").eq("user_id", profile.id);
+  const { data: modules } = await admin.from("modules").select("*").eq("is_active", true);
+
+  const app_permissions = (modules || []).map(mod => {
+    const p = perms?.find(cp => cp.module_id === mod.id) || {};
+    return {
+      module_key: mod.module_key,
+      can_view:   p.can_view   || false,
+      can_add:    p.can_add    || false,
+      can_edit:   p.can_edit   || false,
+      can_delete: p.can_delete || false,
+      can_export: p.can_export || false,
+    };
+  });
+
   res.json({
     token: data.session.access_token,
     user: {
@@ -75,7 +91,8 @@ router.post("/login", async (req, res) => {
       department:          profile.department,
       contact_no:          profile.contact_no         || "",
       avatar:              profile.avatar             || null,
-      profile_permissions: profile.profile_permissions || null,
+      profile_permissions: profile.profile_permissions || {},
+      app_permissions:     app_permissions,
     },
   });
 });
