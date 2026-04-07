@@ -49,7 +49,7 @@ const GuardTab = ({ data, contacts = [], onDelete, onBulkUpload, onAddRecord, on
         </button>
         <button className="btn-add" onClick={() => setShowModal(true)}>+ Add record</button>
       </div>
-      <BulkUpload visible={showUpload} onUpload={(file) => { onBulkUpload?.(file, "guard"); setShowUpload(false); }} columns="Date,SiteCode,Name,Type,Location,Status,InTime,OutTime,Shift,Remarks" />
+      <BulkUpload visible={showUpload} onUpload={(file) => { onBulkUpload?.(file, "guard"); setShowUpload(false); }} columns="Date,SiteCode,Name,Type,Location,Status,InTime,OutTime,Shift,Remarks" exampleRow="01-04-2026,SITE-001,Ramesh Singh,Security Guard,Main Gate,Present,07:00,19:00,Day,Regular duty" />
       <GuardStatCards stats={stats} onStatClick={setStatusFilter} activeFilter={statusFilter} />
       <div className="charts-grid charts-2">
         <WeeklyBar data={weeklyData} />

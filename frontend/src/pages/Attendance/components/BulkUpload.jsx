@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 
-const BulkUpload = ({ onUpload, columns, visible }) => {
+const BulkUpload = ({ onUpload, columns, exampleRow, visible }) => {
   const [dragOver, setDragOver] = useState(false);
   const [file, setFile] = useState(null);
   if (!visible) return null;
@@ -8,8 +8,8 @@ const BulkUpload = ({ onUpload, columns, visible }) => {
   const handleDrop = (e) => { e.preventDefault(); setDragOver(false); if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]); };
 
   const downloadTemplate = () => {
-    // columns is a comma-separated string like "Date,Name,Designation,..."
-    const blob = new Blob(["\uFEFF" + columns + "\n"], { type: "text/csv;charset=utf-8;" });
+    const content = exampleRow ? `${columns}\n${exampleRow}\n` : `${columns}\n`;
+    const blob = new Blob(["\uFEFF" + content], { type: "text/csv;charset=utf-8;" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = "attendance_template.csv";

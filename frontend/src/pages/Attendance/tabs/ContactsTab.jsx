@@ -136,7 +136,7 @@ const ContactsTab = ({ staffData = [], guardData = [], onDelete, onBulkUpload, o
         onAdd={() => setShowStaffModal(true)}
         addLabel="+ Add staff contact"
       />
-      <BulkUpload visible={showStaffUpload} onUpload={(file) => { onBulkUpload?.(file, "sc"); setShowStaffUpload(false); }} columns="S.No,Site,EmpID,JoiningDate,Email,Name,Designation,Department,Manager,Contact" />
+      <BulkUpload visible={showStaffUpload} onUpload={(file) => { onBulkUpload?.(file, "sc"); setShowStaffUpload(false); }} columns="S.No,Site,EmpID,JoiningDate,Email,Name,Designation,Department,Manager,Contact" exampleRow="1,SITE-001,EMP-001,01-01-2025,rajesh@example.com,Rajesh Kumar,Site Engineer,Civil,Amit Sharma,9876543210" />
       <AttendanceTable records={staffData} columns={staffColumns} filters={staffFilters} statusFilter="all" showRowNum={false} onEdit={(rec) => setEditRecord(rec)} onDelete={onDelete} exportFilename="SC_Contacts" />
       <AddRecordModal visible={showStaffModal} onClose={() => setShowStaffModal(false)} onSave={onAddRecord} type="staffContact" contacts={staffData} />
 
@@ -152,7 +152,7 @@ const ContactsTab = ({ staffData = [], guardData = [], onDelete, onBulkUpload, o
           addLabel="+ Add guard contact"
         />
       </div>
-      <BulkUpload visible={showGuardUpload} onUpload={(file) => { onBulkUpload?.(file, "gc"); setShowGuardUpload(false); }} columns="S.No,Site,Name,JoiningDate,Designation,Status,ShiftDuty,ContactNo,Remarks" />
+      <BulkUpload visible={showGuardUpload} onUpload={(file) => { onBulkUpload?.(file, "gc"); setShowGuardUpload(false); }} columns="S.No,Site,Name,JoiningDate,Designation,Status,ShiftDuty,ContactNo,Remarks" exampleRow="1,SITE-001,Ramesh Singh,01-01-2025,Security Guard,Active,Day,9876543210,Main gate duty" />
       <AttendanceTable records={guardData} columns={guardColumns} filters={guardFilters} statusFilter="all" showRowNum={false} onEdit={(rec) => setEditRecord(rec)} onDelete={onDelete} exportFilename="GC_Contacts" />
       <AddRecordModal visible={showGuardModal} onClose={() => setShowGuardModal(false)} onSave={onAddRecord} type="guardContact" contacts={guardData} />
 

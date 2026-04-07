@@ -217,7 +217,24 @@ export default function VendorList() {
   };
 
   const downloadTemplate = () => {
-    const ws = XLSX.utils.json_to_sheet([Object.fromEntries(EXPORT_COLS.map(([h]) => [h, ""]))]);
+    const ws = XLSX.utils.json_to_sheet([{
+      "Vendor Firm Name": "ABC Constructions Pvt Ltd",
+      "Email": "abc@example.com",
+      "Contact Person Name": "Rajesh Kumar",
+      "Contact Person Number": "9876543210",
+      "GST No": "07AABCU9603R1ZV",
+      "PAN No": "AABCU9603R",
+      "Aadhar No": "1234 5678 9012",
+      "MSME Number": "UDYAM-DL-01-0012345",
+      "Bank Name": "State Bank of India",
+      "Account Holder": "ABC Constructions Pvt Ltd",
+      "Account Number": "1234567890",
+      "Bank IFSC": "SBIN0001234",
+      "Bank Branch": "Connaught Place",
+      "Bank City": "New Delhi",
+      "Bank State": "Delhi",
+      "Address": "123 Industrial Area, Phase 2, New Delhi - 110001",
+    }]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Vendors");
     XLSX.writeFile(wb, "vendor_bulk_template.xlsx");

@@ -51,7 +51,7 @@ const StaffTab = ({ data, contacts = [], onDelete, onBulkUpload, onAddRecord, on
         </button>
         <button className="btn-add" onClick={() => setShowModal(true)}>+ Add record</button>
       </div>
-      <BulkUpload visible={showUpload} onUpload={(file) => { onBulkUpload?.(file, "staff"); setShowUpload(false); }} columns="Date,SiteCode,Name,Designation,Department,Status,InTime,OutTime,Shift,Remarks" />
+      <BulkUpload visible={showUpload} onUpload={(file) => { onBulkUpload?.(file, "staff"); setShowUpload(false); }} columns="Date,SiteCode,Name,Designation,Department,Status,InTime,OutTime,Shift,Remarks" exampleRow="01-04-2026,SITE-001,Rajesh Kumar,Site Engineer,Civil,Present,09:00,18:00,Day,On time" />
       <StatCards stats={stats} onStatClick={setStatusFilter} activeFilter={statusFilter} />
       <div className="charts-grid charts-3">
         <VerticalBar data={weeklyData} />

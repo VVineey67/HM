@@ -127,13 +127,17 @@ export default function SiteList() {
     const reader = new FileReader();
     reader.onload = async (ev) => {
       try {
-        const lines = ev.target.result.trim().split("\n").slice(1);
+        const allLines = ev.target.result.trim().split("\n");
+        const parseRow = (line) => (line.match(/(".*?"|[^,]+)(?=\s*,|\s*$)/g) || []).map(c => c.replace(/^"|"$/g, "").trim());
+        const headers = parseRow(allLines[0]).map(h => h.toLowerCase());
+        const idx = (name) => headers.indexOf(name.toLowerCase());
+        const lines = allLines.slice(1);
         const rows = lines
           .filter(l => l.trim())
           .map(l => {
-            const cols = l.match(/(".*?"|[^,]+)(?=\s*,|\s*$)/g) || [];
-            const clean = cols.map(c => c.replace(/^"|"$/g, "").trim());
-            return { siteName: clean[0] || "", siteCode: clean[1] || "", city: clean[2] || "", state: clean[3] || "", billingAddress: clean[4] || "", siteAddress: clean[5] || "" };
+            const clean = parseRow(l);
+            const get = (name) => { const i = idx(name); return i >= 0 ? (clean[i] || "") : ""; };
+            return { siteName: get("site name"), siteCode: get("site code"), city: get("city"), state: get("state"), billingAddress: get("billing address"), siteAddress: get("site address") };
           })
           .filter(r => r.siteName);
         if (!rows.length) { showToast("No valid rows found", "error"); setBulking(false); return; }

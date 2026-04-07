@@ -159,13 +159,17 @@ export default function UOMList() {
     const reader = new FileReader();
     reader.onload = async (ev) => {
       try {
-        const lines = ev.target.result.trim().split("\n").slice(1);
+        const allLines = ev.target.result.trim().split("\n");
+        const parseRow = (line) => (line.match(/(".*?"|[^,]+)(?=\s*,|\s*$)/g) || []).map(c => c.replace(/^"|"$/g, "").trim());
+        const headers = parseRow(allLines[0]).map(h => h.toLowerCase());
+        const idx = (name) => headers.indexOf(name.toLowerCase());
+        const lines = allLines.slice(1);
         const rows = lines
           .filter(l => l.trim())
           .map(l => {
-            const cols = l.match(/(".*?"|[^,]+)(?=\s*,|\s*$)/g) || [];
-            const clean = cols.map(c => c.replace(/^"|"$/g, "").trim());
-            return { uomName: clean[0] || "", uomCode: clean[1] || "" };
+            const clean = parseRow(l);
+            const get = (name) => { const i = idx(name); return i >= 0 ? (clean[i] || "") : ""; };
+            return { uomName: get("uom name"), uomCode: get("uom code") };
           })
           .filter(r => r.uomName);
         if (!rows.length) { showToast("No valid rows found", "error"); setBulking(false); return; }

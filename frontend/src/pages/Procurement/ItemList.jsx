@@ -187,8 +187,27 @@ export default function ItemList() {
   const EXP_SITC    = ["Item Code","Category","Item Name","Specification","Scope of Work","Brands","Unit","Remarks"];
 
   const downloadTemplate = () => {
+    const exampleSupply = {
+      "Category": "Civil",
+      "Item Name": "Cement OPC 53 Grade",
+      "Specification (comma separated)": "53 Grade, ISI marked, 50kg bag",
+      "Brand 1": "UltraTech", "Brand 2": "ACC", "Brand 3": "Ambuja", "Brand 4": "", "Brand 5": "",
+      "Unit": "Bag",
+      "Remarks": "Store in dry place",
+    };
+    const exampleSITC = {
+      ...exampleSupply,
+      "Category": "ELV / IT",
+      "Item Name": "IP Camera 4MP",
+      "Specification (comma separated)": "4MP, IR 30m, H.265, PoE",
+      "Scope of Work": "Supply, installation, testing and commissioning",
+      "Brand 1": "Hikvision", "Brand 2": "Dahua", "Brand 3": "", "Brand 4": "", "Brand 5": "",
+      "Unit": "Nos",
+      "Remarks": "",
+    };
     const headers = isSITC ? SITC_COLS : SUPPLY_COLS;
-    const ws = XLSX.utils.json_to_sheet([Object.fromEntries(headers.map(h => [h, ""]))]);
+    const example = isSITC ? exampleSITC : exampleSupply;
+    const ws = XLSX.utils.json_to_sheet([Object.fromEntries(headers.map(h => [h, example[h] ?? ""]))]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, activeTab);
     XLSX.writeFile(wb, `${activeTab}_items_template.xlsx`);
