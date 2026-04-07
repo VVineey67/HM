@@ -36,7 +36,7 @@ router.get("/serialization", async (_req, res) => {
 /* POST /api/intakes/serialization — upsert config for a site+docType */
 router.post("/serialization", async (req, res) => {
   try {
-    const { doc_type = "intake", site_id, site_name, prefix, pad_length = 2 } = req.body;
+    const { doc_type = "intake", site_id, site_name, prefix, pad_length = 2, createdById, createdByName } = req.body;
     if (!site_id || !prefix) return res.status(400).json({ error: "site_id and prefix required" });
 
     // Check if exists
@@ -50,7 +50,11 @@ router.post("/serialization", async (req, res) => {
       if (error) throw error;
     } else {
       const { error } = await supabase.from("serialization")
-        .insert({ doc_type, site_id, site_name, prefix, pad_length, current_number: 0 });
+        .insert({ 
+          doc_type, site_id, site_name, prefix, pad_length, current_number: 0,
+          created_by_id: createdById || null,
+          created_by_name: createdByName || null,
+        });
       if (error) throw error;
     }
     res.json({ success: true });
@@ -90,7 +94,7 @@ router.get("/approval-flows", async (_req, res) => {
 /* POST /api/intakes/approval-flows — upsert */
 router.post("/approval-flows", async (req, res) => {
   try {
-    const { module, approver_user_id, approver_name, approver_email } = req.body;
+    const { module, approver_user_id, approver_name, approver_email, createdById, createdByName } = req.body;
     if (!module) return res.status(400).json({ error: "module required" });
     const { data: existing } = await supabase.from("approval_flows").select("id").eq("module", module).single();
     if (existing) {
@@ -98,7 +102,11 @@ router.post("/approval-flows", async (req, res) => {
         .update({ approver_user_id, approver_name, approver_email, updated_at: new Date().toISOString() })
         .eq("id", existing.id);
     } else {
-      await supabase.from("approval_flows").insert({ module, approver_user_id, approver_name, approver_email });
+      await supabase.from("approval_flows").insert({ 
+        module, approver_user_id, approver_name, approver_email,
+        created_by_id: createdById || null,
+        created_by_name: createdByName || null,
+      });
     }
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -173,6 +181,8 @@ router.post("/", intakeUpload, async (req, res) => {
       site_name:      intake.site_name      || "",
       status,
       created_by:     intake.created_by     || "",
+      created_by_id:  intake.createdById    || null,
+      created_by_name: intake.createdByName || null,
     }).select().single();
     if (intakeErr) throw intakeErr;
 

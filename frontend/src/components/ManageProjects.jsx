@@ -150,6 +150,9 @@ export default function ManageProjects({ onProjectsUpdate }) {
       });
       const url    = editId ? `${API}/api/projects/${editId}` : `${API}/api/projects`;
       const method = editId ? "PUT" : "POST";
+      const u = JSON.parse(localStorage.getItem("bms_user") || "{}");
+      fd.append("createdById", u.id || "");
+      fd.append("createdByName", u.name || "");
       const res  = await fetch(url, { method, body: fd });
       const data = await res.json();
       if (!res.ok || data.error) { showToast(data.error || "Failed to save", "error"); setSaving(false); return; }
@@ -256,10 +259,12 @@ export default function ManageProjects({ onProjectsUpdate }) {
     if (!bulkRows.length) return showToast("No valid rows to upload", "error");
     setBulkSaving(true);
     try {
+      const u = JSON.parse(localStorage.getItem("bms_user") || "{}");
+      const rowsWithAudit = bulkRows.map(r => ({ ...r, createdById: u.id || "", createdByName: u.name || "" }));
       const res  = await fetch(`${API}/api/projects/bulk`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows: bulkRows }),
+        body: JSON.stringify({ rows: rowsWithAudit }),
       });
       const data = await res.json();
       if (!res.ok || data.error) { showToast(data.error || "Upload failed", "error"); setBulkSaving(false); return; }

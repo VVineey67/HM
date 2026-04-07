@@ -174,6 +174,8 @@ export default function CreateIntake() {
         ...form,
         status,
         created_by: currentUser.name || "",
+        createdById: currentUser.id || "",
+        createdByName: currentUser.name || "",
         items: items.filter(it => it.product_name.trim()).map(it => ({
           product_name: it.product_name,
           make:         it.make,

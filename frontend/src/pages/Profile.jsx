@@ -332,6 +332,7 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
   const [teamLoading, setTeamLoading] = useState(false);
   const [permUser, setPermUser]       = useState(null);
   const [permissions, setPermissions] = useState([]);
+  const [editingProfilePerms, setEditingProfilePerms] = useState(DEFAULT_PROFILE_PERMS);
   const [permLoading, setPermLoading] = useState(false);
   const [permFilter, setPermFilter]   = useState("all");
 
@@ -488,7 +489,8 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
     e.preventDefault();
     setLoading(true);
     try {
-      const { data } = await api.post("/api/users", { ...newUser, profile_permissions: newUserProfilePerms });
+      const u = JSON.parse(localStorage.getItem("bms_user") || "{}");
+      const { data } = await api.post("/api/users", { ...newUser, profile_permissions: newUserProfilePerms, createdById: u.id || "", createdByName: u.name || "" });
       const userId = data.user?.id;
       if (userId && newUserModules.some(m => MODULE_PERM_KEYS.some(k => m[k.key]))) {
         await api.put(`/api/users/${userId}/permissions`, { permissions: newUserModules });
@@ -541,6 +543,7 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
     try {
       const { data } = await api.get(`/api/users/${member.id}/permissions`);
       setPermissions(data.permissions || []);
+      setEditingProfilePerms(data.profile_permissions || DEFAULT_PROFILE_PERMS);
     } catch { showToast("Failed to load permissions", "error"); }
     finally { setPermLoading(false); }
   };
@@ -551,7 +554,10 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
   const savePerms = async () => {
     setPermLoading(true);
     try {
-      await api.put(`/api/users/${permUser.id}/permissions`, { permissions });
+      await api.put(`/api/users/${permUser.id}/permissions`, { 
+        permissions, 
+        profile_permissions: editingProfilePerms 
+      });
       showToast("Permissions saved");
     } catch { showToast("Failed to save permissions", "error"); }
     finally { setPermLoading(false); }
@@ -1127,8 +1133,42 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
                         {permissions.length === 0 ? (
                           <p className="py-6 text-center text-sm text-slate-400">No modules found</p>
                         ) : (
-                          <div className="mb-4">
-                            <GroupedPermissions modules={permissions} onChange={updatePerm} />
+                          <div className="space-y-6">
+                            {/* Profile Management Section */}
+                            <div className="border-b border-slate-100 pb-5">
+                              <p className={lbl + " mb-3"}>Profile Management Access</p>
+                              <div className="rounded-xl border border-slate-100 bg-slate-50 overflow-hidden">
+                                <div className="flex items-center gap-3 px-4 py-2 border-b border-slate-100 bg-slate-100/60">
+                                  <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">Section</span>
+                                  <span className="w-14 text-center text-[10px] font-bold uppercase tracking-widest text-slate-400">View</span>
+                                  <span className="w-14 text-center text-[10px] font-bold uppercase tracking-widest text-slate-400">Edit</span>
+                                </div>
+                                {PROFILE_SECTIONS.map(sec => (
+                                  <div key={sec.key} className="flex items-center gap-3 px-4 py-2.5 border-b border-slate-50 last:border-0">
+                                    <span className="flex-1 text-sm font-medium text-slate-700">{sec.label}</span>
+                                    {["view", "edit"].map(k => (
+                                      <div key={k} className="w-14 flex justify-center">
+                                        <input type="checkbox"
+                                          checked={editingProfilePerms[sec.key]?.[k] || false}
+                                          onChange={e => {
+                                            setEditingProfilePerms(prev => ({
+                                              ...prev,
+                                              [sec.key]: { ...prev[sec.key], [k]: e.target.checked }
+                                            }));
+                                          }}
+                                          className="w-4 h-4 rounded accent-blue-600" />
+                                      </div>
+                                    ))}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* App Tab Permissions */}
+                            <div>
+                                <p className={lbl + " mb-3"}>App Tab Permissions</p>
+                                <GroupedPermissions modules={permissions} onChange={updatePerm} />
+                            </div>
                           </div>
                         )}
                         <div className="mt-2">
@@ -1181,8 +1221,8 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
                                   </div>
                                   <p className="text-xs text-slate-500 truncate">{m.email}</p>
                                   <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                    {/* Role — click to edit (only global_admin can change) */}
-                                    {isGlobalAdmin && m.id !== currentUser.id && editingRoleId === m.id ? (
+                                    {/* Role — click to edit (only global_admin/super_admin can change) */}
+                                    {(isGlobalAdmin || currentUser.role === "super_admin") && m.id !== currentUser.id && editingRoleId === m.id ? (
                                       <select
                                         autoFocus
                                         className="text-[11px] font-bold px-1.5 py-0.5 rounded-lg border border-blue-300 bg-white text-slate-700 outline-none"
@@ -1191,13 +1231,13 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
                                         onBlur={() => setEditingRoleId(null)}>
                                         <option value="user">User</option>
                                         <option value="admin">Admin</option>
-                                        <option value="super_admin">Super Admin</option>
+                                        {isGlobalAdmin && <option value="super_admin">Super Admin</option>}
                                       </select>
                                     ) : (
                                       <span
-                                        onClick={() => isGlobalAdmin && m.id !== currentUser.id && setEditingRoleId(m.id)}
-                                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${mb.color} ${isGlobalAdmin && m.id !== currentUser.id ? "cursor-pointer hover:opacity-70" : ""}`}
-                                        title={isGlobalAdmin && m.id !== currentUser.id ? "Click to change role" : ""}>
+                                        onClick={() => (isGlobalAdmin || currentUser.role === "super_admin") && m.id !== currentUser.id && setEditingRoleId(m.id)}
+                                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${mb.color} ${(isGlobalAdmin || currentUser.role === "super_admin") && m.id !== currentUser.id ? "cursor-pointer hover:opacity-70" : ""}`}
+                                        title={(isGlobalAdmin || currentUser.role === "super_admin") && m.id !== currentUser.id ? "Click to change role" : ""}>
                                         {mb.label}
                                       </span>
                                     )}

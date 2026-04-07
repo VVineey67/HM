@@ -58,6 +58,8 @@ router.post("/", upload.fields([{ name: "logo", maxCount: 1 }]), async (req, res
       address:      b.address     || "",
       logo_url:     logoUrl       || "",
       is_active:    true,
+      created_by_id: b.createdById || null,
+      created_by_name: b.createdByName || null,
     }).select().single();
     if (error) throw error;
     res.json({ success: true, id: data.id });
@@ -130,6 +132,8 @@ router.post("/bulk", async (req, res) => {
       address:      r.address     || "",
       logo_url:     "",
       is_active:    true,
+      created_by_id: null,
+      created_by_name: "Bulk Upload",
     }));
     const { error } = await supabase.from("projects").insert(inserts);
     if (error) throw error;

@@ -70,7 +70,9 @@ export default function UOMList() {
     try {
       const url    = editId ? `${API}/api/procurement/uom/${editId}` : `${API}/api/procurement/uom`;
       const method = editId ? "PUT" : "POST";
-      await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+      const u = JSON.parse(localStorage.getItem("bms_user") || "{}");
+      const payload = { ...form, createdById: u.id || "", createdByName: u.name || "" };
+      await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       showToast(editId ? "UOM updated" : "UOM added");
       setShowModal(false);
       fetchUoms();
@@ -153,10 +155,15 @@ export default function UOMList() {
           })
           .filter(r => r.uomName);
         if (!rows.length) { showToast("No valid rows found", "error"); setBulking(false); return; }
+        const currentUser = JSON.parse(localStorage.getItem("bms_user") || "{}");
         await fetch(`${API}/api/procurement/uom/bulk`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ rows }),
+          body: JSON.stringify({ 
+            rows,
+            createdById: currentUser.id || "",
+            createdByName: currentUser.name || ""
+          }),
         });
         showToast(`${rows.length} UOM${rows.length !== 1 ? "s" : ""} added`);
         fetchUoms();

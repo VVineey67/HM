@@ -55,6 +55,8 @@ router.get("/items", async (_req, res) => {
       imageUrl:     r.image_url     || "",
       scopeOfWork:  r.scope_of_work || "",
       remarks:      r.remarks       || "",
+      createdById:  r.created_by_id || "",
+      createdByName: r.created_by_name || "",
     }));
     res.json({ items });
   } catch (err) {
@@ -65,7 +67,7 @@ router.get("/items", async (_req, res) => {
 
 router.post("/items", upload.single("image"), async (req, res) => {
   try {
-    const { materialName, category, unit, itemType, scopeOfWork, remarks } = req.body;
+    const { materialName, category, unit, itemType, scopeOfWork, remarks, createdById, createdByName } = req.body;
     const brands         = JSON.parse(req.body.brands         || "[]");
     const specifications = JSON.parse(req.body.specifications || "[]");
     const item_code      = await getNextItemCode(itemType || "Supply");
@@ -83,6 +85,7 @@ router.post("/items", upload.single("image"), async (req, res) => {
       description: JSON.stringify(specifications), category: category || "",
       unit: unit || "", image_url,
       scope_of_work: scopeOfWork || "", remarks: remarks || "",
+      created_by_id: createdById || "", created_by_name: createdByName || "",
     }).select().single();
     if (error) throw error;
     res.json({ success: true, id: data.id, itemCode: item_code });
@@ -183,6 +186,8 @@ router.post("/items/bulk", async (req, res) => {
         scope_of_work: r.scopeOfWork   || "",
         remarks:       r.remarks       || "",
         image_url:     "",
+        created_by_id: req.body.createdById || null,
+        created_by_name: req.body.createdByName || "Bulk Upload",
       };
     });
 
@@ -225,6 +230,8 @@ router.get("/clauses", async (req, res) => {
       title:     r.title,
       points:    Array.isArray(r.points) ? r.points : [],
       createdAt: r.created_at,
+      createdById: r.created_by_id || "",
+      createdByName: r.created_by_name || "",
     }));
     res.json({ clauses });
   } catch (err) {
@@ -235,7 +242,7 @@ router.get("/clauses", async (req, res) => {
 
 router.post("/clauses", async (req, res) => {
   try {
-    const { type, category, title, points, editedBy } = req.body;
+    const { type, category, title, points, editedBy, createdById, createdByName } = req.body;
     if (!type || !title) return res.status(400).json({ error: "type and title required" });
     const code = await getNextClauseCode(type);
     const pts  = Array.isArray(points) ? points : [];
@@ -244,6 +251,8 @@ router.post("/clauses", async (req, res) => {
       category: category || "",
       title,
       points: pts,
+      created_by_id: createdById || "",
+      created_by_name: createdByName || "",
     }).select().single();
     if (error) throw error;
     /* save version 1 */
@@ -376,6 +385,8 @@ router.post("/clauses/bulk", async (req, res) => {
       category: r.category || "",
       title:    r.title    || "",
       points:   Array.isArray(r.points) ? r.points : [],
+      created_by_id: req.body.createdById || null,
+      created_by_name: req.body.createdByName || "Bulk Upload",
     }));
 
     const { data: insertedRows, error } = await supabase.schema("procurement").from("clauses").insert(inserts).select();
@@ -459,6 +470,8 @@ router.get("/vendors", async (_req, res) => {
       docCancelChequeUrl:  r.doc_cancel_cheque_url || "",
       docOtherUrl:         r.doc_other_url         || "",
       docOther2Url:        r.doc_other2_url        || "",
+      createdById:         r.created_by_id         || "",
+      createdByName:       r.created_by_name       || "",
     }));
     res.json({ vendors });
   } catch (err) {
@@ -511,6 +524,8 @@ router.post("/vendors", vendorUpload, async (req, res) => {
       doc_cancel_cheque_url: docCancelChequeUrl  || "",
       doc_other_url:         docOtherUrl         || "",
       doc_other2_url:        docOther2Url        || "",
+      created_by_id:         b.createdById       || "",
+      created_by_name:       b.createdByName     || "",
     }).select().single();
     if (error) throw error;
     res.json({ success: true, id: data.id });
@@ -606,6 +621,8 @@ router.post("/vendors/bulk", async (req, res) => {
       bank_city:       r["Bank City"]              || "",
       bank_state:      r["Bank State"]             || "",
       address:         r["Address"]                || "",
+      created_by_id:   req.body.createdById        || null,
+      created_by_name: req.body.createdByName      || "Bulk Upload",
     })).filter(r => r.vendor_name);
     if (!records.length) return res.status(400).json({ error: "No valid rows (Vendor Firm Name required)" });
     const { error } = await supabase.schema("procurement").from("vendors").insert(records);
@@ -644,11 +661,13 @@ router.get("/sites", async (_req, res) => {
 
 router.post("/sites", async (req, res) => {
   try {
-    const { siteName, siteCode, city, state, billingAddress, siteAddress } = req.body;
+    const { siteName, siteCode, city, state, billingAddress, siteAddress, createdById, createdByName } = req.body;
     const { data, error } = await supabase.from("sites").insert({
       site_name: siteName || "", site_code: siteCode || "",
       city: city || "", state: state || "",
       billing_address: billingAddress || "", site_address: siteAddress || "",
+      created_by_id: createdById || null,
+      created_by_name: createdByName || null,
     }).select().single();
     if (error) throw error;
     res.json({ success: true, id: data.id });
@@ -692,6 +711,8 @@ router.post("/sites/bulk", async (req, res) => {
       site_name: r.siteName || "", site_code: r.siteCode || "",
       city: r.city || "", state: r.state || "",
       billing_address: r.billingAddress || "", site_address: r.siteAddress || "",
+      created_by_id: req.body.createdById || null,
+      created_by_name: req.body.createdByName || "Bulk Upload",
     }));
     const { error } = await supabase.from("sites").insert(inserts);
     if (error) throw error;
@@ -725,9 +746,13 @@ router.get("/uom", async (_req, res) => {
 
 router.post("/uom", async (req, res) => {
   try {
-    const { uomName, uomCode } = req.body;
+    const { uomName, uomCode, createdById, createdByName } = req.body;
     const { data, error } = await supabase.from("uom")
-      .insert({ uom_name: uomName || "", uom_code: uomCode || "" })
+      .insert({ 
+        uom_name: uomName || "", uom_code: uomCode || "",
+        created_by_id: createdById || null,
+        created_by_name: createdByName || null,
+      })
       .select().single();
     if (error) throw error;
     res.json({ success: true, id: data.id });
@@ -765,7 +790,12 @@ router.delete("/uom/:id", async (req, res) => {
 router.post("/uom/bulk", async (req, res) => {
   try {
     const { rows } = req.body;
-    const inserts = rows.map(r => ({ uom_name: r.uomName || "", uom_code: r.uomCode || "" }));
+    const inserts = rows.map(r => ({ 
+      uom_name: r.uomName || "", 
+      uom_code: r.uomCode || "",
+      created_by_id: req.body.createdById || null,
+      created_by_name: req.body.createdByName || "Bulk Upload",
+    }));
     const { error } = await supabase.from("uom").insert(inserts);
     if (error) throw error;
     res.json({ success: true, count: rows.length });
@@ -837,6 +867,8 @@ router.post("/categories/bulk", async (req, res) => {
         category_name: r.categoryName || "",
         description:   r.description  || "",
         status:        r.status       || "Active",
+        created_by_id: req.body.createdById || null,
+        created_by_name: req.body.createdByName || "Bulk Upload",
       };
     });
 
@@ -851,10 +883,14 @@ router.post("/categories/bulk", async (req, res) => {
 
 router.post("/categories", async (req, res) => {
   try {
-    const { categoryName, description, status } = req.body;
+    const { categoryName, description, status, createdById, createdByName } = req.body;
     const categoryCode = await getNextCategoryCode();
     const { data, error } = await supabase.from("categories")
-      .insert({ category_code: categoryCode, category_name: categoryName || "", description: description || "", status: status || "Active" })
+      .insert({ 
+        category_code: categoryCode, category_name: categoryName || "", description: description || "", status: status || "Active",
+        created_by_id: createdById || null,
+        created_by_name: createdByName || null,
+      })
       .select().single();
     if (error) throw error;
     res.json({ success: true, id: data.id, categoryCode });
@@ -958,6 +994,8 @@ router.post("/companies", companyUpload, async (req, res) => {
       logo_url:  logoUrl  || "",
       stamp_url: stampUrl || "",
       sign_url:  signUrl  || "",
+      created_by_id: b.createdById || null,
+      created_by_name: b.createdByName || null,
     }).select().single();
     if (error) throw error;
     res.json({ success: true, id: data.id });

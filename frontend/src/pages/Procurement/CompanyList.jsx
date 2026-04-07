@@ -145,6 +145,9 @@ export default function CompanyList() {
       });
       const url    = editId ? `${API}/api/procurement/companies/${editId}` : `${API}/api/procurement/companies`;
       const method = editId ? "PUT" : "POST";
+      const u = JSON.parse(localStorage.getItem("bms_user") || "{}");
+      fd.append("createdById", u.id || "");
+      fd.append("createdByName", u.name || "");
       const res  = await fetch(url, { method, body: fd });
       const data = await res.json();
       if (!res.ok || data.error) { showToast(data.error || "Failed to save", "error"); setSaving(false); return; }

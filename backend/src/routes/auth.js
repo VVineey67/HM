@@ -39,19 +39,28 @@ router.post("/login", async (req, res) => {
 
   const admin = getAdminClient();
 
-  // Run both in parallel: sign in + fetch profile by email
-  const [authResult, profileResult] = await Promise.all([
-    admin.auth.signInWithPassword({ email, password }),
-    admin.from("users").select("*").eq("email", email).single(),
-  ]);
+  // 1. Database check: does this email exist in our profile table?
+  const { data: profile, error: profileErr } = await admin
+    .from("users")
+    .select("*")
+    .eq("email", email)
+    .single();
 
-  const { data, error } = authResult;
-  if (error) return res.status(401).json({ error: "Email ya password galat hai" });
+  if (profileErr || !profile) {
+    return res.status(404).json({ error: "User does not exist" });
+  }
 
-  const profile = profileResult.data;
+  // 2. Status check: is this profile active?
+  if (!profile.is_active) {
+    return res.status(403).json({ error: "You are blocked, contact to Administrator" });
+  }
 
-  if (!profile || !profile.is_active)
-    return res.status(403).json({ error: "Account inactive hai, admin se contact karo" });
+  // 3. Auth check: verify credentials via Supabase Auth
+  const { data, error: authError } = await admin.auth.signInWithPassword({ email, password });
+
+  if (authError) {
+    return res.status(401).json({ error: "Email ya password galat hai" });
+  }
 
   res.json({
     token: data.session.access_token,

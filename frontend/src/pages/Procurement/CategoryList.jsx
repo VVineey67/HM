@@ -73,7 +73,9 @@ export default function CategoryList() {
     try {
       const url    = editId ? `${API}/api/procurement/categories/${editId}` : `${API}/api/procurement/categories`;
       const method = editId ? "PUT" : "POST";
-      await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+      const u = JSON.parse(localStorage.getItem("bms_user") || "{}");
+      const payload = { ...form, createdById: u.id || "", createdByName: u.name || "" };
+      await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       showToast(editId ? "Category updated" : "Category added");
       setShowModal(false);
       fetchCategories();
@@ -178,10 +180,15 @@ export default function CategoryList() {
           })
           .filter(r => r.categoryName);
         if (!rows.length) { showToast("No valid rows found", "error"); setBulking(false); return; }
+        const currentUser = JSON.parse(localStorage.getItem("bms_user") || "{}");
         const res = await fetch(`${API}/api/procurement/categories/bulk`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ rows }),
+          body: JSON.stringify({ 
+            rows,
+            createdById: currentUser.id || "",
+            createdByName: currentUser.name || ""
+          }),
         });
         const result = await res.json();
         const added   = result.count   || 0;

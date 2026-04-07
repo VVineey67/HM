@@ -102,6 +102,8 @@ router.get("/read/:projectId", async (req, res) => {
         workingHrs,
         otHrs,
         remarks:     r.remarks     || "",
+        createdById: r.created_by_id || "",
+        createdByName: r.created_by_name || "",
       };
     });
 
@@ -117,6 +119,8 @@ router.get("/read/:projectId", async (req, res) => {
       outTime:     r.out_time    || "",
       shift:       r.shift       || "Day",
       remarks:     r.remarks     || "",
+      createdById: r.created_by_id || "",
+      createdByName: r.created_by_name || "",
     }));
 
     const staffContacts = (scRes.data || []).map(r => ({
@@ -131,6 +135,8 @@ router.get("/read/:projectId", async (req, res) => {
       department:  r.department    || "",
       manager:     r.manager       || "",
       contact:     r.contact_no    || "",
+      createdById: r.created_by_id || "",
+      createdByName: r.created_by_name || "",
     }));
 
     const guardContacts = (gcRes.data || []).map(r => ({
@@ -144,6 +150,8 @@ router.get("/read/:projectId", async (req, res) => {
       shift:       r.shift_duty  || "",
       contact:     r.contact_no  || "",
       remarks:     r.remarks     || "",
+      createdById: r.created_by_id || "",
+      createdByName: r.created_by_name || "",
     }));
 
     const result = { staff, guards, staffContacts, guardContacts, contacts: staffContacts };
@@ -177,6 +185,8 @@ router.post("/add/:projectId/:sheetName", async (req, res) => {
         out_time:    data.outTime     || data.out_time || "",
         shift:       data.shift       || "Day",
         remarks:     data.remarks     || "",
+        created_by_id:   data.createdById   || "",
+        created_by_name: data.createdByName || "",
       });
       if (error) throw error;
 
@@ -193,6 +203,8 @@ router.post("/add/:projectId/:sheetName", async (req, res) => {
         out_time:   data.outTime     || data.out_time || "",
         shift:      data.shift       || "Day",
         remarks:    data.remarks     || "",
+        created_by_id:   data.createdById   || "",
+        created_by_name: data.createdByName || "",
       });
       if (error) throw error;
 
@@ -217,6 +229,8 @@ router.post("/add/:projectId/:sheetName", async (req, res) => {
         department:   data.department  || "",
         manager:      data.manager     || "",
         contact_no:   data.contactNo   || data.contact || "",
+        created_by_id:   data.createdById   || "",
+        created_by_name: data.createdByName || "",
       });
       if (error) throw error;
 
@@ -230,6 +244,8 @@ router.post("/add/:projectId/:sheetName", async (req, res) => {
         shift_duty:   data.shift       || data.shiftDuty || "",
         contact_no:   data.contactNo   || data.contact || "",
         remarks:      data.remarks     || "",
+        created_by_id:   data.createdById   || "",
+        created_by_name: data.createdByName || "",
       });
       if (error) throw error;
     }
@@ -383,20 +399,20 @@ router.post("/bulk-upload/:projectId/:type", upload.single("file"), async (req, 
       if (type === "staff") {
         if (!clean[0]) { errors.push(`Row ${rowNum}: Date required`); return; }
         if (!clean[2]) { errors.push(`Row ${rowNum}: Name required`); return; }
-        rows.push({ project_id: projectId, date: clean[0] || null, site_code: clean[1] || projectId, name: clean[2], designation: clean[3] || "", department: clean[4] || "", status: clean[5] || "Absent", in_time: clean[6] || "", out_time: clean[7] || "", shift: clean[8] || "Day", remarks: clean[9] || "" });
+        rows.push({ project_id: projectId, date: clean[0] || null, site_code: clean[1] || projectId, name: clean[2], designation: clean[3] || "", department: clean[4] || "", status: clean[5] || "Absent", in_time: clean[6] || "", out_time: clean[7] || "", shift: clean[8] || "Day", remarks: clean[9] || "", created_by_id: req.body.createdById || null, created_by_name: req.body.createdByName || "Bulk Upload" });
 
       } else if (type === "guard") {
         if (!clean[0]) { errors.push(`Row ${rowNum}: Date required`); return; }
         if (!clean[2]) { errors.push(`Row ${rowNum}: Name required`); return; }
-        rows.push({ project_id: projectId, date: clean[0] || null, site_code: clean[1] || projectId, name: clean[2], type: clean[3] || "Security Guard", location: clean[4] || "", status: clean[5] || "Absent", in_time: clean[6] || "", out_time: clean[7] || "", shift: clean[8] || "Day", remarks: clean[9] || "" });
+        rows.push({ project_id: projectId, date: clean[0] || null, site_code: clean[1] || projectId, name: clean[2], type: clean[3] || "Security Guard", location: clean[4] || "", status: clean[5] || "Absent", in_time: clean[6] || "", out_time: clean[7] || "", shift: clean[8] || "Day", remarks: clean[9] || "", created_by_id: req.body.createdById || null, created_by_name: req.body.createdByName || "Bulk Upload" });
 
       } else if (type === "contact" || type === "sc") {
         if (!clean[5]) { errors.push(`Row ${rowNum}: Name required`); return; }
-        rows.push({ project_id: projectId, emp_id: clean[2] || "", joining_date: clean[3] || null, email: clean[4] || "", name: clean[5], designation: clean[6] || "", department: clean[7] || "", manager: clean[8] || "", contact_no: clean[9] || "" });
+        rows.push({ project_id: projectId, emp_id: clean[2] || "", joining_date: clean[3] || null, email: clean[4] || "", name: clean[5], designation: clean[6] || "", department: clean[7] || "", manager: clean[8] || "", contact_no: clean[9] || "", created_by_id: req.body.createdById || null, created_by_name: req.body.createdByName || "Bulk Upload" });
 
       } else if (type === "gc") {
         if (!clean[2]) { errors.push(`Row ${rowNum}: Name required`); return; }
-        rows.push({ project_id: projectId, name: clean[2], joining_date: clean[3] || null, designation: clean[4] || "Security Guard", status: clean[5] || "Deactive", shift_duty: clean[6] || "", contact_no: clean[7] || "", remarks: clean[8] || "" });
+        rows.push({ project_id: projectId, name: clean[2], joining_date: clean[3] || null, designation: clean[4] || "Security Guard", status: clean[5] || "Deactive", shift_duty: clean[6] || "", contact_no: clean[7] || "", remarks: clean[8] || "", created_by_id: req.body.createdById || null, created_by_name: req.body.createdByName || "Bulk Upload" });
       }
     });
 

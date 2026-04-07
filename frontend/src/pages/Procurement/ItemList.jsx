@@ -143,6 +143,11 @@ export default function ItemList() {
       fd.append("brands",       JSON.stringify(form.brands.filter(b => b.trim())));
       fd.append("unit", form.unit);
       fd.append("remarks",      form.remarks);
+      
+      const currentUser = JSON.parse(localStorage.getItem("bms_user") || "{}");
+      fd.append("createdById", currentUser.id || "");
+      fd.append("createdByName", currentUser.name || "");
+
       if (form.image)        fd.append("image",    form.image);
       if (form.imagePreview) fd.append("imageUrl", form.imagePreview);
 
@@ -285,9 +290,14 @@ export default function ItemList() {
     if (!bulkRows.length) return showToast("No valid rows to upload", "error");
     setBulkSaving(true);
     try {
+      const currentUser = JSON.parse(localStorage.getItem("bms_user") || "{}");
       const res  = await fetch(`${API}/api/procurement/items/bulk`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows: bulkRows }),
+        body: JSON.stringify({ 
+          rows: bulkRows,
+          createdById: currentUser.id || "",
+          createdByName: currentUser.name || ""
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Upload failed");
@@ -653,13 +663,13 @@ export default function ItemList() {
               {/* Unit + Remarks row */}
               <div className="grid grid-cols-2 gap-3">
                 {viewItem.unit && (
-                  <div className="bg-slate-50 rounded-xl p-3">
+                  <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
                     <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Unit</p>
                     <p className="text-sm font-semibold text-slate-700">{viewItem.unit}</p>
                   </div>
                 )}
                 {viewItem.remarks && (
-                  <div className="bg-slate-50 rounded-xl p-3">
+                  <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
                     <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Remarks</p>
                     <p className="text-sm text-slate-700">{viewItem.remarks}</p>
                   </div>

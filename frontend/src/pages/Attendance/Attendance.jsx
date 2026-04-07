@@ -253,6 +253,9 @@ const Attendance = ({ selectedProject }) => {
       const sheetMap = { staff: "Staff", guard: "Guard", staffContact: "SC", guardContact: "GC" };
       const sheet = sheetMap[data.type];
       const payload = buildPayload(data);
+      const currentUser = JSON.parse(localStorage.getItem("bms_user") || "{}");
+      payload.createdById = currentUser.id || "";
+      payload.createdByName = currentUser.name || "";
       await API.post(`/api/attendance/add/${selectedProject}/${sheet}`, payload);
       delete _cache[selectedProject];
       showToast("Record added successfully");
@@ -268,6 +271,9 @@ const Attendance = ({ selectedProject }) => {
     try {
       const fd = new FormData();
       fd.append("file", file);
+      const currentUser = JSON.parse(localStorage.getItem("bms_user") || "{}");
+      fd.append("createdById", currentUser.id || "");
+      fd.append("createdByName", currentUser.name || "");
       const res = await API.post(`/api/attendance/bulk-upload/${selectedProject}/${type}`, fd, {
         headers: { "Content-Type": "multipart/form-data" },
       });

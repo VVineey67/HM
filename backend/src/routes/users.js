@@ -92,6 +92,8 @@ router.post("/", requireAuth, requireAdminOrAbove, async (req, res) => {
     department:          department          || "",
     role:                role                || "user",
     profile_permissions: profile_permissions || null,
+    created_by_id:       req.body.createdById || null,
+    created_by_name:     req.body.createdByName || null,
   }).select().single();
 
   if (profileError) return res.status(500).json({ error: profileError.message });
@@ -111,9 +113,19 @@ router.put("/:id", requireAuth, requireAdminOrAbove, async (req, res) => {
   if (contact_no          !== undefined) updates.contact_no          = contact_no;
   if (designation         !== undefined) updates.designation         = designation;
   if (department          !== undefined) updates.department          = department;
-  if (role !== undefined && req.user.role === "global_admin" && role !== "global_admin") updates.role = role;
+  if (role !== undefined) {
+    if (req.user.role === "global_admin") {
+      if (role !== "global_admin") updates.role = role;
+    } else if (req.user.role === "super_admin") {
+      if (!["global_admin", "super_admin"].includes(role)) updates.role = role;
+    }
+  }
   if (is_active           !== undefined) updates.is_active           = is_active;
-  if (profile_permissions !== undefined && req.user.role === "global_admin") updates.profile_permissions = profile_permissions;
+  if (profile_permissions !== undefined) {
+    if (req.user.role === "global_admin" || req.user.role === "super_admin") {
+      updates.profile_permissions = profile_permissions;
+    }
+  }
 
   const admin = getAdminClient();
   const { data, error } = await admin.from("users").update(updates).eq("id", id).select().single();
@@ -145,6 +157,7 @@ router.delete("/:id", requireAuth, requireGlobalAdmin, async (req, res) => {
 router.get("/:id/permissions", requireAuth, requireAdminOrAbove, async (req, res) => {
   const admin = getAdminClient();
   const { data: modules } = await admin.from("modules").select("*").eq("is_active", true).order("id");
+  const { data: user }   = await admin.from("users").select("profile_permissions").eq("id", req.params.id).single();
   const { data: perms }   = await admin.from("permissions").select("*").eq("user_id", req.params.id);
 
   const result = (modules || []).map(mod => {
@@ -163,33 +176,40 @@ router.get("/:id/permissions", requireAuth, requireAdminOrAbove, async (req, res
     };
   });
 
-  res.json({ permissions: result });
+  res.json({ permissions: result, profile_permissions: user?.profile_permissions || {} });
 });
 
 /* PUT /api/users/:id/permissions */
 router.put("/:id/permissions", requireAuth, requireAdminOrAbove, async (req, res) => {
   const { id } = req.params;
-  const { permissions } = req.body;
+  const { permissions, profile_permissions } = req.body;
 
-  if (!Array.isArray(permissions))
+  if (permissions && !Array.isArray(permissions))
     return res.status(400).json({ error: "permissions array chahiye" });
 
-  const rows = permissions.map(p => ({
-    user_id:               id,
-    module_id:             p.module_id,
-    can_view:              p.can_view              || false,
-    can_add:               p.can_add               || false,
-    can_edit:              p.can_edit              || false,
-    can_delete:            p.can_delete            || false,
-    can_bulk_upload:       p.can_bulk_upload       || false,
-    can_export:            p.can_export            || false,
-    can_download_document: p.can_download_document || false,
-  }));
-
   const admin = getAdminClient();
-  const { error } = await admin.from("permissions").upsert(rows, { onConflict: "user_id,module_id" });
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (permissions) {
+    const rows = permissions.map(p => ({
+      user_id:               id,
+      module_id:             p.module_id,
+      can_view:              p.can_view              || false,
+      can_add:               p.can_add               || false,
+      can_edit:              p.can_edit              || false,
+      can_delete:            p.can_delete            || false,
+      can_bulk_upload:       p.can_bulk_upload       || false,
+      can_export:            p.can_export            || false,
+      can_download_document: p.can_download_document || false,
+    }));
+    const { error: permError } = await admin.from("permissions").upsert(rows, { onConflict: "user_id,module_id" });
+    if (permError) return res.status(500).json({ error: permError.message });
+  }
+
+  if (profile_permissions) {
+    const { error: profError } = await admin.from("users").update({ profile_permissions }).eq("id", id);
+    if (profError) return res.status(500).json({ error: profError.message });
+  }
+
   res.json({ success: true });
 });
 
@@ -208,7 +228,12 @@ router.post("/modules", requireAuth, requireGlobalAdmin, async (req, res) => {
     return res.status(400).json({ error: "module_key aur module_name required hai" });
 
   const admin = getAdminClient();
-  const { data, error } = await admin.from("modules").insert({ module_key, module_name }).select().single();
+  const { createdById, createdByName } = req.body;
+  const { data, error } = await admin.from("modules").insert({ 
+    module_key, module_name,
+    created_by_id: createdById || null,
+    created_by_name: createdByName || null,
+  }).select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true, module: data });
 });

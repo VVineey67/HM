@@ -76,7 +76,9 @@ export default function SiteList() {
     try {
       const url    = editId ? `${API}/api/procurement/sites/${editId}` : `${API}/api/procurement/sites`;
       const method = editId ? "PUT" : "POST";
-      await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+      const u = JSON.parse(localStorage.getItem("bms_user") || "{}");
+      const payload = { ...form, createdById: u.id || "", createdByName: u.name || "" };
+      await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       showToast(editId ? "Site updated" : "Site added");
       setShowModal(false); fetchSites();
     } catch { showToast("Failed to save", "error"); }
@@ -121,7 +123,16 @@ export default function SiteList() {
           })
           .filter(r => r.siteName);
         if (!rows.length) { showToast("No valid rows found", "error"); setBulking(false); return; }
-        await fetch(`${API}/api/procurement/sites/bulk`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows }) });
+        const currentUser = JSON.parse(localStorage.getItem("bms_user") || "{}");
+        await fetch(`${API}/api/procurement/sites/bulk`, { 
+          method: "POST", 
+          headers: { "Content-Type": "application/json" }, 
+          body: JSON.stringify({ 
+            rows,
+            createdById: currentUser.id || "",
+            createdByName: currentUser.name || ""
+          }) 
+        });
         showToast(`${rows.length} site${rows.length !== 1 ? "s" : ""} added`);
         fetchSites();
       } catch { showToast("Bulk upload failed", "error"); }

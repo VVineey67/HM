@@ -107,11 +107,14 @@ const fmtDate = (iso) => {
 };
 
 /* ── Get current user from localStorage ── */
+const getCurrentUserObj = () => {
+  try { return JSON.parse(localStorage.getItem("bms_user") || "{}"); }
+  catch { return {}; }
+};
+
 const getCurrentUser = () => {
-  try {
-    const u = JSON.parse(localStorage.getItem("bms_user") || "{}");
-    return u.name || u.email || u.username || "Unknown";
-  } catch { return "Unknown"; }
+  const u = getCurrentUserObj();
+  return u.name || u.email || u.username || "Unknown";
 };
 
 export default function ClausesMaster({ type }) {
@@ -186,7 +189,8 @@ export default function ClausesMaster({ type }) {
     if (!cleanTxt.trim())          return showToast("Enter at least one point/line", "error");
     setSaving(true);
     try {
-      const editorName = getCurrentUser();
+      const userObj = getCurrentUserObj();
+      const editorName = userObj.name || userObj.email || userObj.username || "Unknown";
       const url    = editId ? `${API}/api/procurement/clauses/${editId}` : `${API}/api/procurement/clauses`;
       const method = editId ? "PUT" : "POST";
       const res    = await fetch(url, {
@@ -195,6 +199,8 @@ export default function ClausesMaster({ type }) {
         body:    JSON.stringify({
           type, category: form.category, title: form.title.trim(),
           points: [form.content], editedBy: editorName,
+          createdById: userObj.id || "",
+          createdByName: userObj.name || "",
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error || "Save failed");
@@ -275,9 +281,14 @@ export default function ClausesMaster({ type }) {
     if (!bulkRows.length) return showToast("No valid rows", "error");
     setBulkSaving(true);
     try {
+      const currentUser = JSON.parse(localStorage.getItem("bms_user") || "{}");
       const res  = await fetch(`${API}/api/procurement/clauses/bulk`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body:   JSON.stringify({ rows: bulkRows, type }),
+        body:   JSON.stringify({ 
+          rows: bulkRows, type,
+          createdById: currentUser.id || "",
+          createdByName: currentUser.name || ""
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Bulk failed");

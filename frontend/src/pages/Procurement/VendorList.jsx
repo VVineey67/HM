@@ -123,6 +123,9 @@ export default function VendorList() {
     setSaving(true);
     try {
       const fd = new FormData();
+      const currentUser = JSON.parse(localStorage.getItem("bms_user") || "{}");
+      fd.append("createdById", currentUser.id || "");
+      fd.append("createdByName", currentUser.name || "");
       Object.entries(form).forEach(([k, v]) => {
         if (k === "logoPreview") return;
         if (v instanceof File) fd.append(k, v);
@@ -231,10 +234,15 @@ export default function VendorList() {
     if (!bulkRows.length) return showToast("No valid rows to upload", "error");
     setBulkSaving(true);
     try {
+      const currentUser = JSON.parse(localStorage.getItem("bms_user") || "{}");
       const res = await fetch(`${API}/api/procurement/vendors/bulk`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows: bulkRows }),
+        body: JSON.stringify({ 
+          rows: bulkRows,
+          createdById: currentUser.id || "",
+          createdByName: currentUser.name || ""
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Upload failed");
