@@ -1268,24 +1268,22 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
 
                                 {/* Hover Actions */}
                                 <div className="absolute top-3 right-3 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-all scale-95 group-hover:scale-100">
-                                  {canManage(currentUser.role, m.role, m.id) && !!pp.manage_user?.edit && (
-                                    <button onClick={() => viewPerms(m)} title="Permissions"
-                                      className="p-2 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-all shadow-sm">
-                                      <ShieldCheck size={16} />
-                                    </button>
-                                  )}
-                                  {canManage(currentUser.role, m.role, m.id) && !!pp.manage_user?.edit && (
-                                    <button onClick={() => toggleActive(m)} title={m.is_active ? "Deactivate" : "Activate"}
-                                      className={`p-2 rounded-xl transition-all shadow-sm
-                                        ${m.is_active ? "bg-amber-50 text-amber-600 hover:bg-amber-600 hover:text-white" : "bg-green-50 text-green-600 hover:bg-green-600 hover:text-white"}`}>
-                                      {m.is_active ? <XCircle size={16} /> : <CheckCircle2 size={16} />}
-                                    </button>
-                                  )}
-                                  {isGlobalAdmin && canManage(currentUser.role, m.role, m.id) && (
-                                    <button onClick={() => removeUser(m)} title="Remove"
-                                      className="p-2 rounded-xl bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-sm">
-                                      <Trash2 size={16} />
-                                    </button>
+                                  {canManage(currentUser.role, m.role, m.id) && (isGlobalAdmin || !!pp.manage_user?.edit) && (
+                                    <>
+                                      <button onClick={() => viewPerms(m)} title="Permissions"
+                                        className="p-2 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-all shadow-sm">
+                                        <ShieldCheck size={16} />
+                                      </button>
+                                      <button onClick={() => toggleActive(m)} title={m.is_active ? "Deactivate" : "Activate"}
+                                        className={`p-2 rounded-xl transition-all shadow-sm
+                                          ${m.is_active ? "bg-amber-50 text-amber-600 hover:bg-amber-600 hover:text-white" : "bg-green-50 text-green-600 hover:bg-green-600 hover:text-white"}`}>
+                                        {m.is_active ? <XCircle size={16} /> : <CheckCircle2 size={16} />}
+                                      </button>
+                                      <button onClick={() => removeUser(m)} title="Remove"
+                                        className="p-2 rounded-xl bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-sm">
+                                        <Trash2 size={16} />
+                                      </button>
+                                    </>
                                   )}
                                 </div>
                               </div>
@@ -1349,25 +1347,21 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
 
                               {/* Actions - Premium Buttons */}
                               <div className="flex items-center gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                                {canManage(currentUser.role, m.role, m.id) && !!pp.manage_user?.edit && (
-                                  <button onClick={() => viewPerms(m)} title="Manage Permissions"
-                                    className="p-2.5 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-all shadow-sm">
-                                    <ShieldCheck size={18} />
-                                  </button>
-                                )}
-                                {canManage(currentUser.role, m.role, m.id) && !!pp.manage_user?.edit && (
+                                {canManage(currentUser.role, m.role, m.id) && (isGlobalAdmin || !!pp.manage_user?.edit) && (
                                   <>
+                                    <button onClick={() => viewPerms(m)} title="Manage Permissions"
+                                      className="p-2.5 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-all shadow-sm">
+                                      <ShieldCheck size={18} />
+                                    </button>
                                     <button onClick={() => toggleActive(m)} title={m.is_active ? "Deactivate User" : "Activate User"}
                                       className={`p-2.5 rounded-xl transition-all shadow-sm
                                         ${m.is_active ? "bg-amber-50 text-amber-600 hover:bg-amber-600 hover:text-white" : "bg-green-50 text-green-600 hover:bg-green-600 hover:text-white"}`}>
                                       {m.is_active ? <XCircle size={18} /> : <CheckCircle2 size={18} />}
                                     </button>
-                                    {isGlobalAdmin && (
-                                      <button onClick={() => removeUser(m)} title="Remove User"
-                                        className="p-2.5 rounded-xl bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-sm">
-                                        <Trash2 size={18} />
-                                      </button>
-                                    )}
+                                    <button onClick={() => removeUser(m)} title="Remove User"
+                                      className="p-2.5 rounded-xl bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-sm">
+                                      <Trash2 size={18} />
+                                    </button>
                                   </>
                                 )}
                               </div>
