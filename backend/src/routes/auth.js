@@ -33,9 +33,11 @@ const getUserFromToken = async (token) => {
    Body: { email, password }
 ───────────────────────────────────────── */
 router.post("/login", async (req, res) => {
-  const { email, password } = req.body;
+  let { email, password } = req.body;
   if (!email || !password)
     return res.status(400).json({ error: "Email aur password required hai" });
+
+  email = email.toLowerCase().trim();
 
   const admin = getAdminClient();
 
@@ -84,8 +86,10 @@ router.post("/login", async (req, res) => {
    Supabase khud reset email bhejta hai
 ───────────────────────────────────────── */
 router.post("/forgot-password", async (req, res) => {
-  const { email } = req.body;
+  let { email } = req.body;
   if (!email) return res.status(400).json({ error: "Email required hai" });
+
+  email = email.toLowerCase().trim();
 
   await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${process.env.FRONTEND_URL}/reset-password`,
@@ -228,8 +232,9 @@ router.delete("/avatar", async (req, res) => {
    Token verify ki zaroorat nahi — OTP hi security hai
 ───────────────────────────────────────── */
 router.post("/send-otp", async (req, res) => {
-  const { email } = req.body;
+  let { email } = req.body;
   if (!email) return res.status(400).json({ error: "Email required" });
+  email = email.toLowerCase().trim();
 
   const admin = getAdminClient();
 

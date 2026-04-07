@@ -82,7 +82,8 @@ const GRADIENTS = [
 ];
 const getGradient = (name) => GRADIENTS[(name?.charCodeAt(0) || 0) % GRADIENTS.length];
 
-export default function ManageProjects({ onProjectsUpdate }) {
+export default function ManageProjects({ isGlobalAdmin, permissions = {}, onProjectsUpdate }) {
+  const canEdit = isGlobalAdmin || !!permissions.edit;
   const [projects, setProjects]       = useState([]);
   const [loading, setLoading]         = useState(true);
   const [showModal, setShowModal]     = useState(false);
@@ -337,16 +338,20 @@ export default function ManageProjects({ onProjectsUpdate }) {
             </div>
 
             {/* Bulk Upload */}
-            <button onClick={() => { setShowBulk(true); setBulkRows([]); setBulkFile(""); }}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all">
-              <Upload size={14} /> Bulk Upload
-            </button>
+            {canEdit && (
+              <button onClick={() => { setShowBulk(true); setBulkRows([]); setBulkFile(""); }}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-all">
+                <Upload size={14} /> Bulk Upload
+              </button>
+            )}
 
             {/* Add */}
-            <button onClick={openAdd}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-linear-to-r from-blue-600 to-indigo-600 text-white text-sm font-semibold hover:shadow-md hover:shadow-blue-200 transition-all">
-              <Plus size={15} /> Add Project
-            </button>
+            {canEdit && (
+              <button onClick={openAdd}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-linear-to-r from-blue-600 to-indigo-600 text-white text-sm font-semibold hover:shadow-md hover:shadow-blue-200 transition-all">
+                <Plus size={15} /> Add Project
+              </button>
+            )}
           </div>
         </div>
 
@@ -426,22 +431,28 @@ export default function ManageProjects({ onProjectsUpdate }) {
                       className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors">
                       <Eye size={14} />
                     </button>
-                    <button onClick={() => openEdit(p)} title="Edit"
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-colors">
-                      <Pencil size={14} />
-                    </button>
-                    <button onClick={() => handleDelete(p)} title="Delete"
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors">
-                      <Trash2 size={14} />
-                    </button>
+                    {canEdit && (
+                      <>
+                        <button onClick={() => openEdit(p)} title="Edit"
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-colors">
+                          <Pencil size={14} />
+                        </button>
+                        <button onClick={() => handleDelete(p)} title="Delete"
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                          <Trash2 size={14} />
+                        </button>
+                      </>
+                    )}
                   </div>
                   {/* Toggle switch */}
-                  <button onClick={() => handleToggle(p)}
-                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none
-                      ${p.isActive ? "bg-blue-500" : "bg-slate-200"}`}>
-                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform
-                      ${p.isActive ? "translate-x-4" : "translate-x-0.5"}`} />
-                  </button>
+                  {canEdit && (
+                    <button onClick={() => handleToggle(p)}
+                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none
+                        ${p.isActive ? "bg-blue-500" : "bg-slate-200"}`}>
+                      <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform
+                        ${p.isActive ? "translate-x-4" : "translate-x-0.5"}`} />
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

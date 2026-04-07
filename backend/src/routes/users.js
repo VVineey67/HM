@@ -46,7 +46,12 @@ const requireGlobalAdmin = (req, res, next) => {
 };
 
 /* GET /api/users */
-router.get("/", requireAuth, requireAdminOrAbove, async (req, res) => {
+router.get("/", requireAuth, async (req, res) => {
+  const isAuthorized = ["global_admin", "super_admin", "admin"].includes(req.user.role) || 
+                       (req.user.profile_permissions?.manage_user?.view === true);
+
+  if (!isAuthorized) return res.status(403).json({ error: "Access denied" });
+
   const admin = getAdminClient();
   const { data, error } = await admin
     .from("users")
@@ -59,8 +64,9 @@ router.get("/", requireAuth, requireAdminOrAbove, async (req, res) => {
 
 /* POST /api/users — invite */
 router.post("/", requireAuth, requireAdminOrAbove, async (req, res) => {
-  const { name, email, contact_no, designation, department, role, profile_permissions } = req.body;
+  let { name, email, contact_no, designation, department, role, profile_permissions } = req.body;
   if (!name || !email) return res.status(400).json({ error: "Name aur email required hai" });
+  email = email.toLowerCase().trim();
 
   // global_admin role KABHI bhi app se assign nahi hoga — sirf Supabase Dashboard se
   if (role === "global_admin")

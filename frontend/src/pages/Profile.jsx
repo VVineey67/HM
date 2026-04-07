@@ -1249,11 +1249,13 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
                                 </div>
                               </div>
                               <div className="flex items-center gap-1.5 shrink-0">
-                                <button onClick={() => viewPerms(m)}
-                                  className="text-xs font-semibold text-blue-600 hover:text-blue-800 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors">
-                                  Permissions
-                                </button>
-                                {m.id !== currentUser.id && (
+                                {(isGlobalAdmin || !!pp.manage_user?.edit) && (
+                                  <button onClick={() => viewPerms(m)}
+                                    className="text-xs font-semibold text-blue-600 hover:text-blue-800 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors">
+                                    Permissions
+                                  </button>
+                                )}
+                                {m.id !== currentUser.id && (isGlobalAdmin || !!pp.manage_user?.edit) && (
                                   <>
                                     <button onClick={() => toggleActive(m)}
                                       className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors
@@ -1281,7 +1283,7 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
 
             {/* ─── MANAGE PROJECTS ─── */}
             {section === "projects" && (isGlobalAdmin || !!pp.add_project?.view) && (
-              <ManageProjects onProjectsUpdate={onProjectsUpdate} />
+              <ManageProjects isGlobalAdmin={isGlobalAdmin} permissions={pp.add_project} onProjectsUpdate={onProjectsUpdate} />
             )}
 
             {/* ─── SERIALIZATION ─── */}
