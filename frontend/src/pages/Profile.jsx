@@ -4,8 +4,9 @@ import {
   CheckCircle2, XCircle, Mail, Phone, Building2,
   Briefcase, Camera, FolderOpen, Trash2, Plus,
   UserCircle, Lock, Eye, EyeOff, KeyRound, SendHorizonal,
-  GitMerge, ChevronDown, Pencil
+  GitMerge, ChevronDown, Pencil, LayoutDashboard
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import api from "../utils/api";
 import ManageProjects from "../components/ManageProjects";
 
@@ -19,7 +20,6 @@ const ROLE_BADGE = {
 };
 
 const PROFILE_SECTIONS = [
-  { key: "add_user",      label: "Add User"       },
   { key: "manage_user",   label: "Manage Users"   },
   { key: "add_project",   label: "Add Project"    },
   { key: "serialization", label: "Serialization"  },
@@ -27,7 +27,6 @@ const PROFILE_SECTIONS = [
 ];
 
 const DEFAULT_PROFILE_PERMS = {
-  add_user:      { view: false, edit: false },
   manage_user:   { view: false, edit: false },
   add_project:   { view: false, edit: false },
   serialization: { view: false, edit: false },
@@ -298,6 +297,7 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
   const [section, setSection]   = useState("profile");
   const [toast, setToast]       = useState(null);
   const [loading, setLoading]   = useState(false);
+  const [showAddUser, setShowAddUser] = useState(false);
 
   /* Avatar */
   const [avatar, setAvatar]     = useState(currentUser.avatar || null);
@@ -335,6 +335,7 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
   const [editingProfilePerms, setEditingProfilePerms] = useState(DEFAULT_PROFILE_PERMS);
   const [permLoading, setPermLoading] = useState(false);
   const [permFilter, setPermFilter]   = useState("all");
+  const [viewType, setViewType]       = useState("list");
 
   /* Projects count for header stats */
   const [projectsCount, setProjectsCount] = useState(0);
@@ -379,8 +380,8 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
   }, [section]);
 
   useEffect(() => {
-    if (section === "add_user" && newUserModules.length === 0) fetchModulesForNewUser();
-  }, [section]);
+    if (showAddUser && newUserModules.length === 0) fetchModulesForNewUser();
+  }, [showAddUser]);
 
   const fetchModulesForNewUser = async () => {
     setModulesLoading(true);
@@ -537,6 +538,8 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
     } finally { setOtpLoading(false); }
   };
 
+
+
   /* ── Add member ── */
   const addMember = async (e) => {
     e.preventDefault();
@@ -552,7 +555,9 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
       setNewUserProfilePerms(DEFAULT_PROFILE_PERMS);
       setAllPermsSelected(false);
       setNewUserModules(prev => prev.map(m => ({ ...m, can_view: false, can_add: false, can_edit: false, can_delete: false, can_bulk_upload: false, can_export: false, can_download_document: false })));
+      setShowAddUser(false); // Modal close karo
       showToast(`Invite sent to ${newUser.email}`);
+      fetchTeam(); // List refresh karo
     } catch (err) { showToast(err.response?.data?.error || "Failed to add member", "error"); }
     finally { setLoading(false); }
   };
@@ -732,7 +737,6 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
   const TABS = [
     { id: "profile",       label: "Personal info",  show: true },
     { id: "security",      label: "Security",        show: true },
-    { id: "add_user",      label: "Add User",        show: isGlobalAdmin || !!pp.add_user?.view      },
     { id: "team",          label: "Manage Users",    show: isGlobalAdmin || !!pp.manage_user?.view   },
     { id: "projects",      label: "Projects",        show: isGlobalAdmin || !!pp.add_project?.view   },
     { id: "serialization", label: "Serialization",   show: isGlobalAdmin || !!pp.serialization?.view },
@@ -1052,119 +1056,6 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
               </div>
             )}
 
-            {/* ─── ADD USER ─── */}
-            {section === "add_user" && (isGlobalAdmin || !!pp.add_user?.view) && (
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-                <h2 className="text-lg font-black text-slate-800 mb-1">Add User</h2>
-                <p className="text-sm text-slate-500 mb-6">An invite email will be sent to set their password.</p>
-                <form onSubmit={addMember} className="space-y-6">
-
-                  {/* ── Section 1: Basic Info + Role ── */}
-                  <div>
-                    <p className={lbl + " mb-3"}>Basic Information</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <span className={lbl}>Full Name *</span>
-                        <input className={inp} value={newUser.name}
-                          onChange={(e) => setNewUser((p) => ({ ...p, name: e.target.value }))} required />
-                      </div>
-                      <div>
-                        <span className={lbl}>Email Address *</span>
-                        <input type="email" className={inp} value={newUser.email}
-                          onChange={(e) => setNewUser((p) => ({ ...p, email: e.target.value }))} required />
-                      </div>
-                      <div>
-                        <span className={lbl}>Contact Number</span>
-                        <input className={inp} value={newUser.contact_no}
-                          onChange={(e) => setNewUser((p) => ({ ...p, contact_no: e.target.value }))} />
-                      </div>
-                      <div>
-                        <span className={lbl}>Designation</span>
-                        <input className={inp} value={newUser.designation}
-                          onChange={(e) => setNewUser((p) => ({ ...p, designation: e.target.value }))} />
-                      </div>
-                      <div>
-                        <span className={lbl}>Department</span>
-                        <input className={inp} value={newUser.department}
-                          onChange={(e) => setNewUser((p) => ({ ...p, department: e.target.value }))} />
-                      </div>
-                      <div>
-                        <span className={lbl}>Role</span>
-                        <select className={inp} value={newUser.role}
-                          onChange={(e) => {
-                            const newRole = e.target.value;
-                            setNewUser((p) => ({ ...p, role: newRole }));
-                            applyRoleDefaults(newRole);
-                          }}>
-                          <option value="user">User</option>
-                          {(isGlobalAdmin || currentUser.role === "super_admin") && <option value="admin">Admin</option>}
-                          {isGlobalAdmin && <option value="super_admin">Super Admin</option>}
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* ── Section 2: Profile Management Access ── */}
-                  <div className="border-t border-slate-100 pt-5">
-                    <p className={lbl + " mb-3"}>Profile Management Access</p>
-                    <div className="rounded-xl border border-slate-100 bg-slate-50 overflow-hidden">
-                      {/* header */}
-                      <div className="flex items-center gap-3 px-4 py-2 border-b border-slate-100 bg-slate-100/60">
-                        <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">Section</span>
-                        <span className="w-14 text-center text-[10px] font-bold uppercase tracking-widest text-slate-400">View</span>
-                        <span className="w-14 text-center text-[10px] font-bold uppercase tracking-widest text-slate-400">Edit</span>
-                      </div>
-                      {PROFILE_SECTIONS.map(sec => (
-                        <div key={sec.key} className="flex items-center gap-3 px-4 py-2.5 border-b border-slate-50 last:border-0">
-                          <span className="flex-1 text-sm font-medium text-slate-700">{sec.label}</span>
-                          {["view", "edit"].map(k => (
-                            <div key={k} className="w-14 flex justify-center">
-                              <input type="checkbox"
-                                checked={newUserProfilePerms[sec.key]?.[k] || false}
-                                onChange={e => {
-                                  setNewUserProfilePerms(prev => ({
-                                    ...prev,
-                                    [sec.key]: { ...prev[sec.key], [k]: e.target.checked }
-                                  }));
-                                }}
-                                className="w-4 h-4 rounded accent-blue-600" />
-                            </div>
-                          ))}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* ── Section 3: App Tab Permissions ── */}
-                  <div className="border-t border-slate-100 pt-5">
-                    <div className="flex items-center justify-between mb-3">
-                      <p className={lbl}>App Tab Permissions</p>
-                      <label className="flex items-center gap-2 cursor-pointer select-none">
-                        <input type="checkbox" checked={allPermsSelected}
-                          onChange={e => handleAllPerms(e.target.checked)}
-                          className="w-4 h-4 rounded accent-blue-600" />
-                        <span className="text-xs font-bold text-slate-600 uppercase tracking-widest">All Access</span>
-                      </label>
-                    </div>
-
-                    {modulesLoading ? (
-                      <div className="flex justify-center py-6">
-                        <Loader2 size={20} className="animate-spin text-blue-400" />
-                      </div>
-                    ) : newUserModules.length === 0 ? (
-                      <p className="text-sm text-slate-400 text-center py-4">No modules configured yet.</p>
-                    ) : (
-                      <GroupedPermissions modules={newUserModules} onChange={updateNewUserModule} />
-                    )}
-                  </div>
-
-                  <button type="submit" disabled={loading} className={btnPrimary}>
-                    {loading ? <Loader2 size={16} className="animate-spin" /> : <UserPlus size={16} />}
-                    Send Invite
-                  </button>
-                </form>
-              </div>
-            )}
 
             {/* ─── MANAGE USERS ─── */}
             {section === "team" && (isGlobalAdmin || !!pp.manage_user?.view) && (
@@ -1263,50 +1154,158 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
                   </div>
                 ) : (
                   /* Team list */
-                  <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-                    <div className="flex items-center justify-between mb-5">
+                  <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                    <div className="p-6 border-b border-slate-50 bg-slate-50/30 flex items-center justify-between">
                       <div>
-                        <h2 className="text-lg font-black text-slate-800">Manage Users</h2>
+                        <h2 className="text-xl font-black text-slate-800 tracking-tight">User Management</h2>
                         {!teamLoading && (
-                          <p className="text-sm text-slate-500">{members.length} team member{members.length !== 1 ? "s" : ""}</p>
+                          <div className="flex items-center gap-3 mt-0.5">
+                            <p className="text-xs font-medium text-slate-500">
+                              Total {members.length} team member{members.length !== 1 ? "s" : ""}
+                            </p>
+                            <div className="h-3 w-px bg-slate-200" />
+                            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
+                              <button
+                                onClick={() => setViewType("list")}
+                                className={`p-1 rounded-md transition-all ${viewType === "list" ? "bg-white shadow-sm text-blue-600" : "text-slate-400 hover:text-slate-600"}`}
+                                title="List View"
+                              >
+                                <Briefcase size={14} />
+                              </button>
+                              <button
+                                onClick={() => setViewType("tile")}
+                                className={`p-1 rounded-md transition-all ${viewType === "tile" ? "bg-white shadow-sm text-blue-600" : "text-slate-400 hover:text-slate-600"}`}
+                                title="Tile View"
+                              >
+                                <LayoutDashboard size={14} />
+                              </button>
+                            </div>
+                          </div>
                         )}
                       </div>
+                      {(isGlobalAdmin || !!pp.manage_user?.edit) && (
+                        <button 
+                          onClick={() => setShowAddUser(true)}
+                          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-200 transition-all active:scale-95"
+                        >
+                          <UserPlus size={16} />
+                          Add New User
+                        </button>
+                      )}
                     </div>
 
                     {teamLoading ? (
-                      <div className="flex justify-center py-8">
-                        <Loader2 size={24} className="animate-spin text-blue-500" />
+                      <div className="flex justify-center py-16">
+                        <Loader2 size={32} className="animate-spin text-blue-500" />
                       </div>
                     ) : members.length === 0 ? (
-                      <p className="text-center text-sm text-slate-400 py-8">No team members found.</p>
+                      <div className="text-center py-16">
+                        <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                          <Users className="text-slate-300" size={32} />
+                        </div>
+                        <p className="text-sm font-medium text-slate-400">No team members found.</p>
+                      </div>
                     ) : (
-                      <div className="space-y-2">
+                      <div className={viewType === "tile" ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 p-5 animate-in fade-in slide-in-from-bottom-2 duration-300" : "divide-y divide-slate-50"}>
                         {members.map((m) => {
                           const mb = ROLE_BADGE[m.role] || ROLE_BADGE.user;
-                          return (
-                            <div key={m.id}
-                              className="flex items-center justify-between p-4 rounded-xl border border-slate-100 hover:border-slate-200 hover:bg-slate-50 transition-all gap-3">
-                              <div className="flex items-center gap-3 min-w-0">
-                                <div className="w-10 h-10 rounded-full bg-linear-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm shrink-0 overflow-hidden">
-                                  {m.avatar
-                                    ? <img src={m.avatar} alt="" className="w-full h-full object-cover" />
-                                    : (m.name?.charAt(0)?.toUpperCase() || "?")
-                                  }
-                                </div>
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <p className="font-semibold text-sm text-slate-800 truncate">{m.name}</p>
-                                    {!m.is_active && (
-                                      <span className="text-[10px] font-bold text-red-500 bg-red-50 px-1.5 py-0.5 rounded-full">Inactive</span>
+                          const initials = m.name?.split(" ").map(n => n[0]).join("").toUpperCase() || "?";
+                          
+                          if (viewType === "tile") {
+                            return (
+                              <div key={m.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md hover:border-blue-100 transition-all group p-5 relative">
+                                <div className="flex flex-col items-center text-center">
+                                  {/* Avatar */}
+                                  <div className="relative mb-3">
+                                    <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-white font-black text-xl overflow-hidden shadow-sm ring-4 ${m.is_active ? "ring-green-50" : "ring-red-50"}`}
+                                      style={{ background: "linear-gradient(135deg, #3b82f6, #8b5cf6)" }}>
+                                      {m.avatar ? <img src={m.avatar} alt="" className="w-full h-full object-cover" /> : initials}
+                                    </div>
+                                    <div className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-2 border-white ${m.is_active ? "bg-green-500" : "bg-red-500"}`} />
+                                  </div>
+
+                                  <h3 className="font-bold text-slate-800 text-[15px] truncate max-w-full">{m.name}</h3>
+                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{m.designation || "No Title"}</p>
+                                  
+                                  <div className="mt-3 flex flex-col gap-1.5 w-full">
+                                    <div className="flex items-center justify-center gap-1.5 text-xs text-slate-500">
+                                      <Mail size={12} className="opacity-60" />
+                                      <span className="truncate">{m.email}</span>
+                                    </div>
+                                    <div className="flex items-center justify-center gap-1.5 text-xs text-slate-500">
+                                      <Building2 size={12} className="opacity-60" />
+                                      <span>{m.department || "General"}</span>
+                                    </div>
+                                  </div>
+
+                                  <div className="mt-4 flex flex-wrap justify-center gap-2">
+                                    <div className={`inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-1 rounded-lg ${mb.color}`}>
+                                      {mb.label.toUpperCase()}
+                                    </div>
+                                    {m.is_active === false && (
+                                      <div className="inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-1 rounded-lg bg-red-50 text-red-600 border border-red-100 uppercase">
+                                        Inactive
+                                      </div>
                                     )}
                                   </div>
-                                  <p className="text-xs text-slate-500 truncate">{m.email}</p>
-                                  <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                    {/* Role — click to edit (only global_admin/super_admin can change) */}
+                                </div>
+
+                                {/* Hover Actions */}
+                                <div className="absolute top-3 right-3 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-all scale-95 group-hover:scale-100">
+                                  {(isGlobalAdmin || !!pp.manage_user?.edit) && (
+                                    <button onClick={() => viewPerms(m)} title="Permissions"
+                                      className="p-2 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-all shadow-sm">
+                                      <ShieldCheck size={16} />
+                                    </button>
+                                  )}
+                                  {m.id !== currentUser.id && (isGlobalAdmin || !!pp.manage_user?.edit) && (
+                                    <button onClick={() => toggleActive(m)} title={m.is_active ? "Deactivate" : "Activate"}
+                                      className={`p-2 rounded-xl transition-all shadow-sm
+                                        ${m.is_active ? "bg-amber-50 text-amber-600 hover:bg-amber-600 hover:text-white" : "bg-green-50 text-green-600 hover:bg-green-600 hover:text-white"}`}>
+                                      {m.is_active ? <XCircle size={16} /> : <CheckCircle2 size={16} />}
+                                    </button>
+                                  )}
+                                  {isGlobalAdmin && m.id !== currentUser.id && (
+                                    <button onClick={() => removeUser(m)} title="Remove"
+                                      className="p-2 rounded-xl bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-sm">
+                                      <Trash2 size={16} />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          // Default List View (Existing layout)
+                          return (
+                            <div key={m.id}
+                              className="group flex flex-col md:flex-row md:items-center justify-between p-5 hover:bg-slate-50/50 transition-all gap-4">
+                              <div className="flex items-center gap-4 min-w-0">
+                                {/* Avatar with status ring */}
+                                <div className="relative shrink-0">
+                                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black text-base overflow-hidden shadow-sm ring-2 ${m.is_active ? "ring-green-100" : "ring-red-100"}`}
+                                    style={{ background: "linear-gradient(135deg, #3b82f6, #8b5cf6)" }}>
+                                    {m.avatar ? <img src={m.avatar} alt="" className="w-full h-full object-cover" /> : initials}
+                                  </div>
+                                  <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${m.is_active ? "bg-green-500" : "bg-red-500"}`} />
+                                </div>
+
+                                <div className="min-w-0">
+                                  <div className="flex items-baseline gap-2 mb-0.5">
+                                    <p className="font-bold text-[15px] text-slate-800 tracking-tight truncate">{m.name}</p>
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{m.department || "General"}</span>
+                                  </div>
+                                  <div className="flex items-center gap-3 text-xs text-slate-500 mb-1.5">
+                                    <span className="flex items-center gap-1"><Mail size={12} className="opacity-60" /> {m.email}</span>
+                                    {m.contact_no && <span className="flex items-center gap-1"><Phone size={12} className="opacity-60" /> {m.contact_no}</span>}
+                                  </div>
+                                  
+                                  <div className="flex items-center gap-2">
+                                    {/* Role Select / Badge */}
                                     {(isGlobalAdmin || currentUser.role === "super_admin") && m.id !== currentUser.id && editingRoleId === m.id ? (
                                       <select
                                         autoFocus
-                                        className="text-[11px] font-bold px-1.5 py-1 rounded-lg border border-blue-400 bg-white text-slate-700 outline-none shadow-sm"
+                                        className="text-[11px] font-bold px-2 py-1 rounded-lg border border-blue-400 bg-white text-slate-700 outline-none shadow-sm"
                                         defaultValue={m.role}
                                         onChange={e => changeRole(m, e.target.value)}
                                         onBlur={() => setEditingRoleId(null)}>
@@ -1317,34 +1316,40 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
                                     ) : (
                                       <div
                                         onClick={() => (isGlobalAdmin || currentUser.role === "super_admin") && m.id !== currentUser.id && setEditingRoleId(m.id)}
-                                        className={`flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-0.5 rounded-full transition-all ${mb.color} ${(isGlobalAdmin || currentUser.role === "super_admin") && m.id !== currentUser.id ? "cursor-pointer hover:ring-2 hover:ring-blue-100" : ""}`}
-                                        title={(isGlobalAdmin || currentUser.role === "super_admin") && m.id !== currentUser.id ? "Change Role" : ""}>
-                                        {mb.label}
-                                        {(isGlobalAdmin || currentUser.role === "super_admin") && m.id !== currentUser.id && <Pencil size={10} className="opacity-50" />}
+                                        className={`flex items-center gap-1.5 text-[10px] font-black px-3 py-1 rounded-lg transition-all ${mb.color} ${(isGlobalAdmin || currentUser.role === "super_admin") && m.id !== currentUser.id ? "cursor-pointer hover:shadow-md" : ""}`}
+                                      >
+                                        {mb.label.toUpperCase()}
+                                        {(isGlobalAdmin || currentUser.role === "super_admin") && m.id !== currentUser.id && <Pencil size={10} className="opacity-60" />}
                                       </div>
                                     )}
-                                    {m.designation && <span className="text-[10px] text-slate-400">{m.designation}</span>}
+                                    {m.designation && (
+                                      <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-500 text-[10px] font-bold uppercase tracking-wide">
+                                        <Briefcase size={10} /> {m.designation}
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-1.5 shrink-0">
+
+                              {/* Actions - Premium Buttons */}
+                              <div className="flex items-center gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
                                 {(isGlobalAdmin || !!pp.manage_user?.edit) && (
-                                  <button onClick={() => viewPerms(m)}
-                                    className="text-xs font-semibold text-blue-600 hover:text-blue-800 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors">
-                                    Permissions
+                                  <button onClick={() => viewPerms(m)} title="Manage Permissions"
+                                    className="p-2.5 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-all shadow-sm">
+                                    <ShieldCheck size={18} />
                                   </button>
                                 )}
                                 {m.id !== currentUser.id && (isGlobalAdmin || !!pp.manage_user?.edit) && (
                                   <>
-                                    <button onClick={() => toggleActive(m)}
-                                      className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors
-                                        ${m.is_active ? "text-amber-600 hover:bg-amber-50" : "text-green-600 hover:bg-green-50"}`}>
-                                      {m.is_active ? "Deactivate" : "Activate"}
+                                    <button onClick={() => toggleActive(m)} title={m.is_active ? "Deactivate User" : "Activate User"}
+                                      className={`p-2.5 rounded-xl transition-all shadow-sm
+                                        ${m.is_active ? "bg-amber-50 text-amber-600 hover:bg-amber-600 hover:text-white" : "bg-green-50 text-green-600 hover:bg-green-600 hover:text-white"}`}>
+                                      {m.is_active ? <XCircle size={18} /> : <CheckCircle2 size={18} />}
                                     </button>
                                     {isGlobalAdmin && (
-                                      <button onClick={() => removeUser(m)}
-                                        className="text-xs font-semibold text-red-500 hover:text-red-700 px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors">
-                                        Remove
+                                      <button onClick={() => removeUser(m)} title="Remove User"
+                                        className="p-2.5 rounded-xl bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-sm">
+                                        <Trash2 size={18} />
                                       </button>
                                     )}
                                   </>
@@ -1537,6 +1542,109 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
               </div>
             )}
 
+
+      {/* ─── ADD USER MODAL ─── */}
+      <AnimatePresence>
+        {showAddUser && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setShowAddUser(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
+              
+            <motion.div initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+              
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-10">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
+                    <UserPlus size={20} className="text-blue-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black text-slate-800 tracking-tight">Add New Member</h3>
+                    <p className="text-xs font-medium text-slate-400 mt-0.5">Invite a colleague to your team</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowAddUser(false)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-slate-100 text-slate-400 transition-colors">
+                  <XCircle size={20} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6 space-y-8">
+                <form id="add-member-form" onSubmit={addMember} className="space-y-8">
+                  {/* Basic Info */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-4 border-l-4 border-blue-500 pl-3">
+                      <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Basic Details</p>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                      <div><span className={lbl}>Full Name *</span><input className={inp} value={newUser.name} onChange={(e) => setNewUser((p) => ({ ...p, name: e.target.value }))} required /></div>
+                      <div><span className={lbl}>Email Address *</span><input type="email" className={inp} value={newUser.email} onChange={(e) => setNewUser((p) => ({ ...p, email: e.target.value }))} required /></div>
+                      <div><span className={lbl}>Phone Number</span><input className={inp} value={newUser.contact_no} onChange={(e) => setNewUser((p) => ({ ...p, contact_no: e.target.value }))} /></div>
+                      <div><span className={lbl}>Designation</span><input className={inp} value={newUser.designation} onChange={(e) => setNewUser((p) => ({ ...p, designation: e.target.value }))} /></div>
+                      <div><span className={lbl}>Department</span><input className={inp} value={newUser.department} onChange={(e) => setNewUser((p) => ({ ...p, department: e.target.value }))} /></div>
+                      <div>
+                        <span className={lbl}>Role Access</span>
+                        <select className={inp} value={newUser.role}
+                          onChange={(e) => { const newRole = e.target.value; setNewUser((p) => ({ ...p, role: newRole })); applyRoleDefaults(newRole); }}>
+                          <option value="user">Standard User</option>
+                          {(isGlobalAdmin || currentUser.role === "super_admin") && <option value="admin">Administrator</option>}
+                          {isGlobalAdmin && <option value="super_admin">Super Admin (Organization)</option>}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Profile Perms */}
+                  <div>
+                    <div className="flex items-center justify-between mb-4 border-l-4 border-purple-500 pl-3">
+                      <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Management Access</p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50/50 overflow-hidden shadow-inner">
+                      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-slate-100 bg-slate-100/40">
+                        <span className="flex-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Platform Section</span>
+                        <span className="w-14 text-center text-[10px] font-black uppercase tracking-widest text-slate-400">View</span>
+                        <span className="w-14 text-center text-[10px] font-black uppercase tracking-widest text-slate-400">Edit</span>
+                      </div>
+                      {PROFILE_SECTIONS.map(sec => (
+                        <div key={sec.key} className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 last:border-0 hover:bg-white transition-colors">
+                          <span className="flex-1 text-xs font-bold text-slate-700">{sec.label}</span>
+                          {["view", "edit"].map(k => (
+                            <div key={k} className="w-14 flex justify-center">
+                              <input type="checkbox" checked={newUserProfilePerms[sec.key]?.[k] || false}
+                                onChange={e => setNewUserProfilePerms(prev => ({ ...prev, [sec.key]: { ...prev[sec.key], [k]: e.target.checked } }))}
+                                className="w-4 h-4 rounded-md accent-purple-600 cursor-pointer" />
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Tab Perms */}
+                  <div className="pb-4">
+                    <div className="flex items-center justify-between mb-4 border-l-4 border-emerald-500 pl-3">
+                      <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Module Permissions</p>
+                      <label className="flex items-center gap-2 cursor-pointer group">
+                        <input type="checkbox" checked={allPermsSelected} onChange={e => handleAllPerms(e.target.checked)} className="w-4 h-4 rounded accent-emerald-600" />
+                        <span className="text-[10px] font-black text-slate-400 group-hover:text-emerald-600 uppercase tracking-widest transition-colors">Full Grant</span>
+                      </label>
+                    </div>
+                    {modulesLoading ? <div className="flex justify-center p-8"><Loader2 className="animate-spin text-emerald-500" /></div> : <GroupedPermissions modules={newUserModules} onChange={updateNewUserModule} />}
+                  </div>
+                </form>
+              </div>
+
+              <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-end gap-3">
+                <button onClick={() => setShowAddUser(false)} className="px-5 py-2 text-sm font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-all">Cancel</button>
+                <button form="add-member-form" type="submit" disabled={loading} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl shadow-lg shadow-blue-200 transition-all active:scale-95 flex items-center gap-2">
+                  {loading ? <Loader2 size={16} className="animate-spin" /> : <SendHorizonal size={16} />}
+                  Send Invitation
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
         </div>
       </div>
     </div>

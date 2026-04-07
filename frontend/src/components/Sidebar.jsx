@@ -138,7 +138,7 @@ const Sidebar = ({
     return perm.can_view === true;
   };
 
-  const projects = projectsProp || ["All Project","B-47","GDLV","BHA","SLH","HIH","RWH"];
+  const projects = projectsProp || [];
   const collapsed = isMobile ? false : isCollapsed;
   const initials  = userName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
 
