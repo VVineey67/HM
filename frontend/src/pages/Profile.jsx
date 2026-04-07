@@ -282,6 +282,22 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
   const isAdminOrAbove   = ["global_admin", "super_admin", "admin"].includes(currentUser.role);
   const isGlobalAdmin    = currentUser.role === "global_admin";
 
+  const canManage = (viewerRole, targetRole, targetId) => {
+    if (targetId === currentUser.id) return false; // Cannot manage yourself
+    if (targetRole === "global_admin") return false; // Rule: No one touches Global Admin
+    if (viewerRole === "global_admin") return true;  // Global Admin manages everyone else
+    if (viewerRole === "super_admin") return ["admin", "user"].includes(targetRole);
+    if (viewerRole === "admin") return targetRole === "user";
+    return false;
+  };
+
+  const getManageableRoles = (viewerRole) => {
+    if (viewerRole === "global_admin") return ["super_admin", "admin", "user"];
+    if (viewerRole === "super_admin") return ["admin", "user"];
+    if (viewerRole === "admin") return ["user"];
+    return [];
+  };
+
   const NAV = [
     { id: "profile",  label: "My Profile",      icon: UserCircle },
     { id: "security", label: "Security",         icon: Lock       },
@@ -1252,20 +1268,20 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
 
                                 {/* Hover Actions */}
                                 <div className="absolute top-3 right-3 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-all scale-95 group-hover:scale-100">
-                                  {(isGlobalAdmin || !!pp.manage_user?.edit) && (
+                                  {canManage(currentUser.role, m.role, m.id) && !!pp.manage_user?.edit && (
                                     <button onClick={() => viewPerms(m)} title="Permissions"
                                       className="p-2 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-all shadow-sm">
                                       <ShieldCheck size={16} />
                                     </button>
                                   )}
-                                  {m.id !== currentUser.id && (isGlobalAdmin || !!pp.manage_user?.edit) && (
+                                  {canManage(currentUser.role, m.role, m.id) && !!pp.manage_user?.edit && (
                                     <button onClick={() => toggleActive(m)} title={m.is_active ? "Deactivate" : "Activate"}
                                       className={`p-2 rounded-xl transition-all shadow-sm
                                         ${m.is_active ? "bg-amber-50 text-amber-600 hover:bg-amber-600 hover:text-white" : "bg-green-50 text-green-600 hover:bg-green-600 hover:text-white"}`}>
                                       {m.is_active ? <XCircle size={16} /> : <CheckCircle2 size={16} />}
                                     </button>
                                   )}
-                                  {isGlobalAdmin && m.id !== currentUser.id && (
+                                  {isGlobalAdmin && canManage(currentUser.role, m.role, m.id) && (
                                     <button onClick={() => removeUser(m)} title="Remove"
                                       className="p-2 rounded-xl bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-sm">
                                       <Trash2 size={16} />
@@ -1302,24 +1318,24 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
                                   
                                   <div className="flex items-center gap-2">
                                     {/* Role Select / Badge */}
-                                    {(isGlobalAdmin || currentUser.role === "super_admin") && m.id !== currentUser.id && editingRoleId === m.id ? (
+                                    {canManage(currentUser.role, m.role, m.id) && editingRoleId === m.id ? (
                                       <select
                                         autoFocus
                                         className="text-[11px] font-bold px-2 py-1 rounded-lg border border-blue-400 bg-white text-slate-700 outline-none shadow-sm"
                                         defaultValue={m.role}
                                         onChange={e => changeRole(m, e.target.value)}
                                         onBlur={() => setEditingRoleId(null)}>
-                                        <option value="user">User</option>
-                                        <option value="admin">Admin</option>
-                                        {isGlobalAdmin && <option value="super_admin">Super Admin</option>}
+                                        {getManageableRoles(currentUser.role).map(r => (
+                                          <option key={r} value={r}>{ROLE_BADGE[r]?.label || r}</option>
+                                        ))}
                                       </select>
                                     ) : (
                                       <div
-                                        onClick={() => (isGlobalAdmin || currentUser.role === "super_admin") && m.id !== currentUser.id && setEditingRoleId(m.id)}
-                                        className={`flex items-center gap-1.5 text-[10px] font-black px-3 py-1 rounded-lg transition-all ${mb.color} ${(isGlobalAdmin || currentUser.role === "super_admin") && m.id !== currentUser.id ? "cursor-pointer hover:shadow-md" : ""}`}
+                                        onClick={() => canManage(currentUser.role, m.role, m.id) && setEditingRoleId(m.id)}
+                                        className={`flex items-center gap-1.5 text-[10px] font-black px-3 py-1 rounded-lg transition-all ${mb.color} ${canManage(currentUser.role, m.role, m.id) ? "cursor-pointer hover:shadow-md" : ""}`}
                                       >
                                         {mb.label.toUpperCase()}
-                                        {(isGlobalAdmin || currentUser.role === "super_admin") && m.id !== currentUser.id && <Pencil size={10} className="opacity-60" />}
+                                        {canManage(currentUser.role, m.role, m.id) && <Pencil size={10} className="opacity-60" />}
                                       </div>
                                     )}
                                     {m.designation && (
@@ -1333,13 +1349,13 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
 
                               {/* Actions - Premium Buttons */}
                               <div className="flex items-center gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                                {(isGlobalAdmin || !!pp.manage_user?.edit) && (
+                                {canManage(currentUser.role, m.role, m.id) && !!pp.manage_user?.edit && (
                                   <button onClick={() => viewPerms(m)} title="Manage Permissions"
                                     className="p-2.5 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-all shadow-sm">
                                     <ShieldCheck size={18} />
                                   </button>
                                 )}
-                                {m.id !== currentUser.id && (isGlobalAdmin || !!pp.manage_user?.edit) && (
+                                {canManage(currentUser.role, m.role, m.id) && !!pp.manage_user?.edit && (
                                   <>
                                     <button onClick={() => toggleActive(m)} title={m.is_active ? "Deactivate User" : "Activate User"}
                                       className={`p-2.5 rounded-xl transition-all shadow-sm
@@ -1586,9 +1602,9 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
                         <span className={lbl}>Role Access</span>
                         <select className={inp} value={newUser.role}
                           onChange={(e) => { const newRole = e.target.value; setNewUser((p) => ({ ...p, role: newRole })); applyRoleDefaults(newRole); }}>
+                          {getManageableRoles(currentUser.role).includes("super_admin") && <option value="super_admin">Super Admin (Organization)</option>}
+                          {getManageableRoles(currentUser.role).includes("admin") && <option value="admin">Administrator</option>}
                           <option value="user">Standard User</option>
-                          {(isGlobalAdmin || currentUser.role === "super_admin") && <option value="admin">Administrator</option>}
-                          {isGlobalAdmin && <option value="super_admin">Super Admin (Organization)</option>}
                         </select>
                       </div>
                     </div>
