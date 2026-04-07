@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Plus, Search, Pencil, Trash2, X, Ruler, Upload, Download, FileSpreadsheet, FileText, ChevronDown } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, X, Ruler, Upload, Download, FileSpreadsheet, FileText, ChevronDown, Eye } from "lucide-react";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -28,6 +28,7 @@ export default function UOMList() {
   const [saving, setSaving]       = useState(false);
   const [toast, setToast]         = useState(null);
   const [page, setPage]           = useState(1);
+  const [viewUOM, setViewUOM]     = useState(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showBulkMenu, setShowBulkMenu]     = useState(false);
   const [bulking, setBulking]               = useState(false);
@@ -292,32 +293,29 @@ export default function UOMList() {
           <p className="text-slate-300 font-bold uppercase tracking-widest text-xs">No UOMs found</p>
         </div>
       ) : (
-        <div className="rounded-2xl border border-slate-200 shadow-sm overflow-hidden inline-block min-w-[480px]">
-          <table className="text-sm border-collapse">
+        <div className="rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <table className="w-full text-sm">
             <thead>
               <tr className="bg-slate-800 text-white">
-                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700" style={{width:60}}>S.No</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700" style={{width:220}}>UOM Name</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700" style={{width:140}}>UOM Code</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{width:80}}>Action</th>
+                <th className="text-center px-3 py-3 text-xs font-semibold uppercase tracking-wide w-12">S.No</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide">UOM Name</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide w-36">UOM Code</th>
+                <th className="text-center px-3 py-3 text-xs font-semibold uppercase tracking-wide w-24">Action</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-slate-100">
               {paginated.map((u, idx) => (
-                <tr key={idx} className={`transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-slate-50"} hover:bg-blue-50/50`}>
-                  <td className="px-4 py-3 text-slate-400 text-xs border border-slate-200">{(page - 1) * PER_PAGE + idx + 1}</td>
-                  <td className="px-4 py-3 font-semibold text-slate-800 text-sm border border-slate-200">{u.uomName}</td>
-                  <td className="px-4 py-3 border border-slate-200">
-                    <span className="inline-block px-2.5 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs font-mono font-semibold">{u.uomCode}</span>
+                <tr key={idx} className={`transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"} hover:bg-blue-50/40`}>
+                  <td className="px-3 py-3.5 text-slate-400 text-xs text-center font-medium">{(page - 1) * PER_PAGE + idx + 1}</td>
+                  <td className="px-4 py-3.5 font-semibold text-slate-800 text-sm">{u.uomName}</td>
+                  <td className="px-4 py-3.5">
+                    <span className="px-2.5 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs font-mono font-semibold">{u.uomCode}</span>
                   </td>
-                  <td className="px-4 py-3 border border-slate-200">
-                    <div className="flex items-center gap-1">
-                      {canEdit && (
-                        <button onClick={() => openEdit(u)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all"><Pencil size={13} /></button>
-                      )}
-                      {canDelete && (
-                        <button onClick={() => handleDelete(u.id)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"><Trash2 size={13} /></button>
-                      )}
+                  <td className="px-3 py-3.5">
+                    <div className="flex items-center justify-center gap-0.5">
+                      <button onClick={() => setViewUOM(u)} className="p-1.5 rounded-lg text-slate-300 hover:text-blue-600 hover:bg-blue-50 transition-all"><Eye size={14} /></button>
+                      {canEdit && <button onClick={() => openEdit(u)} className="p-1.5 rounded-lg text-slate-300 hover:text-slate-600 hover:bg-slate-100 transition-all"><Pencil size={14} /></button>}
+                      {canDelete && <button onClick={() => handleDelete(u.id)} className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all"><Trash2 size={14} /></button>}
                     </div>
                   </td>
                 </tr>
@@ -348,6 +346,39 @@ export default function UOMList() {
                     className="px-2 py-1 rounded-lg text-xs font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 disabled:opacity-30 transition-all">›</button>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Modal */}
+      {viewUOM && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className="bg-linear-to-r from-slate-800 to-slate-700 px-6 py-5 relative">
+              <button onClick={() => setViewUOM(null)} className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors"><X size={18} /></button>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center shrink-0">
+                  <Ruler size={20} className="text-blue-300" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-0.5">UOM Name</p>
+                  <h2 className="text-lg font-bold text-white leading-tight">{viewUOM.uomName}</h2>
+                  <div className="flex items-center gap-1.5 mt-1.5">
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Code</p>
+                    <span className="px-2.5 py-0.5 bg-blue-500/20 text-blue-200 rounded-lg text-xs font-mono font-semibold tracking-wider">{viewUOM.uomCode || "—"}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-100">
+              {canEdit && (
+                <button onClick={() => { setViewUOM(null); openEdit(viewUOM); }}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all">
+                  <Pencil size={13} /> Edit
+                </button>
+              )}
+              <button onClick={() => setViewUOM(null)} className="px-5 py-2 rounded-xl text-sm font-semibold bg-slate-900 text-white hover:bg-slate-700 transition-all">Close</button>
             </div>
           </div>
         </div>

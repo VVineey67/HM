@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Plus, Search, Pencil, Trash2, X, MapPin, Upload, Download, FileSpreadsheet, FileText, ChevronDown } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, X, MapPin, Upload, Download, FileSpreadsheet, FileText, ChevronDown, Eye } from "lucide-react";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -40,6 +40,7 @@ export default function SiteList() {
   const [toast, setToast]           = useState(null);
   const [bulking, setBulking]       = useState(false);
   const [page, setPage]             = useState(1);
+  const [viewSite, setViewSite]     = useState(null);
   const csvRef                      = useRef();
   const bulkMenuRef                 = useRef();
   const [permissions, setPermissions] = useState({});
@@ -350,8 +351,9 @@ export default function SiteList() {
               <thead>
                 <tr className="bg-slate-800 text-white">
                   {["S.No","Site Name","Code","City","State","Billing Address","Site Address","Action"].map((h, i) => (
-                    <th key={i} className={`text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700 last:border-r-0
-                      ${i === 0 ? "w-12" : ""} ${i === 1 ? "min-w-[140px]" : ""} ${i === 5 || i === 6 ? "min-w-[240px]" : ""} ${i === 7 ? "w-16" : ""}`}>
+                    <th key={i} className={`px-4 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700 last:border-r-0
+                      ${i === 0 ? "w-12 text-center" : "text-left"}
+                      ${i === 1 ? "min-w-[140px]" : ""} ${i === 5 || i === 6 ? "min-w-[240px]" : ""} ${i === 7 ? "w-20 text-center" : ""}`}>
                       {h}
                     </th>
                   ))}
@@ -360,7 +362,7 @@ export default function SiteList() {
               <tbody>
                 {paginated.map((s, idx) => (
                   <tr key={idx} className={`transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-slate-50"} hover:bg-blue-50/50`}>
-                    <td className="px-4 py-3 text-slate-400 text-xs border border-slate-200 align-top">{(page - 1) * PER_PAGE + idx + 1}</td>
+                    <td className="px-4 py-3 text-slate-400 text-xs border border-slate-200 align-middle text-center">{(page - 1) * PER_PAGE + idx + 1}</td>
                     <td className="px-4 py-3 font-semibold text-slate-800 text-sm border border-slate-200 align-top leading-snug">{s.siteName}</td>
                     <td className="px-4 py-3 border border-slate-200 align-top">
                       <span className="inline-block px-2 py-0.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-mono font-semibold whitespace-nowrap">{s.siteCode}</span>
@@ -369,8 +371,9 @@ export default function SiteList() {
                     <td className="px-4 py-3 text-slate-500 text-xs border border-slate-200 align-top">{s.state}</td>
                     <td className="px-4 py-3 text-slate-600 text-xs border border-slate-200 align-top leading-relaxed">{s.billingAddress}</td>
                     <td className="px-4 py-3 text-slate-600 text-xs border border-slate-200 align-top leading-relaxed">{s.siteAddress}</td>
-                    <td className="px-4 py-3 border border-slate-200 align-top">
-                      <div className="flex items-center gap-1 justify-end">
+                    <td className="px-4 py-3 border border-slate-200 align-middle">
+                      <div className="flex items-center gap-1 justify-center">
+                        <button onClick={() => setViewSite(s)} className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all"><Eye size={13} /></button>
                         {canEdit && (
                           <button onClick={() => openEdit(s)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all"><Pencil size={13} /></button>
                         )}
@@ -408,6 +411,83 @@ export default function SiteList() {
                     className="px-2 py-1 rounded-lg text-xs font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 disabled:opacity-30 transition-all">›</button>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Modal */}
+      {viewSite && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+
+            {/* Coloured header banner */}
+            <div className="bg-linear-to-r from-slate-800 to-slate-700 px-6 py-5 relative">
+              <button onClick={() => setViewSite(null)}
+                className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors">
+                <X size={18} />
+              </button>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center shrink-0">
+                  <MapPin size={20} className="text-blue-300" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-0.5">Site Name</p>
+                  <h2 className="text-lg font-bold text-white leading-tight">{viewSite.siteName}</h2>
+                  <div className="flex items-center gap-1.5 mt-1.5">
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Site Code</p>
+                    <span className="px-2.5 py-0.5 bg-blue-500/20 text-blue-200 rounded-lg text-xs font-mono font-semibold tracking-wider">
+                      {viewSite.siteCode || "—"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="px-6 py-5 space-y-4">
+
+              {/* City + State row */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-slate-50 rounded-xl px-4 py-3">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">City</p>
+                  <p className="text-sm font-semibold text-slate-700">{viewSite.city || "—"}</p>
+                </div>
+                <div className="bg-slate-50 rounded-xl px-4 py-3">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">State</p>
+                  <p className="text-sm font-semibold text-slate-700">{viewSite.state || "—"}</p>
+                </div>
+              </div>
+
+              {/* Billing Address */}
+              <div className="rounded-xl border border-slate-100 overflow-hidden">
+                <div className="bg-slate-50 px-4 py-2 border-b border-slate-100">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Billing Address</p>
+                </div>
+                <p className="px-4 py-3 text-sm text-slate-600 leading-relaxed">{viewSite.billingAddress || "—"}</p>
+              </div>
+
+              {/* Site Address */}
+              <div className="rounded-xl border border-slate-100 overflow-hidden">
+                <div className="bg-slate-50 px-4 py-2 border-b border-slate-100">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Site Address</p>
+                </div>
+                <p className="px-4 py-3 text-sm text-slate-600 leading-relaxed">{viewSite.siteAddress || "—"}</p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-100">
+              {canEdit && (
+                <button onClick={() => { setViewSite(null); openEdit(viewSite); }}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 transition-all">
+                  <Pencil size={13} /> Edit
+                </button>
+              )}
+              <button onClick={() => setViewSite(null)}
+                className="px-5 py-2 rounded-xl text-sm font-semibold bg-slate-900 text-white hover:bg-slate-700 transition-all">
+                Close
+              </button>
             </div>
           </div>
         </div>
