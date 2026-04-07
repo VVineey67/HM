@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   FileText, CreditCard, Scale, Plus, Download, Upload, X, Search,
   ChevronDown, Pencil, Trash2, FileSpreadsheet, AlignLeft, History,
-  ChevronRight, Clock, User, CheckCircle, Eye,
+  ChevronRight, Clock, User, CheckCircle, Eye, BookOpen,
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -56,6 +56,20 @@ const TYPE_CONFIG = {
     borderAccent: "border-l-indigo-400",
     headerBg:  "from-indigo-50 to-white",
     accentRing: "ring-indigo-200",
+  },
+  ANX: {
+    label: "Annexure",
+    desc:  "Annexure templates used across all POs",
+    prefix: "ANX",
+    Icon:  BookOpen,
+    iconBg:    "bg-violet-50",
+    iconColor: "text-violet-600",
+    badgeCls:  "bg-violet-50 text-violet-700 border border-violet-200",
+    numBg:     "bg-violet-100",
+    numColor:  "text-violet-700",
+    borderAccent: "border-l-violet-400",
+    headerBg:  "from-violet-50 to-white",
+    accentRing: "ring-violet-200",
   },
 };
 

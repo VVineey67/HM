@@ -70,6 +70,8 @@ import GovernmentLaws from "./pages/Procurement/GovernmentLaws";
 import SiteList from "./pages/Procurement/SiteList";
 import UOMList from "./pages/Procurement/UOMList";
 import CategoryList from "./pages/Procurement/CategoryList";
+import ContactList from "./pages/Procurement/ContactList";
+import AnnexureMaster from "./pages/Procurement/AnnexureMaster";
 
 // Images
 import AllImages from "./pages/Images/AllImages";
@@ -241,6 +243,8 @@ function App() {
     if (activeTab === "proc_setup__site_list") return <SiteList />;
     if (activeTab === "proc_setup__uom") return <UOMList />;
     if (activeTab === "proc_setup__category_list") return <CategoryList />;
+    if (activeTab === "proc_setup__contact_list") return <ContactList />;
+    if (activeTab === "proc_setup__annexure") return <AnnexureMaster />;
  
     if (!selectedProject) {
       return (

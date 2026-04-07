@@ -16,7 +16,7 @@ const globalMenu = [
   { id: "create",      label: "Create",            icon: PackagePlus,
     sub: ["Intake", "Order"] },
   { id: "proc_setup",  label: "Procurement Setup", icon: Settings2,
-    sub: ["Company List","Site List","Vendor List","UOM","Category List","Item List","Term Condition","Payment Terms","Government Laws"] },
+    sub: ["Company List","Site List","Vendor List","UOM","Category List","Item List","Term Condition","Payment Terms","Government Laws","Contact List","Annexure"] },
 ];
 
 const projectMenu = [
@@ -73,6 +73,8 @@ const TAB_MODULE_KEY = {
   proc_setup__term_condition:     "term_condition",
   proc_setup__payment_terms:      "payment_terms",
   proc_setup__government_laws:    "government_laws",
+  proc_setup__contact_list:       "contact_list",
+  proc_setup__annexure:           "annexure",
   dashboard:                      "dashboard",
   view_3d:                        "view_3d",
   confidential__loa:              "loa",

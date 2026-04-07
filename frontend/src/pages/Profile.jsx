@@ -770,8 +770,10 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
   /* Serialization */
   const [serSites,    setSerSites]    = useState([]);
   const [serConfigs,  setSerConfigs]  = useState([]);
+  const [orderSerConfigs, setOrderSerConfigs] = useState([]);
   const [serLoading,  setSerLoading]  = useState(false);
   const [serSaving,   setSerSaving]   = useState(null); // siteId being saved
+  const [serTab, setSerTab] = useState("intake"); // "intake" | "order"
 
   useEffect(() => {
     if (section === "serialization" && isGlobalAdmin) fetchSerData();
@@ -780,12 +782,14 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
   const fetchSerData = async () => {
     setSerLoading(true);
     try {
-      const [sitesRes, configsRes] = await Promise.all([
+      const [sitesRes, configsRes, orderRes] = await Promise.all([
         fetch(`${API}/api/procurement/sites`).then(r => r.json()),
         fetch(`${API}/api/intakes/serialization`).then(r => r.json()),
+        fetch(`${API}/api/orders/serialization`).then(r => r.json())
       ]);
       setSerSites(sitesRes.sites || []);
       setSerConfigs(configsRes.configs || []);
+      setOrderSerConfigs(orderRes.configs || []);
     } catch { showToast("Failed to load data", "error"); }
     setSerLoading(false);
   };
@@ -819,6 +823,48 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
       showToast(`Saved for ${site.siteName}`);
       fetchSerData();
     } catch { showToast("Failed to save", "error"); }
+    setSerSaving(null);
+  };
+
+  const currentFY = () => {
+    const d = new Date();
+    const m = d.getMonth();
+    const y = d.getFullYear();
+    const fy = m >= 3 ? y : y - 1;
+    return `${fy}-${String(fy + 1).slice(-2)}`;
+  };
+
+  const getOrderSerConfig = (siteId) => {
+    const fy = currentFY();
+    return orderSerConfigs.find(c => c.site_id === siteId && c.financial_year === fy) || { financial_year: fy };
+  };
+
+  const updateOrderSerConfig = (siteId, field, value) => {
+    setOrderSerConfigs(prev => {
+      const fy = currentFY();
+      const exists = prev.find(c => c.site_id === siteId && c.financial_year === fy);
+      if (exists) return prev.map(c => c.site_id === siteId && c.financial_year === fy ? { ...c, [field]: value } : c);
+      return [...prev, { site_id: siteId, financial_year: fy, [field]: value }];
+    });
+  };
+
+  const saveOrderSerConfig = async (site) => {
+    const cfg = getOrderSerConfig(site.id);
+    setSerSaving("order_" + site.id);
+    try {
+      const res = await fetch(`${API}/api/orders/serialization`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          site_id: site.id,
+          financial_year: cfg.financial_year,
+          current_number: parseInt(cfg.current_number) || 0
+        }),
+      });
+      if (!res.ok) throw new Error("Save failed");
+      showToast(`Order sequence saved for ${site.siteName}`);
+      fetchSerData();
+    } catch { showToast("Failed to save sequence", "error"); }
     setSerSaving(null);
   };
 
@@ -1582,13 +1628,26 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
             {/* ─── SERIALIZATION ─── */}
             {section === "serialization" && (isGlobalAdmin || !!pp.serialization?.view) && (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
-                    <KeyRound size={17} className="text-indigo-600" />
+                <div className="flex flex-wrap items-center justify-between gap-4 mb-6 relative">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
+                      <KeyRound size={17} className="text-indigo-600" />
+                    </div>
+                    <div>
+                      <h2 className="text-base font-black text-slate-800">Serialization</h2>
+                      <p className="text-xs text-slate-500">Configure document number series per site</p>
+                    </div>
                   </div>
-                  <div>
-                    <h2 className="text-base font-black text-slate-800">Serialization</h2>
-                    <p className="text-xs text-slate-500">Configure document number series per site</p>
+                  
+                  <div className="flex bg-slate-100 p-1 rounded-xl">
+                    <button onClick={() => setSerTab("intake")}
+                      className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${serTab === "intake" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"}`}>
+                      Intake
+                    </button>
+                    <button onClick={() => setSerTab("order")}
+                      className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${serTab === "order" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"}`}>
+                      Purchase / Work Order
+                    </button>
                   </div>
                 </div>
 
@@ -1600,59 +1659,119 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
                   <p className="text-sm text-slate-400 text-center py-8">No sites registered. Add sites first from Procurement Setup → Site List.</p>
                 ) : (
                   <div className="space-y-3">
-                    {/* Header row */}
-                    <div className="grid grid-cols-12 gap-3 px-4 pb-1">
-                      <div className="col-span-3"><span className={lbl}>Site</span></div>
-                      <div className="col-span-2"><span className={lbl}>Doc Type</span></div>
-                      <div className="col-span-3"><span className={lbl}>Prefix / Format</span></div>
-                      <div className="col-span-2"><span className={lbl}>Pad Length</span></div>
-                      <div className="col-span-2"><span className={lbl}>Preview</span></div>
-                    </div>
-                    {serSites.map(site => {
-                      const cfg    = getSerConfig(site.id);
-                      const next   = (cfg.current_number || 0) + 1;
-                      const padded = String(next).padStart(parseInt(cfg.pad_length) || 2, "0");
-                      const preview = cfg.prefix ? `${cfg.prefix}${padded}` : "—";
-                      return (
-                        <div key={site.id} className="grid grid-cols-12 gap-3 items-center p-4 rounded-xl border border-slate-100 bg-slate-50 hover:border-indigo-200 transition-all">
-                          <div className="col-span-3">
-                            <p className="text-sm font-semibold text-slate-700">{site.siteName}</p>
-                            {site.siteCode && <p className="text-xs text-slate-400 font-mono">{site.siteCode}</p>}
-                          </div>
-                          <div className="col-span-2">
-                            <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-100">Intake</span>
-                          </div>
-                          <div className="col-span-3">
-                            <input
-                              className={inp}
-                              value={cfg.prefix || ""}
-                              onChange={e => updateSerConfig(site.id, "prefix", e.target.value)}
-                              placeholder={`e.g. PR/${site.siteCode || "SITE"}/`}
-                            />
-                          </div>
-                          <div className="col-span-2">
-                            <select
-                              className={inp}
-                              value={cfg.pad_length || 2}
-                              onChange={e => updateSerConfig(site.id, "pad_length", parseInt(e.target.value))}>
-                              {[1,2,3,4].map(n => <option key={n} value={n}>{n} digit{n>1?"s":""} ({"0".repeat(n-1)}1)</option>)}
-                            </select>
-                          </div>
-                          <div className="col-span-2 flex items-center justify-between gap-2">
-                            <span className="text-xs font-mono font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-100 truncate">
-                              {preview}
-                            </span>
-                            <button
-                              onClick={() => saveSerConfig(site)}
-                              disabled={serSaving === site.id}
-                              className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-all">
-                              {serSaving === site.id ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
-                              Save
-                            </button>
-                          </div>
+                    {serTab === "intake" ? (
+                      <>
+                        {/* Header row for Intake */}
+                        <div className="grid grid-cols-12 gap-3 px-4 pb-1">
+                          <div className="col-span-3"><span className={lbl}>Site</span></div>
+                          <div className="col-span-2"><span className={lbl}>Doc Type</span></div>
+                          <div className="col-span-3"><span className={lbl}>Prefix / Format</span></div>
+                          <div className="col-span-2"><span className={lbl}>Pad Length</span></div>
+                          <div className="col-span-2"><span className={lbl}>Preview</span></div>
                         </div>
-                      );
-                    })}
+                        {serSites.map(site => {
+                          const cfg    = getSerConfig(site.id);
+                          const next   = (cfg.current_number || 0) + 1;
+                          const padded = String(next).padStart(parseInt(cfg.pad_length) || 2, "0");
+                          const preview = cfg.prefix ? `${cfg.prefix}${padded}` : "—";
+                          return (
+                            <div key={site.id} className="grid grid-cols-12 gap-3 items-center p-4 rounded-xl border border-slate-100 bg-slate-50 hover:border-indigo-200 transition-all">
+                              <div className="col-span-3">
+                                <p className="text-sm font-semibold text-slate-700">{site.siteName}</p>
+                                {site.siteCode && <p className="text-xs text-slate-400 font-mono">{site.siteCode}</p>}
+                              </div>
+                              <div className="col-span-2">
+                                <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-100">Intake</span>
+                              </div>
+                              <div className="col-span-3">
+                                <input
+                                  className={inp}
+                                  value={cfg.prefix || ""}
+                                  onChange={e => updateSerConfig(site.id, "prefix", e.target.value)}
+                                  placeholder={`e.g. PR/${site.siteCode || "SITE"}/`}
+                                />
+                              </div>
+                              <div className="col-span-2">
+                                <select
+                                  className={inp}
+                                  value={cfg.pad_length || 2}
+                                  onChange={e => updateSerConfig(site.id, "pad_length", parseInt(e.target.value))}>
+                                  {[1,2,3,4].map(n => <option key={n} value={n}>{n} digit{n>1?"s":""} ({"0".repeat(n-1)}1)</option>)}
+                                </select>
+                              </div>
+                              <div className="col-span-2 flex items-center justify-between gap-2">
+                                <span className="text-xs font-mono font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-100 truncate">
+                                  {preview}
+                                </span>
+                                <button
+                                  onClick={() => saveSerConfig(site)}
+                                  disabled={serSaving === site.id}
+                                  className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-all">
+                                  {serSaving === site.id ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                                  Save
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </>
+                    ) : (
+                      <>
+                        {/* Header row for Order */}
+                        <div className="grid grid-cols-12 gap-3 px-4 pb-1">
+                          <div className="col-span-3"><span className={lbl}>Site</span></div>
+                          <div className="col-span-2"><span className={lbl}>Financial Year</span></div>
+                          <div className="col-span-3"><span className={lbl}>Start From Next Serial</span></div>
+                          <div className="col-span-2"><span className={lbl}>Example Format</span></div>
+                          <div className="col-span-2"><span className={lbl}>Action</span></div>
+                        </div>
+                        {serSites.map(site => {
+                          const cfg = getOrderSerConfig(site.id);
+                          const fy = cfg.financial_year || currentFY();
+                          const next = parseInt(cfg.current_number) || 0;
+                          // Dynamic preview like the backend logic: "COMP/SITE/PO/FY/001"
+                          const preview = `CMP/${site.siteCode || "S"}/PO/${fy}/${String(next + 1).padStart(3, "0")}`;
+                          
+                          return (
+                            <div key={site.id} className="grid grid-cols-12 gap-3 items-center p-4 rounded-xl border border-slate-100 bg-slate-50 hover:border-indigo-200 transition-all">
+                              <div className="col-span-3">
+                                <p className="text-sm font-semibold text-slate-700">{site.siteName}</p>
+                                {site.siteCode && <p className="text-xs text-slate-400 font-mono">{site.siteCode}</p>}
+                              </div>
+                              <div className="col-span-2">
+                                <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-200 text-slate-700 border border-slate-300">
+                                   {fy}
+                                </span>
+                              </div>
+                              <div className="col-span-3">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  className={inp}
+                                  value={cfg.current_number !== undefined ? cfg.current_number : 0}
+                                  onChange={e => updateOrderSerConfig(site.id, "current_number", e.target.value)}
+                                  title="0 means next PO will be 1"
+                                />
+                                <p className="text-[10px] text-slate-400 mt-1">If 0, next document is 001</p>
+                              </div>
+                              <div className="col-span-2 text-[11px] font-mono font-bold text-indigo-600 bg-indigo-50 px-2 py-1.5 rounded-lg border border-indigo-100 truncate w-full"
+                                   title={preview}>
+                                 {preview.length > 18 ? preview.slice(0, 18) + '...' : preview}
+                              </div>
+                              <div className="col-span-2 flex items-center justify-end gap-2">
+                                <button
+                                  onClick={() => saveOrderSerConfig(site)}
+                                  disabled={serSaving === "order_" + site.id}
+                                  className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-all">
+                                  {serSaving === "order_" + site.id ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                                  Save
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </>
+                    )}
                   </div>
                 )}
               </div>

@@ -1,0 +1,125 @@
+﻿{
+    "items":  [
+                  {
+                      "id":  "134a221e-88cf-4583-b4be-768c7cfb7e20",
+                      "itemCode":  "ITM-001",
+                      "itemType":  "Supply",
+                      "materialName":  "Cement",
+                      "brands":  [
+                                     "UltraTech ",
+                                     "ACC",
+                                     "Ambuja"
+                                 ],
+                      "specifications":  [
+                                             "OPC 53 Grade",
+                                             "OPC 33 Grade",
+                                             "OPC 43 Grade",
+                                             "PPC",
+                                             "White Cement"
+                                         ],
+                      "category":  "Civil",
+                      "unit":  "bag",
+                      "imageUrl":  "https://lhxgohcxcslbtnuubrsg.supabase.co/storage/v1/object/public/procurement-images/items/1775492159286_shopping.webp",
+                      "scopeOfWork":  "",
+                      "remarks":  "",
+                      "createdById":  "",
+                      "createdByName":  ""
+                  },
+                  {
+                      "id":  "ad64b06e-4a23-45f4-b641-162072d47e93",
+                      "itemCode":  "ITM-002",
+                      "itemType":  "Supply",
+                      "materialName":  "TMT",
+                      "brands":  [
+                                     "Tata Tiscon",
+                                     "Sail",
+                                     "JSW",
+                                     "Kamdhenu"
+                                 ],
+                      "specifications":  [
+                                             "8MM",
+                                             "10MM",
+                                             "12MM",
+                                             "16MM",
+                                             "20MM",
+                                             "25MM",
+                                             "32MM"
+                                         ],
+                      "category":  "Civil",
+                      "unit":  "MT",
+                      "imageUrl":  "",
+                      "scopeOfWork":  "",
+                      "remarks":  "",
+                      "createdById":  "",
+                      "createdByName":  ""
+                  },
+                  {
+                      "id":  "4234b5db-3e86-475b-983b-46d98aaaf9cd",
+                      "itemCode":  "ITM-003",
+                      "itemType":  "Supply",
+                      "materialName":  "Nail",
+                      "brands":  [
+                                     "Bharat",
+                                     "Sharda",
+                                     "Local"
+                                 ],
+                      "specifications":  [
+                                             "1 Inch",
+                                             "2 Inch",
+                                             "3 Inch",
+                                             "4 Inch",
+                                             "1.5 Inch",
+                                             "2.5 Inch"
+                                         ],
+                      "category":  "Civil",
+                      "unit":  "kg",
+                      "imageUrl":  "",
+                      "scopeOfWork":  "",
+                      "remarks":  "",
+                      "createdById":  "",
+                      "createdByName":  ""
+                  },
+                  {
+                      "id":  "100878ea-e7ab-4072-8ab3-1018702e81ef",
+                      "itemCode":  "ITM-004",
+                      "itemType":  "Supply",
+                      "materialName":  "Red Bricks",
+                      "brands":  [
+                                     "A-Marka",
+                                     "Local"
+                                 ],
+                      "specifications":  [
+                                             "First Class",
+                                             "Second Class",
+                                             "Modular",
+                                             "Non-Modular"
+                                         ],
+                      "category":  "Civil",
+                      "unit":  "nos",
+                      "imageUrl":  "",
+                      "scopeOfWork":  "",
+                      "remarks":  "",
+                      "createdById":  "590ded22-9f0c-4a2d-a6cd-6fe88c998c41",
+                      "createdByName":  "Test User"
+                  },
+                  {
+                      "id":  "f9764320-e71e-4e51-9c6b-81ef732ebeb9",
+                      "itemCode":  "SIT-001",
+                      "itemType":  "SITC",
+                      "materialName":  "Soil Testing (Geotechnical Investigation Report)",
+                      "brands":  [
+
+                                 ],
+                      "specifications":  [
+                                             "10 Mtr. Each Location"
+                                         ],
+                      "category":  "Civil",
+                      "unit":  "mtr",
+                      "imageUrl":  "",
+                      "scopeOfWork":  "Complete Soil Testing and providing investigation report as per site requirement.",
+                      "remarks":  "",
+                      "createdById":  "",
+                      "createdByName":  ""
+                  }
+              ]
+}

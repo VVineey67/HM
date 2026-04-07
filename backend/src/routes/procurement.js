@@ -952,19 +952,21 @@ router.get("/companies", async (_req, res) => {
     if (error) throw error;
     const companies = (data || []).map(r => ({
       id:          r.id,
-      companyName: r.company_name || "",
-      companyCode: r.company_code || "",
-      phone:       r.phone        || "",
-      email:       r.email        || "",
-      gstin:       r.gstin        || "",
-      pan:         r.pan          || "",
-      pincode:     r.pincode      || "",
-      state:       r.state        || "",
-      district:    r.district     || "",
-      address:     r.address      || "",
-      logoUrl:     r.logo_url     || "",
-      stampUrl:    r.stamp_url    || "",
-      signUrl:     r.sign_url     || "",
+      companyName:  r.company_name  || "",
+      companyCode:  r.company_code  || "",
+      personName:   r.person_name   || "",
+      designation:  r.designation   || "",
+      phone:        r.phone         || "",
+      email:        r.email         || "",
+      gstin:        r.gstin         || "",
+      pan:          r.pan           || "",
+      pincode:      r.pincode       || "",
+      state:        r.state         || "",
+      district:     r.district      || "",
+      address:      r.address       || "",
+      logoUrl:      r.logo_url      || "",
+      stampUrl:     r.stamp_url     || "",
+      signUrl:      r.sign_url      || "",
     }));
     res.json({ companies });
   } catch (err) {
@@ -985,8 +987,9 @@ router.post("/companies", companyUpload, async (req, res) => {
       uploadCompanyImg(files, "sign",  folder),
     ]);
 
-    const { data, error } = await supabase.from("companies").insert({
+    const { data, error } = await supabase.schema("procurement").from("companies").insert({
       company_name: b.companyName || "", company_code: b.companyCode || "",
+      person_name: b.personName || "", designation: b.designation || "",
       phone: b.phone || "", email: b.email || "",
       gstin: b.gstin || "", pan: b.pan || "",
       pincode: b.pincode || "", state: b.state || "",
@@ -1018,8 +1021,9 @@ router.put("/companies/:id", companyUpload, async (req, res) => {
       uploadCompanyImg(files, "sign",  folder),
     ]);
 
-    const { error } = await supabase.from("companies").update({
+    const { error } = await supabase.schema("procurement").from("companies").update({
       company_name: b.companyName || "", company_code: b.companyCode || "",
+      person_name: b.personName || "", designation: b.designation || "",
       phone: b.phone || "", email: b.email || "",
       gstin: b.gstin || "", pan: b.pan || "",
       pincode: b.pincode || "", state: b.state || "",
@@ -1043,6 +1047,72 @@ router.delete("/companies/:id", async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error("Company delete error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ══════════════════════════════════════════
+   CONTACTS
+══════════════════════════════════════════ */
+router.get("/contacts", async (_req, res) => {
+  try {
+    const { data, error } = await supabase
+      .schema("procurement").from("contacts").select("*").order("person_name", { ascending: true });
+    if (error) throw error;
+    const contacts = (data || []).map(r => ({
+      id:            r.id,
+      personName:    r.person_name    || "",
+      contactNumber: r.contact_number || "",
+      designation:   r.designation    || "",
+      company:       r.company        || "",
+    }));
+    res.json({ contacts });
+  } catch (err) {
+    console.error("Contacts read error:", err.message);
+    res.json({ contacts: [] });
+  }
+});
+
+router.post("/contacts", async (req, res) => {
+  try {
+    const { personName, contactNumber, designation, company, createdById, createdByName } = req.body;
+    const { data, error } = await supabase.schema("procurement").from("contacts").insert({
+      person_name:    personName    || "",
+      contact_number: contactNumber || "",
+      designation:    designation   || "",
+      company:        company       || "",
+      created_by_id:  createdById   || null,
+      created_by_name: createdByName || null,
+    }).select().single();
+    if (error) throw error;
+    res.json({ success: true, id: data.id });
+  } catch (err) {
+    console.error("Contact add error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put("/contacts/:id", async (req, res) => {
+  try {
+    const { personName, contactNumber, designation, company } = req.body;
+    const { error } = await supabase.schema("procurement").from("contacts")
+      .update({ person_name: personName || "", contact_number: contactNumber || "", designation: designation || "", company: company || "" })
+      .eq("id", req.params.id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Contact update error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete("/contacts/:id", async (req, res) => {
+  try {
+    const { error } = await supabase.schema("procurement").from("contacts").delete().eq("id", req.params.id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Contact delete error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });

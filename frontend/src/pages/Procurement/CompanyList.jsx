@@ -12,9 +12,28 @@ const imgUrl = (url) => url || "";
 
 const ACCEPT = "image/jpeg,image/jpg,image/png,image/gif,image/webp,image/bmp,image/svg+xml,image/tiff";
 
+const TABS = [
+  { key: "basic",  label: "Basic Info" },
+  { key: "images", label: "Images"     },
+];
+
+/* ── Form field ── */
+const Field = ({ label, value, onChange, placeholder, mono, span2, textarea }) => (
+  <div className={span2 ? "col-span-2" : ""}>
+    <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">{label}</label>
+    {textarea ? (
+      <textarea value={value} onChange={onChange} rows={2} placeholder={placeholder}
+        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-400 text-slate-700 resize-none" />
+    ) : (
+      <input value={value} onChange={onChange} placeholder={placeholder}
+        className={`w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-400 text-slate-700 ${mono ? "font-mono" : ""}`} />
+    )}
+  </div>
+);
+
 const emptyForm = {
-  companyName: "", companyCode: "", phone: "", email: "",
-  gstin: "", pan: "", pincode: "", state: "", district: "", address: "",
+  companyName: "", companyCode: "", personName: "", designation: "",
+  phone: "", email: "", gstin: "", pan: "", pincode: "", state: "", district: "", address: "",
   logo: null, logoPreview: "",
   stamp: null, stampPreview: "",
   sign: null, signPreview: "",
@@ -179,7 +198,9 @@ export default function CompanyList() {
   const filtered = companies.filter(c =>
     c.companyName?.toLowerCase().includes(search.toLowerCase()) ||
     c.companyCode?.toLowerCase().includes(search.toLowerCase()) ||
-    c.gstin?.toLowerCase().includes(search.toLowerCase())
+    c.gstin?.toLowerCase().includes(search.toLowerCase()) ||
+    c.personName?.toLowerCase().includes(search.toLowerCase()) ||
+    c.designation?.toLowerCase().includes(search.toLowerCase())
   );
   const totalPages = Math.ceil(filtered.length / perPage) || 1;
   const paginated  = filtered.slice((page - 1) * perPage, page * perPage);
@@ -189,6 +210,8 @@ export default function CompanyList() {
       "S.No": i + 1,
       "Company Name": c.companyName,
       "Code": c.companyCode,
+      "Person Name": c.personName,
+      "Designation": c.designation,
       "Phone": c.phone,
       "Email": c.email,
       "GSTIN": c.gstin,
@@ -216,13 +239,13 @@ export default function CompanyList() {
     doc.line(14, 26, pageW - 14, 26);
     autoTable(doc, {
       startY: 30,
-      head: [["S.No", "Company Name", "Code", "Phone", "Email", "GSTIN", "PAN", "Pincode", "State", "District", "Address"]],
-      body: filtered.map((c, i) => [i + 1, c.companyName, c.companyCode, c.phone, c.email, c.gstin, c.pan, c.pincode, c.state, c.district, c.address]),
+      head: [["S.No", "Company Name", "Code", "Person Name", "Designation", "Phone", "Email", "GSTIN", "PAN", "Pincode", "State", "District", "Address"]],
+      body: filtered.map((c, i) => [i + 1, c.companyName, c.companyCode, c.personName, c.designation, c.phone, c.email, c.gstin, c.pan, c.pincode, c.state, c.district, c.address]),
       tableWidth: pageW - 28,
       styles: { fontSize: 7, cellPadding: { top: 3, right: 3, bottom: 3, left: 3 }, valign: "top", lineColor: [203, 213, 225], lineWidth: 0.3, textColor: [51, 65, 85], overflow: "linebreak" },
       headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 7, halign: "left", lineColor: [30, 41, 59] },
       alternateRowStyles: { fillColor: [248, 250, 252] },
-      columnStyles: { 0: { cellWidth: 10, halign: "center" }, 1: { cellWidth: 40 }, 2: { cellWidth: 16 }, 10: { cellWidth: "auto" } },
+      columnStyles: { 0: { cellWidth: 10, halign: "center" }, 1: { cellWidth: 35 }, 2: { cellWidth: 15 }, 3: { cellWidth: 25 }, 4: { cellWidth: 25 }, 12: { cellWidth: "auto" } },
       didDrawPage: (data) => {
         const pageCount = doc.internal.getNumberOfPages();
         doc.setFontSize(7); doc.setTextColor(148, 163, 184);
@@ -234,23 +257,7 @@ export default function CompanyList() {
     setShowExportMenu(false);
   };
 
-  const TABS = [
-    { key: "basic",  label: "Basic Info" },
-    { key: "images", label: "Images"     },
-  ];
 
-  const Field = ({ label, value, onChange, placeholder, mono, span2, textarea }) => (
-    <div className={span2 ? "col-span-2" : ""}>
-      <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">{label}</label>
-      {textarea ? (
-        <textarea value={value} onChange={onChange} rows={2} placeholder={placeholder}
-          className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-400 text-slate-700 resize-none" />
-      ) : (
-        <input value={value} onChange={onChange} placeholder={placeholder}
-          className={`w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-400 text-slate-700 ${mono ? "font-mono" : ""}`} />
-      )}
-    </div>
-  );
 
   return (
     <div className="p-6 w-full min-w-0">
@@ -329,6 +336,8 @@ export default function CompanyList() {
                   <th className="sticky left-0 z-20 bg-slate-800 px-3 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700 text-center w-10">S.No</th>
                   <th className="sticky left-10 z-20 bg-slate-800 px-3 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700 text-left min-w-44">Company Name</th>
                   <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700 text-left w-20">Code</th>
+                  <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700 text-left min-w-36">Person Name</th>
+                  <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700 text-left w-32">Designation</th>
                   <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700 text-left w-28">Phone</th>
                   <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700 text-left min-w-36">Email</th>
                   <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700 text-left min-w-36">GSTIN</th>
@@ -358,6 +367,8 @@ export default function CompanyList() {
                     <td className="px-3 py-3 border border-slate-200 align-middle">
                       <span className="inline-block px-2 py-0.5 bg-green-50 text-green-700 rounded-lg text-xs font-mono font-semibold whitespace-nowrap">{c.companyCode}</span>
                     </td>
+                    <td className="px-3 py-3 text-slate-600 text-xs border border-slate-200 align-middle">{c.personName || <span className="text-slate-300">—</span>}</td>
+                    <td className="px-3 py-3 text-slate-600 text-xs border border-slate-200 align-middle">{c.designation || <span className="text-slate-300">—</span>}</td>
                     <td className="px-3 py-3 text-slate-600 text-xs border border-slate-200 align-middle whitespace-nowrap">{c.phone || <span className="text-slate-300">—</span>}</td>
                     <td className="px-3 py-3 text-slate-600 text-xs border border-slate-200 align-middle">{c.email || <span className="text-slate-300">—</span>}</td>
                     <td className="px-3 py-3 text-slate-600 text-xs font-mono border border-slate-200 align-middle whitespace-nowrap">{c.gstin}</td>
@@ -456,6 +467,12 @@ export default function CompanyList() {
                   <Field label="Company Code" value={form.companyCode}
                     onChange={e => setForm(f => ({ ...f, companyCode: e.target.value.toUpperCase() }))}
                     placeholder="e.g. NSSPL" mono />
+                  <Field label="Person Name" value={form.personName}
+                    onChange={e => setForm(f => ({ ...f, personName: e.target.value }))}
+                    placeholder="e.g. John Doe" />
+                  <Field label="Designation" value={form.designation}
+                    onChange={e => setForm(f => ({ ...f, designation: e.target.value }))}
+                    placeholder="e.g. Managing Director" />
                   <Field label="Phone" value={form.phone}
                     onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
                     placeholder="Phone number" />
@@ -540,6 +557,8 @@ export default function CompanyList() {
               {/* Info grid */}
               <div className="grid grid-cols-2 gap-x-8 gap-y-3">
                 {[
+                  ["Person Name", viewData.personName],
+                  ["Designation", viewData.designation],
                   ["Phone",    viewData.phone],
                   ["Email",    viewData.email],
                   ["GSTIN",    viewData.gstin],
