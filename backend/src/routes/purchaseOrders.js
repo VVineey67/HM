@@ -20,6 +20,7 @@ const getFinancialYear = (date = new Date()) => {
   const month = date.getMonth(); // 0-indexed
   const year  = date.getFullYear();
   const fyStart = month >= 3 ? year : year - 1;
+  // Format: 2024-25 for FY 2024-25
   return `${fyStart}-${String(fyStart + 1).slice(-2)}`;
 };
 
@@ -110,9 +111,14 @@ router.get("/", async (req, res) => {
   try {
     const { data, error } = await supabase.schema("procurement")
       .from("purchase_orders")
-      .select("*, sites(site_name, site_code), companies(company_name, company_code), vendors(vendor_name)")
+      .select("*, companies(*), sites(*), vendors(*)")
       .order("created_at", { ascending: false });
-    if (error) throw error;
+    
+    if (error) {
+      console.error("Supabase Error fetching orders:", error);
+      throw error;
+    }
+    console.log(`Fetched ${data?.length || 0} orders from DB`);
     res.json({ orders: data || [] });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -126,7 +132,7 @@ router.post("/", upload.fields([
   try {
     const bodyData = JSON.parse(req.body.data || "{}");
     const files    = req.files || {};
-    const { mainData, items, nextSerial } = bodyData;
+    let { mainData, items, nextSerial } = bodyData;
 
     // 1. Handle File Uploads
     let quotationUrl = "";
@@ -145,6 +151,12 @@ router.post("/", upload.fields([
         `orders/${mainData.order_number}/comparative_${Date.now()}_${files.comparative[0].originalname}`,
         files.comparative[0].buffer, files.comparative[0].mimetype
       );
+    }
+
+    // 1.1 Override order_number to DRAFT if not Issued
+    // The official number is now assigned in approvals.js ONLY when Issued.
+    if (mainData.status !== 'Issued') {
+       mainData.order_number = `PENDING-${Date.now()}`;
     }
 
     // 2. Insert main order
@@ -166,10 +178,12 @@ router.post("/", upload.fields([
       if (itemErr) throw itemErr;
     }
 
-    // 4. Update serialization
-    await supabase.schema("procurement").from("serialization_settings")
-      .update({ current_number: nextSerial })
-      .eq("site_id", mainData.site_id);
+    // 4. Update serialization ONLY if Issued (usually not from here anymore)
+    if (mainData.status === 'Issued') {
+      await supabase.schema("procurement").from("serialization_settings")
+        .update({ current_number: nextSerial })
+        .eq("site_id", mainData.site_id);
+    }
 
     res.json({ success: true, id: order.id });
   } catch (err) {
@@ -229,6 +243,19 @@ router.put("/:id", upload.fields([
         `orders/${mainData.order_number}/comparative_${Date.now()}_${files.comparative[0].originalname}`,
         files.comparative[0].buffer, files.comparative[0].mimetype
       );
+    }
+
+    // 2.1 Override order_number to DRAFT if not Issued (prevent premature numbering on Edit)
+    if (mainData.status !== 'Issued' && !mainData.order_number?.startsWith("PENDING-")) {
+        // Find existing order number to see if it was already PENDING
+        const { data: curr } = await supabase.schema("procurement")
+          .from("purchase_orders").select("order_number").eq("id", req.params.id).single();
+        
+        if (!curr?.order_number?.startsWith("PENDING-")) {
+          mainData.order_number = `PENDING-${Date.now()}`;
+        } else {
+          mainData.order_number = curr.order_number; // Preserve existing pending ID
+        }
     }
 
     const { error: orderErr } = await supabase.schema("procurement")

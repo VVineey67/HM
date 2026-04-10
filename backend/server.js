@@ -13,6 +13,7 @@ const usersRoutes         = require("./src/routes/users");
 const projectsRoutes      = require("./src/routes/projects");
 const intakesRoutes       = require("./src/routes/intakes");
 const purchaseOrderRoutes = require("./src/routes/purchaseOrders");
+const approvalsRoutes     = require("./src/routes/approvals");
 
 const app = express();
 
@@ -36,6 +37,7 @@ app.use("/api/users",       usersRoutes);
 app.use("/api/projects",    projectsRoutes);
 app.use("/api/intakes",     intakesRoutes);
 app.use("/api/orders",      purchaseOrderRoutes);
+app.use("/api/approvals",   approvalsRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, "0.0.0.0", () => console.log(`✅ Backend on port ${PORT}`));

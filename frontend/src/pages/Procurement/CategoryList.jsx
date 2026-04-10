@@ -237,7 +237,7 @@ export default function CategoryList() {
   const paginated  = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
 
   return (
-    <div className="p-6 w-full">
+    <div className="p-3 sm:p-4 lg:p-6 w-full pb-32">
 
       {toast && (
         <div className={`fixed top-5 right-5 z-50 px-4 py-3 rounded-xl text-sm font-medium shadow-lg
@@ -247,7 +247,7 @@ export default function CategoryList() {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center">
             <Tag size={20} className="text-teal-600" />
@@ -258,7 +258,7 @@ export default function CategoryList() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap sm:justify-end">
 
           {canExport && (
           <div className="relative" ref={exportMenuRef}>
@@ -342,30 +342,30 @@ export default function CategoryList() {
             </colgroup>
             <thead>
               <tr className="bg-slate-800 text-white">
-                <th className="text-center px-3 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700">S.No</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700">Code</th>
+                <th className="text-center px-3 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700 sticky-left-0 w-[50px]">S.No</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700 sticky-left-1 w-[100px]" style={{left:'50px'}}>Code</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700">Category Name</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700">Description</th>
                 <th className="text-center px-3 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700">Status</th>
-                <th className="text-center px-3 py-3 text-xs font-semibold uppercase tracking-wide">Action</th>
+                <th className="text-center px-3 py-3 text-xs font-semibold uppercase tracking-wide sticky-right-0 w-[100px]">Action</th>
               </tr>
             </thead>
             <tbody>
               {paginated.map((c, idx) => (
-                <tr key={c.id} className={`transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-slate-50"} hover:bg-teal-50/40`}>
-                  <td className="px-3 py-3 text-slate-400 text-xs text-center border border-slate-100 font-medium">{(page - 1) * PER_PAGE + idx + 1}</td>
-                  <td className="px-4 py-3 border border-slate-100">
+                <tr key={c.id} className={`transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-slate-50"} hover:bg-teal-50/40 group`}>
+                  <td className="px-3 py-3 text-slate-400 text-xs text-center border border-slate-100 font-medium sticky-left-0 w-[50px]">{(page - 1) * PER_PAGE + idx + 1}</td>
+                  <td className="px-4 py-3 border border-slate-100 sticky-left-1 w-[100px]" style={{left:'50px'}}>
                     <span className="px-2.5 py-1 bg-teal-50 text-teal-700 rounded-lg text-xs font-mono font-semibold">{c.categoryCode}</span>
                   </td>
-                  <td className="px-4 py-3 font-semibold text-slate-800 text-sm border border-slate-100">{c.categoryName}</td>
-                  <td className="px-4 py-3 text-slate-500 text-xs border border-slate-100 leading-relaxed">{c.description}</td>
+                  <td className="px-4 py-3 font-semibold text-slate-800 text-sm border border-slate-100 whitespace-normal break-words leading-tight">{c.categoryName}</td>
+                  <td className="px-4 py-3 text-slate-500 text-xs border border-slate-100 leading-relaxed whitespace-normal break-words">{c.description}</td>
                   <td className="px-3 py-3 border border-slate-100 text-center">
                     <span className={`px-2.5 py-1 rounded-full text-xs font-semibold
                       ${c.status === "Active" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
                       {c.status}
                     </span>
                   </td>
-                  <td className="px-3 py-3 border border-slate-100">
+                  <td className="px-3 py-3 border border-slate-100 sticky-right-0 w-[100px]">
                     <div className="flex items-center justify-center gap-0.5">
                       <button onClick={() => setViewCategory(c)} className="p-1.5 rounded-lg text-slate-300 hover:text-teal-600 hover:bg-teal-50 transition-all"><Eye size={14} /></button>
                       {canEdit && <button onClick={() => openEdit(c)} className="p-1.5 rounded-lg text-slate-300 hover:text-slate-600 hover:bg-slate-100 transition-all"><Pencil size={14} /></button>}

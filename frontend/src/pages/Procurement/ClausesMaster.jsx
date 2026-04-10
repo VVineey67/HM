@@ -131,7 +131,7 @@ const getCurrentUser = () => {
   return u.name || u.email || u.username || "Unknown";
 };
 
-export default function ClausesMaster({ type }) {
+export default function ClausesMaster({ type, initialViewId, initialAction, isActionOnly, onCloseModal }) {
   const cfg = TYPE_CONFIG[type] || TYPE_CONFIG.TC;
   const { label, desc, prefix, Icon: CfgIcon, iconBg, iconColor, badgeCls, numBg, numColor, borderAccent, headerBg, accentRing } = cfg;
 
@@ -198,6 +198,18 @@ export default function ClausesMaster({ type }) {
     setLoading(false);
   };
 
+  useEffect(() => {
+    if (initialViewId && clauses.length > 0) {
+       const c = clauses.find(x => x.id === initialViewId);
+       if (c) {
+          if (initialAction === 'edit' && canEdit) openEdit(c);
+          else if (initialAction === 'history') openHistory(c);
+          else setViewClause(c);
+       }
+    }
+    if (initialAction === 'add' && canAdd) openAdd();
+  }, [initialViewId, initialAction, clauses.length]);
+
   const showToast = (msg, kind = "success") => {
     setToast({ msg, kind });
     setTimeout(() => setToast(null), 3000);
@@ -207,6 +219,11 @@ export default function ClausesMaster({ type }) {
   const openAdd  = () => { setForm(emptyForm); setEditId(null); setShowModal(true); };
   const openEdit = (c) => {
     setForm({ title: c.title, category: c.category || "", content: getHTML(c.points) });
+    setEditId(c.id);
+    setShowModal(true);
+  };
+  const openHistoryEdit = (c, v) => {
+    setForm({ title: v.title || c.title, category: v.category || c.category || "", content: getHTML(v.points) });
     setEditId(c.id);
     setShowModal(true);
   };
@@ -236,6 +253,8 @@ export default function ClausesMaster({ type }) {
       showToast(editId ? "Updated successfully" : "Clause added");
       setShowModal(false);
       fetchAll();
+      if (historyClause) openHistory(historyClause);
+      if (isActionOnly && !historyClause && onCloseModal) onCloseModal();
     } catch (err) { showToast(err.message, "error"); }
     setSaving(false);
   };
@@ -388,6 +407,30 @@ export default function ClausesMaster({ type }) {
         .quill-content strong { font-weight: bold; }
         .quill-content em { font-style: italic; }
         .quill-content u { text-decoration: underline; }
+        
+        /* Fixed Toolbar Logic */
+        .ql-toolbar.ql-snow {
+          border: none !important;
+          border-bottom: 1px solid #e2e8f0 !important;
+          background: #f8fafc !important;
+          position: sticky !important;
+          top: 0;
+          z-index: 10;
+        }
+        .ql-container.ql-snow {
+          border: none !important;
+          height: 320px !important;
+        }
+        .ql-editor {
+          min-height: 100%;
+          font-size: 0.875rem;
+          color: #334155;
+          line-height: 1.6;
+        }
+        .ql-editor.ql-blank::before {
+          color: #94a3b8;
+          font-style: normal;
+        }
       `}</style>
 
 
@@ -428,7 +471,7 @@ export default function ClausesMaster({ type }) {
                     </div>
                   </div>
                 </div>
-                <button onClick={() => setHistoryClause(null)}
+                <button type="button" onClick={() => { setHistoryClause(null); if (isActionOnly && onCloseModal) onCloseModal(); }}
                   className="text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100 shrink-0 transition-all">
                   <X size={20} />
                 </button>
@@ -487,11 +530,30 @@ export default function ClausesMaster({ type }) {
                             </div>
                           </div>
                           <div className="flex items-center gap-2 shrink-0 ml-2">
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${numBg} ${numColor}`}>
-                              {v.points.length} pt{v.points.length !== 1 ? "s" : ""}
-                            </span>
+                            {isActionOnly && (
+                              <button 
+                                onClick={(e) => { 
+                                  e.stopPropagation(); 
+                                  console.log("Applying points:", v.points);
+                                  onCloseModal(v.points); 
+                                }} 
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border font-bold text-[10px] uppercase tracking-wider transition-all
+                                  ${isLatest 
+                                    ? "bg-emerald-50 border-emerald-200 text-emerald-600 hover:bg-emerald-100" 
+                                    : "bg-indigo-50 border-indigo-200 text-indigo-600 hover:bg-indigo-100"}`}
+                                title="Apply this specific version to the order">
+                                <CheckCircle size={12} /> Apply
+                              </button>
+                            )}
+                            {canEdit && (
+                              <button onClick={(e) => { e.stopPropagation(); openHistoryEdit(historyClause, v); }}
+                                className="p-1 px-2 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all border border-transparent hover:border-indigo-100"
+                                title="Edit this Version">
+                                <Pencil size={14} />
+                              </button>
+                            )}
                             {canDelete && (
-                              <button onClick={(e) => handleDeleteVersion(v.id, e)} className="p-1 rounded-md text-red-400 hover:text-red-600 hover:bg-red-50 transition-all mx-1" title="Delete Version">
+                              <button onClick={(e) => handleDeleteVersion(v.id, e)} className="p-1 px-2 rounded-lg text-red-400 hover:text-red-700 hover:bg-red-50 transition-all border border-transparent hover:border-red-100" title="Delete Version">
                                 <Trash2 size={14} />
                               </button>
                             )}
@@ -522,7 +584,7 @@ export default function ClausesMaster({ type }) {
               <p className="text-xs text-slate-400">
                 {versions.length > 0 ? `Last edited by ${versions[versions.length - 1]?.editedBy}` : "No edits yet"}
               </p>
-              <button onClick={() => setHistoryClause(null)}
+              <button type="button" onClick={() => { setHistoryClause(null); if (isActionOnly && onCloseModal) onCloseModal(); }}
                 className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-100 transition-all">
                 Close
               </button>
@@ -531,9 +593,11 @@ export default function ClausesMaster({ type }) {
         </>
       )}
 
-      {/* ── HEADER ── */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
+      {!isActionOnly && (
+        <div className="p-3 sm:p-4 lg:p-6 w-full pb-32">
+          {/* ── HEADER ── */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
+            <div className="flex items-center gap-3">
           <div className={`w-10 h-10 rounded-xl ${iconBg} flex items-center justify-center`}>
             <CfgIcon size={20} className={iconColor} />
           </div>
@@ -542,7 +606,7 @@ export default function ClausesMaster({ type }) {
             <p className="text-sm text-slate-400">{desc}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap sm:justify-end">
           {canExport && (
           <div className="relative" ref={exportRef}>
             <button onClick={() => { setShowExport(s => !s); setShowBulk(false); }}
@@ -746,6 +810,8 @@ export default function ClausesMaster({ type }) {
           )}
         </>
       )}
+      </div>
+      )}
 
       {/* ══════════════════════════════
           VIEW CLAUSE MODAL
@@ -774,7 +840,7 @@ export default function ClausesMaster({ type }) {
                     </p>
                   </div>
                 </div>
-                <button onClick={() => setViewClause(null)}
+                <button type="button" onClick={() => { setViewClause(null); if (isActionOnly && onCloseModal) onCloseModal(); }}
                   className="text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100 shrink-0">
                   <X size={20} />
                 </button>
@@ -789,16 +855,16 @@ export default function ClausesMaster({ type }) {
             {/* Footer */}
             <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 shrink-0 flex items-center gap-2">
               {canEdit && (
-                <button onClick={() => { setViewClause(null); openEdit(viewClause); }}
+                <button type="button" onClick={() => { setViewClause(null); openEdit(viewClause); }}
                   className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-700 transition-all">
                   <Pencil size={13} /> Edit
                 </button>
               )}
-              <button onClick={() => { setViewClause(null); openHistory(viewClause); }}
+              <button type="button" onClick={() => { setViewClause(null); openHistory(viewClause); }}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-100 transition-all">
                 <History size={13} /> History
               </button>
-              <button onClick={() => setViewClause(null)}
+              <button type="button" onClick={() => { setViewClause(null); if (isActionOnly && onCloseModal) onCloseModal(); }}
                 className="ml-auto px-4 py-2 rounded-xl border border-slate-200 text-slate-500 text-sm font-medium hover:bg-slate-100 transition-all">
                 Close
               </button>
@@ -827,7 +893,7 @@ export default function ClausesMaster({ type }) {
                   </p>
                 </div>
               </div>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100">
+              <button type="button" onClick={() => { setShowModal(false); if (isActionOnly && onCloseModal) onCloseModal(); }} className="text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100">
                 <X size={18} />
               </button>
             </div>
@@ -867,13 +933,12 @@ export default function ClausesMaster({ type }) {
                     Use the toolbar to bold text, add colors, or create standard and nested lists.
                   </p>
                 </div>
-                <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                <div className="bg-white rounded-xl border border-slate-200">
                   <ReactQuill 
                     theme="snow"
                     value={form.content}
                     onChange={(val) => setForm(f => ({ ...f, content: val }))}
                     modules={QUILL_MODULES}
-                    className="h-64"
                   />
                 </div>
               </div>
@@ -884,11 +949,11 @@ export default function ClausesMaster({ type }) {
                 <User size={11} /> Saving as: <span className="font-semibold text-slate-600 ml-1">{getCurrentUser()}</span>
               </p>
               <div className="flex items-center gap-2">
-                <button onClick={() => setShowModal(false)}
+                <button type="button" onClick={() => { setShowModal(false); if (isActionOnly && onCloseModal) onCloseModal(); }}
                   className="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-200 transition-all">
                   Cancel
                 </button>
-                <button onClick={handleSave} disabled={saving}
+                <button type="button" onClick={handleSave} disabled={saving}
                   className="px-5 py-2 rounded-xl text-sm font-semibold bg-slate-900 text-white hover:bg-slate-700 transition-all disabled:opacity-50">
                   {saving ? "Saving…" : editId ? "Update & Save Version" : "Add Clause"}
                 </button>

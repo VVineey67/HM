@@ -72,6 +72,7 @@ import UOMList from "./pages/Procurement/UOMList";
 import CategoryList from "./pages/Procurement/CategoryList";
 import ContactList from "./pages/Procurement/ContactList";
 import AnnexureMaster from "./pages/Procurement/AnnexureMaster";
+import ApprovalConfig from "./components/ApprovalConfig";
 
 // Images
 import AllImages from "./pages/Images/AllImages";
@@ -120,6 +121,8 @@ function App() {
     const { isReset, project } = parseHash();
     return (!isReset && loggedIn) ? project : null;
   });
+
+  const [editingOrderId, setEditingOrderId] = useState(null);
 
   const [isCollapsed, setIsCollapsed] = useState(() => localStorage.getItem("bms_sidebar_collapsed") === "true");
 
@@ -231,7 +234,7 @@ function App() {
 
     // Global Create tabs
     if (activeTab === "create__intake") return <IntakeList />;
-    if (activeTab === "create__order")  return <GlobalCreateOrder />;
+    if (activeTab === "create__order")  return <GlobalCreateOrder editOrderId={editingOrderId} onEditComplete={() => setEditingOrderId(null)} />;
 
     // Global procurement setup tabs — no project needed
     if (activeTab === "proc_setup__item_list") return <ItemList />;
@@ -245,6 +248,7 @@ function App() {
     if (activeTab === "proc_setup__category_list") return <CategoryList />;
     if (activeTab === "proc_setup__contact_list") return <ContactList />;
     if (activeTab === "proc_setup__annexure") return <AnnexureMaster />;
+    if (activeTab === "approvals__config") return <ApprovalConfig showToast={(msg, type) => alert(`${type?.toUpperCase()}: ${msg}`)} />;
  
     if (!selectedProject) {
       return (
@@ -278,7 +282,12 @@ function App() {
       case "store_stock_available": return <StockAvailable project={selectedProject} />;
       case "store_grn_docs": return <GRNDocs project={selectedProject} />;
       case "procurement__create_order": return <CreateOrder project={selectedProject} />;
-      case "procurement__order_record": return <OrderRecord project={selectedProject} />;
+      case "procurement__order_record": return (
+        <OrderRecord 
+          project={selectedProject} 
+          onEdit={(id) => { setEditingOrderId(id); setActiveTab("create__order"); }} 
+        />
+      );
       case "images_all_images": return <AllImages project={selectedProject} />;
       case "images_compare_images": return <CompareImages project={selectedProject} />;
       case "staff": return <Attendance selectedProject={selectedProject} />;
@@ -346,11 +355,11 @@ function App() {
       <div
         className={`
           flex-1 flex flex-col transition-all duration-300 min-h-screen min-w-0
-          ${!isMobile ? (isCollapsed ? "ml-20" : "ml-65") : "ml-0"}
+          ${!isMobile ? (isCollapsed ? "ml-[56px]" : "ml-[220px]") : "ml-0"}
         `}
       >
-        <main className={`flex-1 min-w-0 min-h-screen overflow-x-hidden overflow-y-auto relative
-          ${isMobile ? "pt-14 px-3 pb-4" : "p-4"}
+        <main className={`flex-1 min-w-0 min-h-screen overflow-y-auto relative
+          ${isMobile ? "pt-14 px-3 pb-4" : "p-3 sm:p-4 lg:p-6"}
         `}>
           {renderPage()}
         </main>

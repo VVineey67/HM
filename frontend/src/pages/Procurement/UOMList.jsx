@@ -205,7 +205,7 @@ export default function UOMList() {
   const paginated  = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
 
   return (
-    <div className="p-6 w-full">
+    <div className="p-3 sm:p-4 lg:p-6 w-full pb-32">
 
       {toast && (
         <div className={`fixed top-5 right-5 z-50 px-4 py-3 rounded-xl text-sm font-medium shadow-lg
@@ -215,7 +215,7 @@ export default function UOMList() {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
             <Ruler size={20} className="text-blue-600" />
@@ -226,7 +226,7 @@ export default function UOMList() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap sm:justify-end">
           {canExport && (
             <div className="relative" ref={exportMenuRef}>
               <button onClick={() => setShowExportMenu(v => !v)}
@@ -301,21 +301,21 @@ export default function UOMList() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-slate-800 text-white">
-                <th className="text-center px-3 py-3 text-xs font-semibold uppercase tracking-wide w-12">S.No</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide">UOM Name</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide w-36">UOM Code</th>
-                <th className="text-center px-3 py-3 text-xs font-semibold uppercase tracking-wide w-24">Action</th>
+                <th className="text-center px-3 py-3 text-xs font-semibold uppercase tracking-wide sticky-left-0 w-12">S.No</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide sticky-left-1 w-[120px]" style={{left:'48px'}}>UOM Name</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide">UOM Code</th>
+                <th className="text-center px-3 py-3 text-xs font-semibold uppercase tracking-wide sticky-right-0 w-24">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {paginated.map((u, idx) => (
-                <tr key={idx} className={`transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"} hover:bg-blue-50/40`}>
-                  <td className="px-3 py-3.5 text-slate-400 text-xs text-center font-medium">{(page - 1) * PER_PAGE + idx + 1}</td>
-                  <td className="px-4 py-3.5 font-semibold text-slate-800 text-sm">{u.uomName}</td>
-                  <td className="px-4 py-3.5">
+                <tr key={idx} className={`transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"} hover:bg-blue-50/40 group`}>
+                  <td className="px-3 py-3.5 text-slate-400 text-xs text-center font-medium sticky-left-0 w-12">{(page - 1) * PER_PAGE + idx + 1}</td>
+                  <td className="px-4 py-3.5 font-semibold text-slate-800 text-sm sticky-left-1 w-[120px] whitespace-normal break-words leading-tight" style={{left:'48px'}}>{u.uomName}</td>
+                  <td className="px-4 py-3.5 whitespace-normal break-words leading-tight">
                     <span className="px-2.5 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs font-mono font-semibold">{u.uomCode}</span>
                   </td>
-                  <td className="px-3 py-3.5">
+                  <td className="px-3 py-3.5 sticky-right-0 w-24">
                     <div className="flex items-center justify-center gap-0.5">
                       <button onClick={() => setViewUOM(u)} className="p-1.5 rounded-lg text-slate-300 hover:text-blue-600 hover:bg-blue-50 transition-all"><Eye size={14} /></button>
                       {canEdit && <button onClick={() => openEdit(u)} className="p-1.5 rounded-lg text-slate-300 hover:text-slate-600 hover:bg-slate-100 transition-all"><Pencil size={14} /></button>}

@@ -9,7 +9,7 @@ const PER_PAGE = 10;
 const TABS = ["Supply", "SITC"];
 
 const emptyForm = {
-  materialName: "", specifications: [], category: "", scopeOfWork: "",
+  materialName: "", specifications: [], category: "", scopeOfWork: [],
   brands: [], unit: "", remarks: "",
   image: null, imagePreview: "",
 };
@@ -123,7 +123,7 @@ export default function ItemList() {
       materialName:   item.materialName   || "",
       specifications: Array.isArray(item.specifications) ? item.specifications : [],
       category:       item.category       || "",
-      scopeOfWork:  item.scopeOfWork  || "",
+      scopeOfWork:  Array.isArray(item.scopeOfWork) ? item.scopeOfWork : [],
       brands:       Array.isArray(item.brands) ? item.brands : [],
       unit:         item.unit         || "",
       remarks:      item.remarks      || "",
@@ -149,7 +149,7 @@ export default function ItemList() {
       fd.append("materialName", form.materialName);
       fd.append("specifications", JSON.stringify(form.specifications.filter(s => s.trim())));
       fd.append("category",     form.category);
-      fd.append("scopeOfWork",  form.scopeOfWork);
+      fd.append("scopeOfWork",  JSON.stringify(form.scopeOfWork.filter(s => s.trim())));
       fd.append("brands",       JSON.stringify(form.brands.filter(b => b.trim())));
       fd.append("unit", form.unit);
       fd.append("remarks",      form.remarks);
@@ -174,7 +174,7 @@ export default function ItemList() {
           materialName:   form.materialName,
           specifications: form.specifications.filter(s => s.trim()),
           category:       form.category,
-          scopeOfWork:    form.scopeOfWork,
+          scopeOfWork:    form.scopeOfWork.filter(s => s.trim()),
           brands:         form.brands.filter(b => b.trim()),
           unit:           form.unit,
           remarks:        form.remarks,
@@ -234,7 +234,7 @@ export default function ItemList() {
     const rows = tabItems.map(item => {
       const brands = (item.brands || []).join("; ");
       const base   = { "Item Code": item.itemCode, "Category": item.category, "Item Name": item.materialName, "Specification": (item.specifications||[]).join(", "), "Brands": brands, "Unit": item.unit, "Remarks": item.remarks };
-      if (isSITC) base["Scope of Work"] = item.scopeOfWork;
+      if (isSITC) base["Scope of Work"] = Array.isArray(item.scopeOfWork) ? item.scopeOfWork.join(", ") : (item.scopeOfWork || "");
       return Object.fromEntries(headers.map(h => [h, base[h] || ""]));
     });
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -266,7 +266,7 @@ export default function ItemList() {
           "Category":     item.category   || "",
           "Item Name":    item.materialName|| "",
           "Specification": specs,
-          "Scope of Work": item.scopeOfWork|| "",
+          "Scope of Work": Array.isArray(item.scopeOfWork) ? item.scopeOfWork.join(", ") : (item.scopeOfWork || ""),
           "Brands":        brands,
           "Unit":          item.unit      || "",
           "Remarks":       item.remarks   || "",
@@ -319,7 +319,7 @@ export default function ItemList() {
         category:       r["Category"]     || "",
         materialName:   r["Item Name"]    || "",
         specifications: (r["Specification (comma separated)"] || "").toString().split(",").map(s => s.trim()).filter(Boolean),
-        scopeOfWork:    r["Scope of Work"]|| "",
+        scopeOfWork:    (r["Scope of Work"] || "").toString().split(",").map(s => s.trim()).filter(Boolean),
         brands:         [r["Brand 1"],r["Brand 2"],r["Brand 3"],r["Brand 4"],r["Brand 5"]].filter(b => b?.toString().trim()),
         unit:        r["Unit"]         || "",
         remarks:     r["Remarks"]      || "",
@@ -366,6 +366,11 @@ export default function ItemList() {
   const updateSpec = (i, v) => setForm(f => { const s = [...f.specifications]; s[i] = v; return { ...f, specifications: s }; });
   const removeSpec = (i) => setForm(f => ({ ...f, specifications: f.specifications.filter((_, idx) => idx !== i) }));
 
+  /* scope of work helpers */
+  const addScope    = () => setForm(f => ({ ...f, scopeOfWork: [...f.scopeOfWork, ""] }));
+  const updateScope = (i, v) => setForm(f => { const s = [...f.scopeOfWork]; s[i] = v; return { ...f, scopeOfWork: s }; });
+  const removeScope = (i) => setForm(f => ({ ...f, scopeOfWork: f.scopeOfWork.filter((_, idx) => idx !== i) }));
+
   const [filterCategory, setFilterCategory] = useState("");
   const [filterItem,     setFilterItem]     = useState("");
 
@@ -392,7 +397,7 @@ export default function ItemList() {
   const uomOptions = uoms.map(u => ({ label: `${u.uomName} (${u.uomCode})`, value: u.uomCode }));
 
   return (
-    <div className="p-6 w-full">
+    <div className="p-3 sm:p-4 lg:p-6 w-full pb-32">
 
       {/* Toast */}
       {toast && (
@@ -403,7 +408,7 @@ export default function ItemList() {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
             <Package size={20} className="text-blue-600" />
@@ -413,7 +418,7 @@ export default function ItemList() {
             <p className="text-sm text-slate-400">Global master — used across all POs</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap sm:justify-end">
           {/* Export dropdown */}
           {canExport && (
             <div className="relative">
@@ -522,8 +527,8 @@ export default function ItemList() {
       </div>
 
       {/* Search + Filters */}
-      <div className="flex items-center gap-2 mb-4 flex-wrap">
-        <div className="relative flex-1 min-w-48">
+      <div className="flex flex-col sm:flex-row items-center gap-2 mb-4">
+        <div className="relative w-full sm:flex-1">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
             placeholder="Search by code, name or category…"
@@ -531,9 +536,9 @@ export default function ItemList() {
         </div>
 
         {/* Category filter */}
-        <div className="relative">
+        <div className="relative w-full sm:w-auto">
           <select value={filterCategory} onChange={e => { setFilterCategory(e.target.value); setPage(1); }}
-            className="h-10 pl-3 pr-8 rounded-xl border border-slate-200 text-sm outline-none focus:border-slate-400 bg-white text-slate-600 min-w-40 appearance-none cursor-pointer">
+            className="h-10 w-full sm:w-40 pl-3 pr-8 rounded-xl border border-slate-200 text-sm outline-none focus:border-slate-400 bg-white text-slate-600 appearance-none cursor-pointer">
             <option value="">All Categories</option>
             {uniqueCategories.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
@@ -541,9 +546,9 @@ export default function ItemList() {
         </div>
 
         {/* Item filter */}
-        <div className="relative">
+        <div className="relative w-full sm:w-auto">
           <select value={filterItem} onChange={e => { setFilterItem(e.target.value); setPage(1); }}
-            className="h-10 pl-3 pr-8 rounded-xl border border-slate-200 text-sm outline-none focus:border-slate-400 bg-white text-slate-600 min-w-48 appearance-none cursor-pointer">
+            className="h-10 w-full sm:w-48 pl-3 pr-8 rounded-xl border border-slate-200 text-sm outline-none focus:border-slate-400 bg-white text-slate-600 appearance-none cursor-pointer">
             <option value="">All Items</option>
             {uniqueItems.map(n => <option key={n} value={n}>{n}</option>)}
           </select>
@@ -565,16 +570,16 @@ export default function ItemList() {
           <table className="w-full border-collapse">
             <thead>
               <tr className="bg-slate-50">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200 w-12">S.No</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200 whitespace-nowrap">Item Code</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200 sticky-left-0 w-[45px]">S.No</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200 sticky-left-1 w-[95px] whitespace-nowrap">Item Code</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200">Category</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200 whitespace-nowrap">Item Name</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200">Item Name</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200">Specification</th>
-                {isSITC && <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200 whitespace-nowrap" style={{minWidth:'180px',maxWidth:'220px'}}>Scope of Work</th>}
+                {isSITC && <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200 whitespace-nowrap" style={{minWidth:'250px'}}>Scope of Work</th>}
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200">Brand(s)</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200">Unit</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200">Remarks</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200">Actions</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200 sticky-right-0 w-[90px]">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -584,27 +589,31 @@ export default function ItemList() {
                 <tr><td colSpan={isSITC ? 10 : 9} className="text-center py-16 text-slate-300 font-semibold uppercase tracking-widest text-xs border border-slate-200">No items found</td></tr>
               ) : paginated.map((item, idx) => (
                 <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-4 py-3 text-sm text-slate-400 text-center border border-slate-200 align-top">{(page - 1) * PER_PAGE + idx + 1}</td>
-                  <td className="px-4 py-3 text-sm font-mono text-slate-600 border border-slate-200 align-top whitespace-nowrap">{item.itemCode}</td>
+                  <td className="px-4 py-3 text-sm text-slate-400 text-center border border-slate-200 align-top sticky-left-0 w-[45px]">{(page - 1) * PER_PAGE + idx + 1}</td>
+                  <td className="px-4 py-3 text-sm font-mono text-slate-600 border border-slate-200 align-top whitespace-nowrap sticky-left-1 w-[95px]">{item.itemCode}</td>
                   <td className="px-4 py-3 border border-slate-200 align-top">
                     {item.category
                       ? <span className="px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-medium whitespace-nowrap">{item.category}</span>
                       : <span className="text-slate-300 text-sm">—</span>}
                   </td>
-                  <td className="px-4 py-3 text-sm font-semibold text-slate-700 border border-slate-200 align-top whitespace-nowrap">{item.materialName}</td>
+                  <td className="px-4 py-3 text-sm font-semibold text-slate-700 border border-slate-200 align-top whitespace-normal break-words leading-tight">{item.materialName}</td>
                   <td className="px-4 py-3 border border-slate-200 align-top">
                     {item.specifications?.length > 0
                       ? <div className="flex flex-wrap gap-1">
                           {item.specifications.map((s, i) => (
-                            <span key={i} className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs whitespace-nowrap">{s}</span>
+                            <span key={i} className="px-2 py-0.5 rounded-xl bg-slate-100 text-slate-600 text-xs whitespace-normal break-words leading-tight">{s}</span>
                           ))}
                         </div>
                       : <span className="text-slate-300 text-sm">—</span>}
                   </td>
                   {isSITC && (
-                    <td className="px-4 py-3 text-sm text-slate-500 border border-slate-200 align-top" style={{minWidth:'180px',maxWidth:'220px'}}>
-                      {item.scopeOfWork
-                        ? <p className="text-slate-600 text-xs leading-relaxed" style={{display:'-webkit-box',WebkitLineClamp:3,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{item.scopeOfWork}</p>
+                    <td className="px-4 py-3 text-sm text-slate-500 border border-slate-200 align-top" style={{minWidth:'250px'}}>
+                      {item.scopeOfWork?.length > 0
+                        ? <div className="flex flex-wrap gap-1">
+                            {item.scopeOfWork.map((s, i) => (
+                              <span key={i} className="px-2 py-0.5 rounded-xl bg-slate-100 text-slate-600 text-xs whitespace-normal break-words leading-tight">{s}</span>
+                            ))}
+                          </div>
                         : <span className="text-slate-300">—</span>}
                     </td>
                   )}
@@ -612,14 +621,14 @@ export default function ItemList() {
                     {item.brands?.length > 0
                       ? <div className="flex flex-wrap gap-1">
                           {item.brands.map((b, i) => (
-                            <span key={i} className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs whitespace-nowrap">{b}</span>
+                            <span key={i} className="px-2 py-0.5 rounded-xl bg-slate-100 text-slate-600 text-xs whitespace-normal break-words leading-tight">{b}</span>
                           ))}
                         </div>
                       : <span className="text-slate-300 text-sm">—</span>}
                   </td>
                   <td className="px-4 py-3 text-sm text-slate-500 border border-slate-200 align-top whitespace-nowrap">{item.unit || "—"}</td>
-                  <td className="px-4 py-3 text-sm text-slate-500 border border-slate-200 align-top">{item.remarks || "—"}</td>
-                  <td className="px-4 py-3 border border-slate-200 align-top">
+                  <td className="px-4 py-3 text-sm text-slate-500 border border-slate-200 align-top whitespace-normal break-words leading-tight">{item.remarks || "—"}</td>
+                  <td className="px-4 py-3 border border-slate-200 align-top sticky-right-0 w-[90px]">
                     <div className="flex items-center gap-1">
                       <button onClick={() => setViewItem(item)}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all" title="View">
@@ -732,10 +741,12 @@ export default function ItemList() {
               </div>
 
               {/* Scope of Work (SITC only) */}
-              {viewItem.itemType === "SITC" && viewItem.scopeOfWork && (
+              {viewItem.itemType === "SITC" && viewItem.scopeOfWork?.length > 0 && (
                 <div className="bg-purple-50 rounded-xl p-4 border border-purple-100">
                   <p className="text-xs font-semibold text-purple-500 uppercase tracking-wide mb-2">Scope of Work</p>
-                  <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{viewItem.scopeOfWork}</p>
+                  <ul className="list-disc pl-5 text-sm text-slate-700 leading-relaxed space-y-1">
+                    {viewItem.scopeOfWork.map((s, i) => <li key={i}>{s}</li>)}
+                  </ul>
                 </div>
               )}
 
@@ -852,10 +863,28 @@ export default function ItemList() {
                 {/* Scope of Work (SITC only) */}
                 {isSITC && (
                   <div className="col-span-2">
-                    <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wide">Scope of Work</label>
-                    <textarea value={form.scopeOfWork} onChange={e => setForm(f => ({ ...f, scopeOfWork: e.target.value }))}
-                      rows={2} placeholder="Scope of work…"
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-400 text-slate-700 resize-none" />
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Scope of Work</label>
+                      <button type="button" onClick={addScope} className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1">
+                        <Plus size={12} /> Add
+                      </button>
+                    </div>
+                    {form.scopeOfWork.length === 0
+                      ? <p className="text-xs text-slate-400 italic">Click "Add" to add scope of work points</p>
+                      : <div className="space-y-2">
+                          {form.scopeOfWork.map((s, i) => (
+                            <div key={i} className="flex items-center gap-2">
+                              <input value={s} onChange={e => updateScope(i, e.target.value)}
+                                placeholder={`Scope ${i + 1}`}
+                                className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-slate-400 text-slate-700" />
+                              <button type="button" onClick={() => removeScope(i)}
+                                className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all">
+                                <X size={13} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                    }
                   </div>
                 )}
 

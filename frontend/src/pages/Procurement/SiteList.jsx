@@ -256,7 +256,7 @@ export default function SiteList() {
 
 
   return (
-    <div className="p-6 w-full">
+    <div className="p-3 sm:p-4 lg:p-6 w-full pb-32">
 
       {toast && (
         <div className={`fixed top-5 right-5 z-50 px-4 py-3 rounded-xl text-sm font-medium shadow-lg
@@ -266,7 +266,7 @@ export default function SiteList() {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
             <MapPin size={20} className="text-blue-600" />
@@ -276,8 +276,7 @@ export default function SiteList() {
             <p className="text-sm text-slate-400">Global master — all project sites</p>
           </div>
         </div>
-
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap sm:justify-end">
 
           {canExport && (
           <div className="relative" ref={exportMenuRef}>
@@ -355,28 +354,39 @@ export default function SiteList() {
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="bg-slate-800 text-white">
-                  {["S.No","Site Name","Code","City","State","Billing Address","Site Address","Action"].map((h, i) => (
-                    <th key={i} className={`px-4 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700 last:border-r-0
-                      ${i === 0 ? "w-12 text-center" : "text-left"}
-                      ${i === 1 ? "min-w-[140px]" : ""} ${i === 5 || i === 6 ? "min-w-[240px]" : ""} ${i === 7 ? "w-20 text-center" : ""}`}>
-                      {h}
-                    </th>
-                  ))}
+                  {["S.No","Site Name","Code","City","State","Billing Address","Site Address","Action"].map((h, i) => {
+                    let stickyClass = "";
+                    let style = {};
+                    if (i === 0) stickyClass = "sticky-left-0";
+                    if (i === 1) { stickyClass = "sticky-left-1"; style = { left: '48px' }; }
+                    if (i === 7) stickyClass = "sticky-right-0";
+                    
+                    return (
+                      <th key={i} className={`px-4 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700 last:border-r-0 ${stickyClass}
+                        ${i === 0 ? "w-12 text-center" : "text-left"}
+                        ${i === 1 ? "min-w-[150px]" : ""} 
+                        ${i === 5 || i === 6 ? "min-w-[240px]" : ""} 
+                        ${i === 7 ? "w-20 text-center" : ""}`}
+                        style={style}>
+                        {h}
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>
                 {paginated.map((s, idx) => (
-                  <tr key={idx} className={`transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-slate-50"} hover:bg-blue-50/50`}>
-                    <td className="px-4 py-3 text-slate-400 text-xs border border-slate-200 align-middle text-center">{(page - 1) * PER_PAGE + idx + 1}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-800 text-sm border border-slate-200 align-top leading-snug">{s.siteName}</td>
+                  <tr key={idx} className={`transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-slate-50"} hover:bg-blue-50/50 group`}>
+                    <td className="px-4 py-3 text-slate-400 text-xs border border-slate-200 align-middle text-center sticky-left-0 w-12">{(page - 1) * PER_PAGE + idx + 1}</td>
+                    <td className="px-4 py-3 font-semibold text-slate-800 text-sm border border-slate-200 align-top leading-snug sticky-left-1 w-[150px] whitespace-normal break-words" style={{left:'48px'}}>{s.siteName}</td>
                     <td className="px-4 py-3 border border-slate-200 align-top">
                       <span className="inline-block px-2 py-0.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-mono font-semibold whitespace-nowrap">{s.siteCode}</span>
                     </td>
-                    <td className="px-4 py-3 text-slate-700 text-xs border border-slate-200 align-top">{s.city}</td>
-                    <td className="px-4 py-3 text-slate-500 text-xs border border-slate-200 align-top">{s.state}</td>
-                    <td className="px-4 py-3 text-slate-600 text-xs border border-slate-200 align-top leading-relaxed">{s.billingAddress}</td>
-                    <td className="px-4 py-3 text-slate-600 text-xs border border-slate-200 align-top leading-relaxed">{s.siteAddress}</td>
-                    <td className="px-4 py-3 border border-slate-200 align-middle">
+                    <td className="px-4 py-3 text-slate-700 text-xs border border-slate-200 align-top whitespace-normal break-words">{s.city}</td>
+                    <td className="px-4 py-3 text-slate-500 text-xs border border-slate-200 align-top whitespace-normal break-words">{s.state}</td>
+                    <td className="px-4 py-3 text-slate-600 text-xs border border-slate-200 align-top leading-relaxed whitespace-normal break-words">{s.billingAddress}</td>
+                    <td className="px-4 py-3 text-slate-600 text-xs border border-slate-200 align-top leading-relaxed whitespace-normal break-words">{s.siteAddress}</td>
+                    <td className="px-4 py-3 border border-slate-200 align-middle sticky-right-0 w-20">
                       <div className="flex items-center gap-1 justify-center">
                         <button onClick={() => setViewSite(s)} className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all"><Eye size={13} /></button>
                         {canEdit && (

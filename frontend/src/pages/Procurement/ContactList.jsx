@@ -157,7 +157,7 @@ export default function ContactList() {
   const paginated  = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
 
   return (
-    <div className="p-6 w-full">
+    <div className="p-3 sm:p-4 lg:p-6 w-full pb-32">
 
       {toast && (
         <div className={`fixed top-5 right-5 z-50 px-4 py-3 rounded-xl text-sm font-medium shadow-lg
@@ -167,7 +167,7 @@ export default function ContactList() {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-sky-50 flex items-center justify-center">
             <Users size={20} className="text-sky-600" />
@@ -178,7 +178,7 @@ export default function ContactList() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap sm:justify-end">
           {canExport && (
             <div className="relative" ref={exportMenuRef}>
               <button onClick={() => setShowExportMenu(v => !v)}
@@ -237,19 +237,19 @@ export default function ContactList() {
             </colgroup>
             <thead>
               <tr className="bg-slate-800 text-white">
-                <th className="text-center px-3 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700">S.No</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700">Person Name</th>
+                <th className="text-center px-3 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700 sticky-left-0 w-12">S.No</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700 sticky-left-1 w-[160px]" style={{left:'48px'}}>Person Name</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700">Contact Number</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700">Designation</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700">Company / Organisation</th>
-                <th className="text-center px-3 py-3 text-xs font-semibold uppercase tracking-wide">Action</th>
+                <th className="text-center px-3 py-3 text-xs font-semibold uppercase tracking-wide sticky-right-0 w-[100px]">Action</th>
               </tr>
             </thead>
             <tbody>
               {paginated.map((c, idx) => (
-                <tr key={c.id} className={`transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-slate-50"} hover:bg-sky-50/40`}>
-                  <td className="px-3 py-3 text-slate-400 text-xs text-center border border-slate-100 font-medium">{(page - 1) * PER_PAGE + idx + 1}</td>
-                  <td className="px-4 py-3 font-semibold text-slate-800 text-sm border border-slate-100">
+                <tr key={c.id} className={`transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-slate-50"} hover:bg-sky-50/40 group`}>
+                  <td className="px-3 py-3 text-slate-400 text-xs text-center border border-slate-100 font-medium sticky-left-0 w-12">{(page - 1) * PER_PAGE + idx + 1}</td>
+                  <td className="px-4 py-3 font-semibold text-slate-800 text-sm border border-slate-100 sticky-left-1 w-[160px] whitespace-normal break-words leading-tight" style={{left:'48px'}}>
                     <div className="flex items-center gap-2">
                       <div className="w-7 h-7 rounded-full bg-sky-100 flex items-center justify-center shrink-0">
                         <span className="text-sky-600 text-xs font-bold">{c.personName?.[0]?.toUpperCase()}</span>
@@ -257,15 +257,15 @@ export default function ContactList() {
                       {c.personName}
                     </div>
                   </td>
-                  <td className="px-4 py-3 border border-slate-100">
+                  <td className="px-4 py-3 border border-slate-100 whitespace-nowrap">
                     <div className="flex items-center gap-1.5 text-slate-600 text-sm">
                       <Phone size={12} className="text-slate-400 shrink-0" />
                       {c.contactNumber || "—"}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-slate-600 text-sm border border-slate-100">{c.designation || "—"}</td>
-                  <td className="px-4 py-3 text-slate-500 text-xs border border-slate-100">{c.company || "—"}</td>
-                  <td className="px-3 py-3 border border-slate-100">
+                  <td className="px-4 py-3 text-slate-600 text-sm border border-slate-100 whitespace-normal break-words leading-snug">{c.designation || "—"}</td>
+                  <td className="px-4 py-3 text-slate-500 text-xs border border-slate-100 whitespace-normal break-words leading-snug">{c.company || "—"}</td>
+                  <td className="px-3 py-3 border border-slate-100 sticky-right-0 w-[100px]">
                     <div className="flex items-center justify-center gap-0.5">
                       <button onClick={() => setViewContact(c)} className="p-1.5 rounded-lg text-slate-300 hover:text-sky-600 hover:bg-sky-50 transition-all"><Eye size={14} /></button>
                       {canEdit && <button onClick={() => openEdit(c)} className="p-1.5 rounded-lg text-slate-300 hover:text-slate-600 hover:bg-slate-100 transition-all"><Pencil size={14} /></button>}

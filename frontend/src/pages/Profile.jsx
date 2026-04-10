@@ -9,6 +9,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import api from "../utils/api";
 import ManageProjects from "../components/ManageProjects";
+import ApprovalConfig from "../components/ApprovalConfig";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
@@ -1779,95 +1780,7 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
 
             {/* ─── APPROVAL FLOW ─── */}
             {section === "approval_flow" && (isGlobalAdmin || !!pp.approval_flow?.view) && (
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-9 h-9 rounded-xl bg-violet-50 flex items-center justify-center shrink-0">
-                    <GitMerge size={17} className="text-violet-600" />
-                  </div>
-                  <div>
-                    <h2 className="text-base font-black text-slate-800">Approval Flow</h2>
-                    <p className="text-xs text-slate-500">Set who can approve each module's documents</p>
-                  </div>
-                </div>
-
-                {approvalLoading ? (
-                  <div className="flex justify-center py-10">
-                    <Loader2 size={22} className="animate-spin text-violet-400" />
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {/* Column headers */}
-                    <div className="grid grid-cols-12 gap-3 px-4 pb-1">
-                      <div className="col-span-3"><span className={lbl}>Module</span></div>
-                      <div className="col-span-2"><span className={lbl}>Flow</span></div>
-                      <div className="col-span-4"><span className={lbl}>Approver</span></div>
-                      <div className="col-span-3"><span className={lbl}>Currently Set</span></div>
-                    </div>
-
-                    {APPROVAL_MODULES.map(mod => {
-                      const cfg = approvalFlows[mod.key] || {};
-                      return (
-                        <div key={mod.key} className="grid grid-cols-12 gap-3 items-center p-4 rounded-xl border border-slate-100 bg-slate-50 hover:border-violet-200 transition-all">
-                          <div className="col-span-3">
-                            <p className="text-sm font-semibold text-slate-700">{mod.label}</p>
-                          </div>
-                          <div className="col-span-2">
-                            <div className="flex flex-col gap-1 text-xs text-slate-500">
-                              <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-blue-400 inline-block"/>Submitted</span>
-                              <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-violet-400 inline-block"/>Approve/Reject</span>
-                              <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block"/>Assign &amp; Work</span>
-                            </div>
-                          </div>
-                          <div className="col-span-4">
-                            <div className="relative">
-                              <select
-                                className={inp + " appearance-none pr-8"}
-                                value={cfg.approver_user_id || ""}
-                                onChange={e => updateApprovalFlow(mod.key, e.target.value)}>
-                                <option value="">— No approver set —</option>
-                                {approvalUsers.map(u => (
-                                  <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
-                                ))}
-                              </select>
-                              <ChevronDown size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                            </div>
-                          </div>
-                          <div className="col-span-3 flex items-center justify-between gap-2">
-                            <div className="min-w-0">
-                              {cfg.approver_name ? (
-                                <>
-                                  <p className="text-xs font-semibold text-slate-700 truncate">{cfg.approver_name}</p>
-                                  <p className="text-[10px] text-slate-400 truncate">{cfg.approver_email}</p>
-                                </>
-                              ) : (
-                                <p className="text-xs text-slate-300">Not configured</p>
-                              )}
-                            </div>
-                            <button
-                              onClick={() => saveApprovalFlow(mod.key)}
-                              disabled={approvalSaving === mod.key}
-                              className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600 text-white text-xs font-semibold hover:bg-violet-700 disabled:opacity-50 transition-all">
-                              {approvalSaving === mod.key ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
-                              Save
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-
-                    <div className="mt-4 p-4 rounded-xl bg-violet-50 border border-violet-100">
-                      <p className="text-xs font-semibold text-violet-700 mb-1">How it works</p>
-                      <ul className="text-xs text-violet-600 space-y-1 list-disc list-inside">
-                        <li>User raises an intake → status: <strong>Submitted</strong></li>
-                        <li>Configured approver sees it → can <strong>Approve</strong> or <strong>Reject</strong></li>
-                        <li>After approval → approver assigns to a team member → status: <strong>In Review</strong></li>
-                        <li>Assigned person starts working → status: <strong>Working</strong></li>
-                        <li>Quotations collected → Comparative generated → PR <strong>Closed</strong></li>
-                      </ul>
-                    </div>
-                  </div>
-                )}
-              </div>
+               <ApprovalConfig showToast={showToast} />
             )}
 
 

@@ -53,7 +53,7 @@ router.get("/items", async (_req, res) => {
       category:     r.category      || "",
       unit:         r.unit          || "",
       imageUrl:     r.image_url     || "",
-      scopeOfWork:  r.scope_of_work || "",
+      scopeOfWork:  parseJsonArr(r.scope_of_work),
       remarks:      r.remarks       || "",
       createdById:  r.created_by_id || "",
       createdByName: r.created_by_name || "",
@@ -67,9 +67,10 @@ router.get("/items", async (_req, res) => {
 
 router.post("/items", upload.single("image"), async (req, res) => {
   try {
-    const { materialName, category, unit, itemType, scopeOfWork, remarks, createdById, createdByName } = req.body;
+    const { materialName, category, unit, itemType, remarks, createdById, createdByName } = req.body;
     const brands         = JSON.parse(req.body.brands         || "[]");
     const specifications = JSON.parse(req.body.specifications || "[]");
+    const scopeOfWork    = JSON.parse(req.body.scopeOfWork    || "[]");
     const item_code      = await getNextItemCode(itemType || "Supply");
     let image_url        = "";
     if (req.file) {
@@ -84,7 +85,7 @@ router.post("/items", upload.single("image"), async (req, res) => {
       material_name: materialName || "", make: JSON.stringify(brands),
       description: JSON.stringify(specifications), category: category || "",
       unit: unit || "", image_url,
-      scope_of_work: scopeOfWork || "", remarks: remarks || "",
+      scope_of_work: JSON.stringify(scopeOfWork), remarks: remarks || "",
       created_by_id: createdById || "", created_by_name: createdByName || "",
     }).select().single();
     if (error) throw error;
@@ -98,9 +99,10 @@ router.post("/items", upload.single("image"), async (req, res) => {
 router.put("/items/:id", upload.single("image"), async (req, res) => {
   try {
     const { id } = req.params;
-    const { materialName, category, unit, itemType, scopeOfWork, remarks } = req.body;
+    const { materialName, category, unit, itemType, remarks } = req.body;
     const brands         = JSON.parse(req.body.brands         || "[]");
     const specifications = JSON.parse(req.body.specifications || "[]");
+    const scopeOfWork    = JSON.parse(req.body.scopeOfWork    || "[]");
     let image_url        = req.body.imageUrl || "";
 
     if (req.file) {
@@ -120,12 +122,69 @@ router.put("/items/:id", upload.single("image"), async (req, res) => {
       material_name: materialName || "", make: JSON.stringify(brands),
       description: JSON.stringify(specifications), category: category || "",
       unit: unit || "", image_url,
-      scope_of_work: scopeOfWork || "", remarks: remarks || "",
+      scope_of_work: JSON.stringify(scopeOfWork), remarks: remarks || "",
     }).eq("id", id);
     if (error) throw error;
     res.json({ success: true, imageUrl: image_url });
   } catch (err) {
     console.error("Item update error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/items/:id/append-array", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { field, value } = req.body;
+    
+    if (!value || !value.trim()) return res.json({ success: true });
+
+    const { data: item } = await supabase.schema("procurement").from("items").select(field).eq("id", id).single();
+    if (!item) throw new Error("Item not found");
+
+    let currentArr = [];
+    try { currentArr = JSON.parse(item[field] || "[]"); } catch { currentArr = []; }
+
+    if (!currentArr.includes(value.trim())) {
+      currentArr.push(value.trim());
+      const { error } = await supabase.schema("procurement").from("items").update({
+        [field]: JSON.stringify(currentArr)
+      }).eq("id", id);
+      if (error) throw error;
+    }
+
+    res.json({ success: true, updatedArray: currentArr });
+  } catch (err) {
+    console.error("Append array error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/items/:id/update-array-item", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { field, oldValue, newValue } = req.body;
+    
+    if (!newValue || !newValue.trim()) return res.status(400).json({ error: "New value is required" });
+
+    const { data: item } = await supabase.schema("procurement").from("items").select(field).eq("id", id).single();
+    if (!item) throw new Error("Item not found");
+
+    let currentArr = [];
+    try { currentArr = JSON.parse(item[field] || "[]"); } catch { currentArr = []; }
+
+    const idx = currentArr.indexOf(oldValue);
+    if (idx !== -1) {
+      currentArr[idx] = newValue.trim();
+      const { error } = await supabase.schema("procurement").from("items").update({
+        [field]: JSON.stringify(currentArr)
+      }).eq("id", id);
+      if (error) throw error;
+    }
+
+    res.json({ success: true, updatedArray: currentArr });
+  } catch (err) {
+    console.error("Update array item error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -183,7 +242,7 @@ router.post("/items/bulk", async (req, res) => {
         description:   JSON.stringify(Array.isArray(r.specifications) ? r.specifications.filter(Boolean) : []),
         category:      r.category      || "",
         unit:          r.unit          || "",
-        scope_of_work: r.scopeOfWork   || "",
+        scope_of_work: JSON.stringify(Array.isArray(r.scopeOfWork) ? r.scopeOfWork.filter(Boolean) : []),
         remarks:       r.remarks       || "",
         image_url:     "",
         created_by_id: req.body.createdById || null,
@@ -216,7 +275,38 @@ const getNextClauseCode = async (type) => {
 
 router.get("/clauses", async (req, res) => {
   try {
-    const { type } = req.query;
+    const { type, allVersions } = req.query;
+
+    if (allVersions === "true") {
+      // Fetch all historical versions
+      let query = supabase.schema("procurement").from("clause_versions")
+        .select(`
+          id, version, title, category, points, edited_by, edited_at,
+          clause_ref:clauses!clause_id(code, type)
+        `)
+        .order("edited_at", { ascending: false });
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      // Filter by type if provided (inner filter since we join)
+      const filtered = (data || []).map(v => ({
+        id:        v.id,
+        isVersion: true,
+        version:   v.version,
+        code:      v.clause_ref?.code || "VER",
+        type:      v.clause_ref?.type || "TC",
+        category:  v.category || "",
+        // Formatted title for dropdown
+        title:     `${v.title} (V${v.version})`,
+        points:    Array.isArray(v.points) ? v.points : [],
+        createdAt: v.edited_at,
+        createdByName: v.edited_by || "Unknown",
+      })).filter(v => !type || v.type === type);
+
+      return res.json({ clauses: filtered });
+    }
+
     let query = supabase.schema("procurement").from("clauses")
       .select("*").order("code", { ascending: true });
     if (type) query = query.eq("type", type);

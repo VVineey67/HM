@@ -288,7 +288,7 @@ export default function VendorList() {
   const paginated  = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
 
   return (
-    <div className="p-4 md:p-6 w-full">
+    <div className="p-3 sm:p-4 lg:p-6 w-full pb-32">
 
       {/* Toast */}
       {toast && (
@@ -299,7 +299,7 @@ export default function VendorList() {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-purple-50 flex items-center justify-center shrink-0">
             <Building2 size={18} className="text-purple-600" />
@@ -309,7 +309,7 @@ export default function VendorList() {
             <p className="text-xs text-slate-400">{vendors.length} vendors registered</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap sm:justify-end">
           {/* Export dropdown */}
           {canExport && (
             <div className="relative">
@@ -432,7 +432,7 @@ export default function VendorList() {
             <table className="w-full text-sm border-collapse border border-slate-200">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 divide-x divide-slate-200">
-                  <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500 sticky left-0 bg-slate-50 min-w-12">
+                  <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500 sticky-left-0 w-[50px]">
                     S.NO
                   </th>
                   {COLS.map(c => (
@@ -440,15 +440,15 @@ export default function VendorList() {
                       {c.label}
                     </th>
                   ))}
-                  <th className="px-4 py-3 text-right text-[11px] font-bold uppercase tracking-wider text-slate-500 w-[100px] sticky right-0 bg-slate-50">
+                  <th className="px-4 py-3 text-right text-[11px] font-bold uppercase tracking-wider text-slate-500 w-[100px] sticky-right-0">
                     Actions
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {paginated.map((v, idx) => (
-                  <tr key={v.id} className="hover:bg-slate-50/60 transition-colors divide-x divide-slate-200">
-                    <td className="px-4 py-3 text-xs font-medium text-slate-400 sticky left-0 bg-white">
+                  <tr key={v.id} className="hover:bg-slate-50/60 transition-colors divide-x divide-slate-200 group">
+                    <td className="px-4 py-3 text-xs font-medium text-slate-400 sticky-left-0 w-[50px] text-center">
                       {(page - 1) * PER_PAGE + idx + 1}
                     </td>
                     {COLS.map(c => (
@@ -470,7 +470,7 @@ export default function VendorList() {
                         )}
                       </td>
                     ))}
-                    <td className="px-4 py-3 sticky right-0 bg-white">
+                    <td className="px-4 py-3 sticky-right-0 w-[100px]">
                       <div className="flex items-center justify-end gap-1">
                         <button onClick={() => setViewVendor(v)}
                           className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all" title="View Details">

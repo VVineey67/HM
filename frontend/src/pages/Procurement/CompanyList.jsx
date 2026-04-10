@@ -260,7 +260,7 @@ export default function CompanyList() {
 
 
   return (
-    <div className="p-6 w-full min-w-0">
+    <div className="p-3 sm:p-4 lg:p-6 w-full pb-32">
 
       {/* Toast */}
       {toast && (
@@ -271,7 +271,7 @@ export default function CompanyList() {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center">
             <Landmark size={20} className="text-green-600" />
@@ -281,7 +281,7 @@ export default function CompanyList() {
             <p className="text-sm text-slate-400">Global — Buyer company details for PO</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap sm:justify-end">
             {canExport && (
               <div className="relative" ref={exportMenuRef}>
                 <button onClick={() => setShowExportMenu(v => !v)}
@@ -333,8 +333,8 @@ export default function CompanyList() {
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="bg-slate-800 text-white">
-                  <th className="sticky left-0 z-20 bg-slate-800 px-3 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700 text-center w-10">S.No</th>
-                  <th className="sticky left-10 z-20 bg-slate-800 px-3 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700 text-left min-w-44">Company Name</th>
+                  <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700 text-center sticky-left-0 w-[45px]">S.No</th>
+                  <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700 text-left sticky-left-1 w-[140px]" style={{left:'45px'}}>Company Name</th>
                   <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700 text-left w-20">Code</th>
                   <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700 text-left min-w-36">Person Name</th>
                   <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700 text-left w-32">Designation</th>
@@ -345,40 +345,38 @@ export default function CompanyList() {
                   <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700 text-center w-20">Pincode</th>
                   <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700 text-left w-24">State</th>
                   <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700 text-left w-28">District</th>
-                  <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700 text-left min-w-52">Address</th>
-                  <th className="sticky right-0 z-20 bg-slate-800 px-3 py-3 text-xs font-semibold uppercase tracking-wide text-center w-24 border-l border-slate-700">Action</th>
+                  <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700 text-left min-w-52 whitespace-normal break-words leading-tight">Address</th>
+                  <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wide text-center sticky-right-0 w-[100px] border-l border-slate-700">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {paginated.map((c, idx) => {
                   const even = idx % 2 === 0;
                   const rowBg    = even ? "bg-white"   : "bg-slate-50";
-                  const stickyBg = even ? "bg-white"   : "bg-slate-50";
-                  const hoverBg  = even ? "group-hover:bg-emerald-50" : "group-hover:bg-emerald-50";
                   return (
                   <tr key={idx} className={`transition-colors ${rowBg} hover:bg-emerald-50 group`}>
                     {/* sticky S.No */}
-                    <td className={`sticky left-0 z-10 ${stickyBg} ${hoverBg} px-3 py-3 text-slate-400 text-xs border-r border-b border-slate-200 text-center align-middle font-medium`}>{(page - 1) * perPage + idx + 1}</td>
+                    <td className="px-3 py-3 text-slate-400 text-xs border-r border-b border-slate-200 text-center align-middle font-medium sticky-left-0 w-[45px]">{(page - 1) * perPage + idx + 1}</td>
                     {/* sticky Company Name */}
-                    <td className={`sticky left-10 z-10 ${stickyBg} ${hoverBg} px-3 py-3 border-r border-b border-slate-200 align-middle shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]`}>
-                      <span className="font-semibold text-slate-800 text-xs leading-snug">{c.companyName}</span>
+                    <td className="px-3 py-3 border-r border-b border-slate-200 align-middle sticky-left-1 w-[140px]" style={{left:'45px'}}>
+                      <span className="font-semibold text-slate-800 text-xs leading-snug whitespace-normal break-words">{c.companyName}</span>
                     </td>
                     {/* scrollable */}
                     <td className="px-3 py-3 border border-slate-200 align-middle">
                       <span className="inline-block px-2 py-0.5 bg-green-50 text-green-700 rounded-lg text-xs font-mono font-semibold whitespace-nowrap">{c.companyCode}</span>
                     </td>
-                    <td className="px-3 py-3 text-slate-600 text-xs border border-slate-200 align-middle">{c.personName || <span className="text-slate-300">—</span>}</td>
-                    <td className="px-3 py-3 text-slate-600 text-xs border border-slate-200 align-middle">{c.designation || <span className="text-slate-300">—</span>}</td>
+                    <td className="px-3 py-3 text-slate-600 text-xs border border-slate-200 align-middle whitespace-normal break-words">{c.personName || <span className="text-slate-300">—</span>}</td>
+                    <td className="px-3 py-3 text-slate-600 text-xs border border-slate-200 align-middle whitespace-normal break-words">{c.designation || <span className="text-slate-300">—</span>}</td>
                     <td className="px-3 py-3 text-slate-600 text-xs border border-slate-200 align-middle whitespace-nowrap">{c.phone || <span className="text-slate-300">—</span>}</td>
-                    <td className="px-3 py-3 text-slate-600 text-xs border border-slate-200 align-middle">{c.email || <span className="text-slate-300">—</span>}</td>
+                    <td className="px-3 py-3 text-slate-600 text-xs border border-slate-200 align-middle whitespace-normal break-words">{c.email || <span className="text-slate-300">—</span>}</td>
                     <td className="px-3 py-3 text-slate-600 text-xs font-mono border border-slate-200 align-middle whitespace-nowrap">{c.gstin}</td>
                     <td className="px-3 py-3 text-slate-600 text-xs font-mono border border-slate-200 align-middle whitespace-nowrap">{c.pan}</td>
                     <td className="px-3 py-3 text-slate-600 text-xs border border-slate-200 align-middle text-center">{c.pincode}</td>
-                    <td className="px-3 py-3 text-slate-600 text-xs border border-slate-200 align-middle">{c.state}</td>
-                    <td className="px-3 py-3 text-slate-600 text-xs border border-slate-200 align-middle">{c.district}</td>
-                    <td className="px-3 py-3 text-slate-500 text-xs border border-slate-200 align-top leading-relaxed min-w-52">{c.address}</td>
+                    <td className="px-3 py-3 text-slate-600 text-xs border border-slate-200 align-middle whitespace-normal break-words">{c.state}</td>
+                    <td className="px-3 py-3 text-slate-600 text-xs border border-slate-200 align-middle whitespace-normal break-words">{c.district}</td>
+                    <td className="px-3 py-3 text-slate-500 text-xs border border-slate-200 align-top leading-relaxed min-w-52 whitespace-normal break-words">{c.address}</td>
                     {/* sticky Action */}
-                    <td className={`sticky right-0 z-10 ${stickyBg} ${hoverBg} px-3 py-3 border-l border-b border-slate-200 align-middle shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.08)]`}>
+                    <td className="px-3 py-3 border-l border-b border-slate-200 align-middle sticky-right-0 w-[100px]">
                       <div className="flex items-center gap-1 justify-center">
                         <button onClick={() => openView(c)} title="View"
                           className="p-1.5 rounded-lg text-slate-400 hover:text-green-600 hover:bg-green-50 transition-all">

@@ -17,6 +17,8 @@ const globalMenu = [
     sub: ["Intake", "Order"] },
   { id: "proc_setup",  label: "Procurement Setup", icon: Settings2,
     sub: ["Company List","Site List","Vendor List","UOM","Category List","Item List","Term Condition","Payment Terms","Government Laws","Contact List","Annexure"] },
+  { id: "approvals",   label: "Approval Engine",   icon: ShieldCheck,
+    sub: ["Config"] },
 ];
 
 const projectMenu = [
@@ -99,6 +101,7 @@ const TAB_MODULE_KEY = {
   procurement__order_record:      "order_record",
   images__all_images:             "all_images",
   images__compare_images:         "compare_images",
+  approvals__config:              "approval_workflows",
 };
 
 const Sidebar = ({
@@ -250,7 +253,7 @@ const Sidebar = ({
       initial={false}
       animate={{ width: collapsed ? "56px" : "220px" }}
       transition={{ duration: 0.22, ease: "easeInOut" }}
-      className="h-screen flex flex-col shrink-0 overflow-hidden"
+      className="h-screen flex flex-col shrink-0 overflow-hidden print:hidden"
       style={{ background: "#1c1c1e", borderRight: "1px solid rgba(255,255,255,0.07)" }}
     >
       {/* ── HEADER ── */}

@@ -135,7 +135,35 @@ const emptyVendor = {
 };
 
 export const FullVendorModal = ({ onClose, onSuccess, editData }) => {
-  const [form, setForm] = useState(editData ? { ...emptyVendor, ...editData, logoPreview: editData.logoUrl || "" } : emptyVendor);
+  const [form, setForm] = useState(() => {
+    if (!editData) return emptyVendor;
+    return {
+      ...emptyVendor,
+      ...editData,
+      // Fallbacks for snake_case join data
+      vendorName:     editData.vendorName     || editData.vendor_name || "",
+      bankName:       editData.bankName       || editData.bank_name   || "",
+      accountHolder:  editData.accountHolder  || editData.account_holder || "",
+      accountNumber:  editData.accountNumber  || editData.account_number || "",
+      ifscCode:       editData.ifscCode       || editData.ifsc_code   || "",
+      bankBranch:     editData.bankBranch     || editData.bank_branch || "",
+      bankCity:       editData.bankCity       || editData.bank_city   || "",
+      bankState:      editData.bankState      || editData.bank_state  || "",
+      msmeNumber:     editData.msmeNumber     || editData.msme_number || "",
+      aadharNo:       editData.aadharNo       || editData.aadhar_no   || "",
+      contactPerson:  editData.contactPerson  || editData.contact_person || "",
+      logoUrl:        editData.logoUrl        || editData.logo_url    || "",
+      docGstUrl:      editData.docGstUrl      || editData.doc_gst_url || "",
+      docPanUrl:      editData.docPanUrl      || editData.doc_pan_url || "",
+      docAadhaarUrl:  editData.docAadhaarUrl  || editData.doc_aadhaar_url || "",
+      docCoiUrl:      editData.docCoiUrl      || editData.doc_coi_url || "",
+      docMsmeUrl:     editData.docMsmeUrl     || editData.doc_msme_url || "",
+      docCancelChequeUrl: editData.docCancelChequeUrl || editData.doc_cancel_cheque_url || "",
+      docOtherUrl:    editData.docOtherUrl    || editData.doc_other_url || "",
+      docOther2Url:   editData.docOther2Url   || editData.doc_other2_url || "",
+      logoPreview:    editData.logoUrl        || editData.logo_url    || "",
+    };
+  });
   const [tab, setTab] = useState("basic");
   const [saving, setSaving] = useState(false);
   const logoRef = useRef();
@@ -151,7 +179,7 @@ export const FullVendorModal = ({ onClose, onSuccess, editData }) => {
       fd.append("createdById", u.id || "");
       fd.append("createdByName", u.name || "");
       Object.entries(form).forEach(([k, v]) => {
-        if (["logoPreview", "docGstUrl", "docPanUrl", "docAadhaarUrl", "docCoiUrl", "docMsmeUrl", "docCancelChequeUrl", "docOtherUrl", "docOther2Url"].includes(k)) return;
+        if (k === "logoPreview") return;
         if (v instanceof File) fd.append(k, v);
         else if (v !== null && v !== undefined && v !== "") fd.append(k, v);
       });
@@ -258,14 +286,14 @@ export const FullVendorModal = ({ onClose, onSuccess, editData }) => {
 export const FullViewVendorModal = ({ vendor, onClose, onEdit }) => {
   if (!vendor) return null;
   const docs = [
-    { label: "Aadhar", url: vendor.docAadhaarUrl },
-    { label: "PAN Card", url: vendor.docPanUrl },
-    { label: "GST Certificate", url: vendor.docGstUrl },
-    { label: "MSME", url: vendor.docMsmeUrl },
-    { label: "Cancel Cheque", url: vendor.docCancelChequeUrl },
-    { label: "COI", url: vendor.docCoiUrl },
-    { label: "Other Doc 1", url: vendor.docOtherUrl },
-    { label: "Other Doc 2", url: vendor.docOther2Url },
+    { label: "Aadhar", url: vendor.docAadhaarUrl || vendor.doc_aadhaar_url },
+    { label: "PAN Card", url: vendor.docPanUrl || vendor.doc_pan_url },
+    { label: "GST Certificate", url: vendor.docGstUrl || vendor.doc_gst_url },
+    { label: "MSME", url: vendor.docMsmeUrl || vendor.doc_msme_url },
+    { label: "Cancel Cheque", url: vendor.docCancelChequeUrl || vendor.doc_cancel_cheque_url },
+    { label: "COI", url: vendor.docCoiUrl || vendor.doc_coi_url },
+    { label: "Other Doc 1", url: vendor.docOtherUrl || vendor.doc_other_url },
+    { label: "Other Doc 2", url: vendor.docOther2Url || vendor.doc_other2_url },
   ].filter(d => d.url);
 
   return (
@@ -275,7 +303,7 @@ export const FullViewVendorModal = ({ vendor, onClose, onEdit }) => {
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
           <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
-            <Building2 size={18} className="text-indigo-600" /> {vendor.vendorName}
+            <Building2 size={18} className="text-indigo-600" /> {vendor.vendorName || vendor.vendor_name}
           </h2>
           <div className="flex items-center gap-2">
             {onEdit && (
@@ -298,11 +326,11 @@ export const FullViewVendorModal = ({ vendor, onClose, onEdit }) => {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="col-span-2 md:col-span-1">
                 <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5">Contact Person</p>
-                <p className="text-sm font-semibold text-slate-700">{vendor.contactPerson || "—"}</p>
+                <p className="text-sm font-semibold text-slate-700">{vendor.contactPerson || vendor.contact_person || "—"}</p>
               </div>
               <div>
                 <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5">Mobile</p>
-                <p className="text-sm font-semibold text-slate-700">{vendor.mobile || "—"}</p>
+                <p className="text-sm font-semibold text-slate-700">{vendor.mobile || vendor.phone || "—"}</p>
               </div>
               <div className="col-span-2">
                 <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5">Email</p>
@@ -318,7 +346,7 @@ export const FullViewVendorModal = ({ vendor, onClose, onEdit }) => {
               </div>
               <div>
                 <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5">Aadhar NO</p>
-                <p className="text-sm font-semibold text-slate-700 font-mono">{vendor.aadharNo || "—"}</p>
+                <p className="text-sm font-semibold text-slate-700 font-mono">{vendor.aadharNo || vendor.aadhar_no || "—"}</p>
               </div>
               <div>
                 <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5">MSME NO</p>
@@ -337,23 +365,23 @@ export const FullViewVendorModal = ({ vendor, onClose, onEdit }) => {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="col-span-2">
                 <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5">Bank Name</p>
-                <p className="text-sm font-semibold text-slate-700">{vendor.bankName || "—"}</p>
+                <p className="text-sm font-semibold text-slate-700">{vendor.bankName || vendor.bank_name || "—"}</p>
               </div>
               <div className="col-span-2">
                 <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5">Account Holder</p>
-                <p className="text-sm font-semibold text-slate-700">{vendor.accountHolder || "—"}</p>
+                <p className="text-sm font-semibold text-slate-700">{vendor.accountHolder || vendor.account_holder || "—"}</p>
               </div>
               <div className="col-span-2">
                 <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5">Account No</p>
-                <p className="text-sm font-bold font-mono text-emerald-700">{vendor.accountNumber || "—"}</p>
+                <p className="text-sm font-bold font-mono text-emerald-700">{vendor.accountNumber || vendor.account_number || "—"}</p>
               </div>
               <div>
                 <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5">IFSC Code</p>
-                <p className="text-sm font-bold font-mono text-emerald-700">{vendor.ifscCode || "—"}</p>
+                <p className="text-sm font-bold font-mono text-emerald-700">{vendor.ifscCode || vendor.ifsc_code || "—"}</p>
               </div>
               <div>
                 <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5">Branch</p>
-                <p className="text-sm font-semibold text-slate-700">{vendor.bankBranch || "—"}</p>
+                <p className="text-sm font-semibold text-slate-700">{vendor.bankBranch || vendor.bank_branch || "—"}</p>
               </div>
             </div>
           </div>
@@ -437,7 +465,19 @@ const emptyCompany = {
 };
 
 export const FullCompanyModal = ({ onClose, onSuccess, editData }) => {
-  const [form, setForm] = useState(editData ? { ...emptyCompany, ...editData, logoPreview: editData.logoUrl || "", stampPreview: editData.stampUrl || "", signPreview: editData.signUrl || "" } : emptyCompany);
+  const [form, setForm] = useState(() => {
+    if (!editData) return emptyCompany;
+    return {
+      ...emptyCompany,
+      ...editData,
+      companyName:     editData.companyName || editData.company_name || "",
+      companyCode:     editData.companyCode || editData.company_code || "",
+      logoUrl:         editData.logoUrl     || editData.logo_url     || "",
+      logoPreview:     editData.logoUrl     || editData.logo_url     || "",
+      stampUrl:        editData.stampUrl    || editData.stamp_url    || "",
+      signUrl:         editData.signUrl     || editData.sign_url     || "",
+    };
+  });
   const [tab, setTab] = useState("basic");
   const [saving, setSaving] = useState(false);
 
@@ -452,7 +492,7 @@ export const FullCompanyModal = ({ onClose, onSuccess, editData }) => {
       fd.append("createdById", u.id || "");
       fd.append("createdByName", u.name || "");
       Object.entries(form).forEach(([k, v]) => {
-        if (k.includes("Preview") || ["logoUrl", "stampUrl", "signUrl"].includes(k)) return;
+        if (k.includes("Preview")) return;
         if (v instanceof File) fd.append(k, v);
         else if (v !== null && v !== undefined && v !== "") fd.append(k, v);
       });
@@ -488,9 +528,9 @@ export const FullCompanyModal = ({ onClose, onSuccess, editData }) => {
             <div className="grid grid-cols-2 gap-4">
               <Field label="Company Name *" value={form.companyName} onChange={e => setForm({ ...form, companyName: e.target.value })} placeholder="Full registered name" span2 />
               <Field label="Company Code" value={form.companyCode} onChange={e => setForm({ ...form, companyCode: e.target.value.toUpperCase() })} placeholder="e.g. NSSPL" mono />
-              <Field label="Person Name" value={form.personName} onChange={e => setForm({ ...form, personName: e.target.value })} placeholder="e.g. John Doe" />
+              <Field label="Person Name" value={form.personName || form.person_name} onChange={e => setForm({ ...form, personName: e.target.value })} placeholder="e.g. John Doe" />
               <Field label="Designation" value={form.designation} onChange={e => setForm({ ...form, designation: e.target.value })} placeholder="e.g. Managing Director" />
-              <Field label="Phone" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="Phone number" />
+              <Field label="Phone" value={form.phone || form.mobile} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="Phone number" />
               <Field label="Email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="company@email.com" span2 />
               <Field label="GSTIN" value={form.gstin} onChange={e => setForm({ ...form, gstin: e.target.value.toUpperCase() })} placeholder="15-digit GST No." mono />
               <Field label="PAN" value={form.pan} onChange={e => setForm({ ...form, pan: e.target.value.toUpperCase() })} placeholder="10-char PAN" mono />
@@ -525,9 +565,22 @@ export const FullViewCompanyModal = ({ company, onClose, onEdit }) => {
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm text-left">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
-          <div className="flex items-center gap-3">
-            {company.logoUrl ? <img src={company.logoUrl} alt="" className="w-10 h-10 rounded-xl object-contain border border-slate-100 bg-slate-50 p-1" /> : <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center"><Landmark size={18} className="text-green-600" /></div>}
-            <div><h2 className="text-base font-bold text-slate-800">{company.companyName}</h2>{company.companyCode && <span className="text-xs font-mono text-green-700 bg-green-50 px-2 py-0.5 rounded-lg">{company.companyCode}</span>}</div>
+          <div className="flex items-center gap-3 text-left">
+            {(company.logoUrl || company.logo_url) ? (
+              <img src={company.logoUrl || company.logo_url} alt="" className="w-10 h-10 rounded-xl object-contain border border-slate-100 bg-slate-50 p-1" />
+            ) : (
+              <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center">
+                <Landmark size={18} className="text-green-600" />
+              </div>
+            )}
+            <div>
+              <h2 className="text-base font-bold text-slate-800">{company.companyName || company.company_name}</h2>
+              {(company.companyCode || company.company_code) && (
+                <span className="text-xs font-mono text-green-700 bg-green-50 px-2 py-0.5 rounded-lg">
+                  {company.companyCode || company.company_code}
+                </span>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-2">
             {onEdit && (
@@ -536,20 +589,36 @@ export const FullViewCompanyModal = ({ company, onClose, onEdit }) => {
                 <Pencil size={16} />
               </button>
             )}
-            <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
+              <X size={18} />
+            </button>
           </div>
         </div>
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-8">
-          <div className="grid grid-cols-2 gap-x-8 gap-y-4">
-            {[["Person Name", company.personName], ["Designation", company.designation], ["Phone", company.phone], ["Email", company.email], ["GSTIN", company.gstin], ["PAN", company.pan], ["Pincode", company.pincode], ["State", company.state], ["District", company.district]].map(([l, v]) => v ? (
+          <div className="grid grid-cols-2 gap-x-8 gap-y-4 text-left">
+            {[
+              ["Person Name", company.personName || company.person_name], 
+              ["Designation", company.designation], 
+              ["Phone", company.phone || company.mobile], 
+              ["Email", company.email], 
+              ["GSTIN", company.gstin], 
+              ["PAN", company.pan], 
+              ["Pincode", company.pincode], 
+              ["State", company.state], 
+              ["District", company.district]
+            ].map(([l, v]) => v ? (
               <div key={l}><p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-0.5">{l}</p><p className="text-sm text-slate-700 font-medium">{v}</p></div>
             ) : null)}
-            {company.address && <div className="col-span-2"><p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-0.5">Address</p><p className="text-sm text-slate-700">{company.address}</p></div>}
+            {(company.address) && <div className="col-span-2 text-left"><p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-0.5">Address</p><p className="text-sm text-slate-700">{company.address}</p></div>}
           </div>
           <div className="grid grid-cols-3 gap-4 border-t border-slate-100 pt-6">
-            {[["Logo", company.logoUrl], ["Stamp", company.stampUrl], ["Sign", company.signUrl]].map(([l, u]) => (
-              <div key={l}>
-                 <p className="text-[10px] font-bold text-slate-400 uppercase mb-2 text-center">{l}</p>
+            {[
+              ["Logo", company.logoUrl || company.logo_url], 
+              ["Stamp", company.stampUrl || company.stamp_url], 
+              ["Sign", company.signUrl || company.sign_url]
+            ].map(([l, u]) => (
+              <div key={l} className="text-center">
+                 <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">{l}</p>
                  <div className="h-32 rounded-xl border border-slate-100 bg-slate-50/50 flex items-center justify-center overflow-hidden">
                    {u ? <img src={u} alt={l} className="max-h-full max-w-full object-contain p-2" /> : <p className="text-[10px] text-slate-300">N/A</p>}
                  </div>
@@ -640,11 +709,11 @@ export const FullViewSiteModal = ({ site, onClose, onEdit }) => {
             <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center shrink-0"><MapPin size={20} className="text-blue-300" /></div>
             <div>
               <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-0.5">Site Name</p>
-              <h2 className="text-lg font-bold text-white leading-tight">{site.siteName}</h2>
+              <h2 className="text-lg font-bold text-white leading-tight">{site.siteName || site.site_name}</h2>
               <div className="flex items-center gap-1.5 mt-1.5">
                 <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Site Code</p>
                 <span className="px-2.5 py-0.5 bg-blue-500/20 text-blue-200 rounded-lg text-xs font-mono font-semibold tracking-wider">
-                  {site.siteCode || "—"}
+                  {site.siteCode || site.site_code || "—"}
                 </span>
               </div>
             </div>
@@ -657,11 +726,11 @@ export const FullViewSiteModal = ({ site, onClose, onEdit }) => {
           </div>
           <div className="rounded-xl border border-slate-100 overflow-hidden">
             <div className="bg-slate-50 px-4 py-2 border-b border-slate-100"><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Billing Address</p></div>
-            <p className="px-4 py-3 text-sm text-slate-600 leading-relaxed">{site.billingAddress || "—"}</p>
+            <p className="px-4 py-3 text-sm text-slate-600 leading-relaxed">{site.billingAddress || site.billing_address || "—"}</p>
           </div>
           <div className="rounded-xl border border-slate-100 overflow-hidden">
             <div className="bg-slate-50 px-4 py-2 border-b border-slate-100"><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Site Address</p></div>
-            <p className="px-4 py-3 text-sm text-slate-600 leading-relaxed">{site.siteAddress || "—"}</p>
+            <p className="px-4 py-3 text-sm text-slate-600 leading-relaxed">{site.siteAddress || site.site_address || "—"}</p>
           </div>
         </div>
       </div>
@@ -783,5 +852,23 @@ export const FullViewContactModal = ({ contact, onClose, onEdit }) => {
         </div>
       </div>
     </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────
+// CLAUSE MODAL (Mounts full ClausesMaster inside a popup)
+// ─────────────────────────────────────────────────────────────────
+
+import ClausesMaster from "../Procurement/ClausesMaster";
+
+export const FullClauseModal = ({ type, onClose, onSuccess, initialViewId, initialAction }) => {
+  return (
+    <ClausesMaster 
+      type={type} 
+      initialViewId={initialViewId} 
+      initialAction={initialAction}
+      isActionOnly={true}
+      onCloseModal={(data) => { onSuccess(data); onClose(); }}
+    />
   );
 };
