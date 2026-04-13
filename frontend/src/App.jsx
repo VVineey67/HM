@@ -88,39 +88,18 @@ function App() {
   const [isResetMode, setIsResetMode]   = useState(() => parseHash().isReset);
   const [isInviteMode, setIsInviteMode] = useState(() => parseHash().isInvite);
 
-  const loggedIn = !!localStorage.getItem("bms_token");
-  const [isLoggedIn, setIsLoggedIn] = useState(() => loggedIn);
-  const [userRole, setUserRole] = useState(() => {
-    const u = localStorage.getItem("bms_user");
-    return u ? JSON.parse(u).role : null;
-  });
-  const [currentUser, setCurrentUser] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("bms_user") || "{}"); } catch { return {}; }
-  });
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userRole, setUserRole] = useState(null);
+  const [currentUser, setCurrentUser] = useState({});
   // projects = [{ name: "All Project" }, ...active projects from DB]
   const [projects, setProjects] = useState([{ name: "All Project" }]);
 
   // Tab-level permissions for sidebar filtering
   // { hasAny: bool, map: { module_key: { can_view, can_edit, ... } } }
-  const [userTabPermissions, setUserTabPermissions] = useState(() => {
-    // If we have currentUser with app_permissions in localStorage, load it instantly
-    if (currentUser?.app_permissions) {
-      const permMap = {};
-      currentUser.app_permissions.forEach(p => { permMap[p.module_key] = p; });
-      return { hasAny: currentUser.app_permissions.length > 0, map: permMap };
-    }
-    return null;
-  });
+  const [userTabPermissions, setUserTabPermissions] = useState(null);
 
-  // Restore tab + project from URL on load
-  const [activeTab, setActiveTab] = useState(() => {
-    const { isReset, tab } = parseHash();
-    return (!isReset && loggedIn) ? tab : "about";
-  });
-  const [selectedProject, setSelectedProject] = useState(() => {
-    const { isReset, project } = parseHash();
-    return (!isReset && loggedIn) ? project : null;
-  });
+  const [activeTab, setActiveTab] = useState("about");
+  const [selectedProject, setSelectedProject] = useState(null);
 
   const [editingOrderId, setEditingOrderId] = useState(null);
 
