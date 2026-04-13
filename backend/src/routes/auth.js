@@ -129,13 +129,14 @@ router.post("/reset-password", async (req, res) => {
   if (!password) return res.status(400).json({ error: "Password required hai" });
   if (!token)    return res.status(401).json({ error: "Reset token required" });
 
-  // Verify the recovery token and get user id
-  const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+  // Fresh isolated client use karo — shared client ka session interfere kar sakta hai
+  const adminClient = getAdminClient();
+  const { data: { user }, error: userError } = await adminClient.auth.getUser(token);
   if (userError || !user)
     return res.status(401).json({ error: "Reset link expired or invalid. Please request a new one." });
 
   // Update password via admin API
-  const { error } = await supabase.auth.admin.updateUserById(user.id, { password });
+  const { error } = await adminClient.auth.admin.updateUserById(user.id, { password });
   if (error) return res.status(400).json({ error: error.message });
 
   res.json({ success: true });
