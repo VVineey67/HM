@@ -125,19 +125,30 @@ router.post("/forgot-password", async (req, res) => {
 ───────────────────────────────────────── */
 router.post("/reset-password", async (req, res) => {
   const token = req.headers.authorization?.split(" ")[1];
-  const { password } = req.body;
+  const { password, refresh_token } = req.body;
   if (!password) return res.status(400).json({ error: "Password required hai" });
   if (!token)    return res.status(401).json({ error: "Reset token required" });
 
-  // Fresh isolated client use karo — shared client ka session interfere kar sakta hai
   const adminClient = getAdminClient();
+
+  // Pehle access_token se try karo, expire ho toh refresh_token se session refresh karo
+  let userId;
   const { data: { user }, error: userError } = await adminClient.auth.getUser(token);
-  console.log("[reset-password] getUser result:", { user: user?.id, error: userError?.message, status: userError?.status });
-  if (userError || !user)
-    return res.status(401).json({ error: "Reset link expired or invalid. Please request a new one.", detail: userError?.message });
+
+  if (!userError && user) {
+    userId = user.id;
+  } else if (refresh_token) {
+    // Access token expired — refresh_token se naya session lo
+    const { data: refreshData, error: refreshError } = await adminClient.auth.refreshSession({ refresh_token });
+    if (refreshError || !refreshData?.user)
+      return res.status(401).json({ error: "Reset link expired or invalid. Please request a new one." });
+    userId = refreshData.user.id;
+  } else {
+    return res.status(401).json({ error: "Reset link expired or invalid. Please request a new one." });
+  }
 
   // Update password via admin API
-  const { error } = await adminClient.auth.admin.updateUserById(user.id, { password });
+  const { error } = await adminClient.auth.admin.updateUserById(userId, { password });
   if (error) return res.status(400).json({ error: error.message });
 
   res.json({ success: true });

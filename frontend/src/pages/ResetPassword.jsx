@@ -10,15 +10,19 @@ export default function ResetPassword({ onComplete, isInvite = false }) {
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState("");
   const [success, setSuccess]     = useState(false);
-  const [token, setToken]         = useState("");
+  const [token, setToken]               = useState("");
+  const [refreshToken, setRefreshToken] = useState("");
 
   useEffect(() => {
-    // Supabase puts access_token + type=recovery in the URL hash
+    // Supabase puts access_token + refresh_token + type=recovery in the URL hash
     const params = new URLSearchParams(window.location.hash.slice(1));
     const t    = params.get("access_token");
+    const rt   = params.get("refresh_token");
     const type = params.get("type");
-    if (t && (type === "recovery" || type === "invite")) setToken(t);
-    else setError("Invalid or expired link. Please request a new one.");
+    if (t && (type === "recovery" || type === "invite")) {
+      setToken(t);
+      setRefreshToken(rt || "");
+    } else setError("Invalid or expired link. Please request a new one.");
   }, []);
 
   const handleSubmit = async (e) => {
@@ -31,7 +35,7 @@ export default function ResetPassword({ onComplete, isInvite = false }) {
     try {
       await api.post(
         "/api/auth/reset-password",
-        { password },
+        { password, refresh_token: refreshToken },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       // Clear the hash so refreshing doesn't re-trigger this page
