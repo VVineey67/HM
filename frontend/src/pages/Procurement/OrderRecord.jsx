@@ -1,10 +1,20 @@
-import React, { useState, useEffect } from "react";
-import { List, Search, Trash2, Download, Eye, FileText, ChevronRight, Calculator, Pencil, FileDown, Rocket } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { List, Search, Trash2, Eye, Pencil, FileDown, Rocket, X, Printer } from "lucide-react";
+import html2pdf from "html2pdf.js";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import ViewOrder from "./ViewOrder";
+import OrderPDFTemplate from "./OrderPDFTemplate";
+import { createPdfBlobFromElement, downloadElementAsPdf, printElement } from "./pdfUtils";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
+const normalizeRichTextHtml = (value) =>
+  typeof value === "string"
+    ? value.replace(/&nbsp;|&#160;|\u00A0/g, " ")
+    : value;
+
+const normalizeRichTextArray = (value) =>
+  Array.isArray(value) ? value.map(normalizeRichTextHtml) : [];
 
 export default function OrderRecord(props) {
   const { project } = props;
@@ -12,12 +22,23 @@ export default function OrderRecord(props) {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState(null);
-  const [viewOrderId, setViewOrderId] = useState(null);
+  const [viewOrderId, setViewOrderId] = useState(() => sessionStorage.getItem("bms_view_order_id") || null);
   const [activeTab, setActiveTab] = useState("All");
+  const [pdfPreview, setPdfPreview] = useState(null); // { order, items, comp, vend, site, contacts }
+  const [pdfPreviewLoading, setPdfPreviewLoading] = useState(false);
+  const [pdfDownloading, setPdfDownloading] = useState(false);
+  const pdfRef = useRef(null);
 
   const TABS = ["All", "Draft", "Review", "Pending Issue", "Issued", "Rejected", "Revert", "Recall"];
 
+  // Persist viewOrderId so browser refresh stays on the same order
+  useEffect(() => {
+    if (viewOrderId) sessionStorage.setItem("bms_view_order_id", viewOrderId);
+    else sessionStorage.removeItem("bms_view_order_id");
+  }, [viewOrderId]);
+
   useEffect(() => { fetchOrders(); }, []);
+
 
   const fetchOrders = async () => {
     setLoading(true);
@@ -72,6 +93,94 @@ export default function OrderRecord(props) {
     } catch { showToast("Failed to delete", "error"); }
   };
 
+  const openPDFPreview = async (orderId) => {
+    clearPreparedPdf();
+    setPdfPreviewLoading(true);
+    try {
+      const res = await fetch(`${API}/api/orders/${orderId}`);
+      const json = await res.json();
+      const { order, items } = json;
+      const snap = order.snapshot || {};
+      const isKacha = ["Draft", "Review"].includes(order.status);
+      const getVal = (v) => Array.isArray(v) ? v[0] : v;
+      const comp = isKacha ? (getVal(order.companies) || snap.company || {}) : (snap.company || getVal(order.companies) || {});
+      const vend = isKacha ? (getVal(order.vendors) || snap.vendor || {}) : (snap.vendor || getVal(order.vendors) || {});
+      const site = isKacha ? (getVal(order.sites) || snap.site || {}) : (snap.site || getVal(order.sites) || {});
+      const liveContact = getVal(order.contact_person);
+      const contacts = snap.contacts || (liveContact ? [liveContact] : []);
+      setPdfPreview({ order, items, comp, vend, site, contacts });
+    } catch {
+      showToast("Failed to load PDF preview", "error");
+    }
+    setPdfPreviewLoading(false);
+  };
+
+  const _handlePDFDownload = async () => {
+    if (pdfDownloading) return;
+    const element = document.getElementById("order-record-pdf-area");
+    if (!element) { showToast("PDF not ready, please wait", "error"); return; }
+    setPdfDownloading(true);
+    try {
+      const fixColors = (src, dst) => {
+        const cs = window.getComputedStyle(src);
+        const props = ['color','background-color','border-top-color','border-bottom-color','border-left-color','border-right-color'];
+        props.forEach(p => { const v = cs.getPropertyValue(p); if (v) dst.style.setProperty(p, v, 'important'); });
+        dst.style.boxShadow = 'none';
+        for (let i = 0; i < src.children.length; i++) {
+          if (dst.children[i]) fixColors(src.children[i], dst.children[i]);
+        }
+      };
+      const clone = element.cloneNode(true);
+      fixColors(element, clone);
+      clone.style.cssText = "position:fixed;top:-9999px;left:0;width:210mm;z-index:-1;";
+      document.body.appendChild(clone);
+
+      const options = {
+        margin: [0, 0, 0, 0],
+        filename: `PO_${pdfPreview?.order?.order_number || "Order"}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, letterRendering: true, logging: false, scrollY: 0, windowWidth: 794 },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+      };
+      await html2pdf().from(clone).set(options).save();
+      document.body.removeChild(clone);
+    } catch (err) {
+      console.error("PDF error:", err);
+      showToast("Download failed", "error");
+    }
+    setPdfDownloading(false);
+  };
+
+  const handleSafePDFDownload = async () => {
+    if (pdfDownloading) return;
+    const element = pdfRef.current;
+    if (!element) { showToast("PDF not ready, please wait", "error"); return; }
+    setPdfDownloading(true);
+    try {
+      await downloadElementAsPdf({
+        element,
+        filename: `PO_${pdfPreview?.order?.order_number || "Order"}.pdf`,
+      });
+    } catch (err) {
+      console.error("PDF error:", err);
+      showToast("Download failed", "error");
+    } finally {
+      setPdfDownloading(false);
+    }
+  };
+
+  const handlePDFPrint = async () => {
+    try {
+      const element = document.getElementById("order-record-pdf-area");
+      if (!element) { showToast("PDF not ready, please wait", "error"); return; }
+      await printElement({ element, title: pdfPreview?.order?.order_number || "Order PDF" });
+    } catch (err) {
+      console.error("PDF print error:", err);
+      showToast(err.message?.includes("Popup") ? "Allow popups for this site to print" : "Print failed", "error");
+    }
+  };
+
   // Convert image URL to Base64 to embed in PDF
   const getBase64Image = async (url) => {
     if (!url) return null;
@@ -91,7 +200,7 @@ export default function OrderRecord(props) {
   /* ════════════════════════════════════════════════════════
      PROFESSIONAL PDF EXPORT
      ════════════════════════════════════════════════════════ */
-  const exportPDF = async (orderId) => {
+  const _exportPDF = async (orderId) => {
     try {
       showToast("Generating PDF... Please wait.");
       const res = await fetch(`${API}/api/orders/${orderId}`);
@@ -255,7 +364,7 @@ export default function OrderRecord(props) {
         doc.setFont("helvetica", "normal"); doc.setFontSize(9);
         
         // Basic HTML to text conversion for PDF
-        const cleanNotes = order.notes
+        const cleanNotes = normalizeRichTextHtml(order.notes)
           .replace(/<br\s*\/?>/gi, "\n")
           .replace(/<\/p>/gi, "\n")
           .replace(/<li>/gi, "• ")
@@ -274,10 +383,10 @@ export default function OrderRecord(props) {
         cursorY = 20;
       }
       
-      const tc = order.terms_conditions || [];
-      const pt = order.payment_terms || [];
-      const gl = order.governing_laws || [];
-      const anx = order.annexures || [];
+      const tc = normalizeRichTextArray(order.terms_conditions || []);
+      const pt = normalizeRichTextArray(order.payment_terms || []);
+      const gl = normalizeRichTextArray(order.governing_laws || []);
+      const anx = normalizeRichTextArray(order.annexures || []);
       
       doc.setFont("helvetica", "bold");
       doc.setFontSize(10);
@@ -532,9 +641,9 @@ export default function OrderRecord(props) {
                             title="Delete Order">
                             <Trash2 size={13} />
                           </button>
-                          <button onClick={() => exportPDF(o.id)} 
+                          <button onClick={() => openPDFPreview(o.id)}
                             className="h-7 w-7 rounded-full border border-slate-200 flex items-center justify-center text-slate-800 hover:text-slate-900 border-slate-300 hover:bg-slate-100 transition-all shadow-sm"
-                            title="Download PDF">
+                            title="PDF Preview">
                             <FileDown size={14} strokeWidth={2.5}/>
                           </button>
                         </div>
@@ -547,6 +656,57 @@ export default function OrderRecord(props) {
           </div>
         )}
       </div>
+      )}
+
+      {/* PDF Preview Side Panel */}
+      {(pdfPreview || pdfPreviewLoading) && (
+        <div className="fixed inset-0 z-50 flex">
+          {/* Backdrop */}
+          <div className="flex-1 bg-black/50" onClick={() => setPdfPreview(null)} />
+          {/* Panel */}
+          <div className="w-full max-w-[860px] bg-slate-200 flex flex-col h-full shadow-2xl">
+            {/* Panel Header */}
+            <div className="bg-white border-b border-slate-200 px-5 py-3 flex items-center justify-between shrink-0">
+              <span className="font-bold text-slate-700 text-sm">PDF Preview</span>
+              <div className="flex items-center gap-2">
+                <button onClick={handlePDFPrint}
+                  className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white font-bold rounded-lg text-xs uppercase tracking-wider transition-all">
+                  <Printer size={14} /> Print
+                </button>
+                <button disabled={pdfDownloading} onClick={handleSafePDFDownload}
+                  className={`flex items-center gap-2 px-4 py-2 text-white font-bold rounded-lg text-xs uppercase tracking-wider transition-all ${pdfDownloading ? 'bg-slate-400 cursor-not-allowed' : 'bg-[#1b3e8a] hover:bg-[#16326d]'}`}>
+                  {pdfDownloading
+                    ? <div className="h-3 w-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    : <FileDown size={14} />}
+                  {pdfDownloading ? "Downloading..." : "Download PDF"}
+                </button>
+                <button onClick={() => { clearPreparedPdf(); setPdfPreview(null); }}
+                  className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-all">
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+            {/* PDF Content */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {pdfPreviewLoading ? (
+                <div className="flex items-center justify-center h-64">
+                  <div className="h-8 w-8 border-4 border-[#1b3e8a] border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : (
+                <div id="order-record-pdf-area" ref={pdfRef}>
+                  <OrderPDFTemplate
+                    order={pdfPreview.order}
+                    items={pdfPreview.items}
+                    comp={pdfPreview.comp}
+                    vend={pdfPreview.vend}
+                    site={pdfPreview.site}
+                    contacts={pdfPreview.contacts}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

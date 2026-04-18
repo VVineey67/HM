@@ -12,5 +12,11 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-
-
+/* Quill rich-text display (cards, history, view modal) */
+.quill-content ol { list-style: decimal !important; padding-left: 1.5rem !important; margin-bottom: 0.25rem; }
+.quill-content ul { list-style: disc    !important; padding-left: 1.5rem !important; margin-bottom: 0.25rem; }
+.quill-content li { display: list-item  !important; margin-bottom: 0.15rem; }
+.quill-content p  { margin-bottom: 0.25rem; }
+.quill-content strong { font-weight: bold; }
+.quill-content em     { font-style: italic; }
+.quill-content u      { text-decoration: underline; }

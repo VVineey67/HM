@@ -5,6 +5,19 @@ const supabase  = require("../helpers/supabaseHelper");
 
 const upload = multer({ storage: multer.memoryStorage() });
 
+const normalizeNbsp = (value) =>
+  typeof value === "string"
+    ? value.replace(/&nbsp;|&#160;|\u00A0/g, " ")
+    : value;
+
+const sanitizeRichTextDeep = (value) => {
+  if (Array.isArray(value)) return value.map(sanitizeRichTextDeep);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, val]) => [key, sanitizeRichTextDeep(val)]));
+  }
+  return normalizeNbsp(value);
+};
+
 /* ─── Storage upload helper ─── */
 const uploadToStorage = async (bucket, path, buffer, mimetype) => {
   const { error } = await supabase.storage
@@ -296,12 +309,12 @@ router.get("/clauses", async (req, res) => {
         version:   v.version,
         code:      v.clause_ref?.code || "VER",
         type:      v.clause_ref?.type || "TC",
-        category:  v.category || "",
+        category:  normalizeNbsp(v.category || ""),
         // Formatted title for dropdown
-        title:     `${v.title} (V${v.version})`,
-        points:    Array.isArray(v.points) ? v.points : [],
+        title:     `${normalizeNbsp(v.title)} (V${v.version})`,
+        points:    sanitizeRichTextDeep(Array.isArray(v.points) ? v.points : []),
         createdAt: v.edited_at,
-        createdByName: v.edited_by || "Unknown",
+        createdByName: normalizeNbsp(v.edited_by || "Unknown"),
       })).filter(v => !type || v.type === type);
 
       return res.json({ clauses: filtered });
@@ -316,12 +329,12 @@ router.get("/clauses", async (req, res) => {
       id:        r.id,
       code:      r.code,
       type:      r.type,
-      category:  r.category  || "",
-      title:     r.title,
-      points:    Array.isArray(r.points) ? r.points : [],
+      category:  normalizeNbsp(r.category || ""),
+      title:     normalizeNbsp(r.title),
+      points:    sanitizeRichTextDeep(Array.isArray(r.points) ? r.points : []),
       createdAt: r.created_at,
       createdById: r.created_by_id || "",
-      createdByName: r.created_by_name || "",
+      createdByName: normalizeNbsp(r.created_by_name || ""),
     }));
     res.json({ clauses });
   } catch (err) {
@@ -335,22 +348,26 @@ router.post("/clauses", async (req, res) => {
     const { type, category, title, points, editedBy, createdById, createdByName } = req.body;
     if (!type || !title) return res.status(400).json({ error: "type and title required" });
     const code = await getNextClauseCode(type);
-    const pts  = Array.isArray(points) ? points : [];
+    const pts  = sanitizeRichTextDeep(Array.isArray(points) ? points : []);
+    const cleanCategory = normalizeNbsp(category || "");
+    const cleanTitle = normalizeNbsp(title);
+    const cleanEditedBy = normalizeNbsp(editedBy || "Unknown");
+    const cleanCreatedByName = normalizeNbsp(createdByName || "");
     const { data, error } = await supabase.schema("procurement").from("clauses").insert({
       code, type,
-      category: category || "",
-      title,
+      category: cleanCategory,
+      title: cleanTitle,
       points: pts,
       created_by_id: createdById || "",
-      created_by_name: createdByName || "",
+      created_by_name: cleanCreatedByName,
     }).select().single();
     if (error) throw error;
     /* save version 1 */
     try {
       await supabase.schema("procurement").from("clause_versions").insert({
         clause_id: data.id, version: 1,
-        title, category: category || "", points: pts,
-        edited_by: editedBy || "Unknown",
+        title: cleanTitle, category: cleanCategory, points: pts,
+        edited_by: cleanEditedBy,
       });
     } catch (ve) { console.warn("Version save skipped:", ve.message); }
     res.json({ success: true, id: data.id, code });
@@ -363,7 +380,10 @@ router.post("/clauses", async (req, res) => {
 router.put("/clauses/:id", async (req, res) => {
   try {
     const { category, title, points, editedBy } = req.body;
-    const pts = Array.isArray(points) ? points : [];
+    const pts = sanitizeRichTextDeep(Array.isArray(points) ? points : []);
+    const cleanCategory = normalizeNbsp(category || "");
+    const cleanTitle = normalizeNbsp(title);
+    const cleanEditedBy = normalizeNbsp(editedBy || "Unknown");
 
     // Self-healing: if no version exists (e.g. old bulk uploads), save current state as v1 before updating
     const { data: currentData } = await supabase.schema("procurement").from("clauses").select("*").eq("id", req.params.id).single();
@@ -378,8 +398,8 @@ router.put("/clauses/:id", async (req, res) => {
     }
 
     const { error } = await supabase.schema("procurement").from("clauses").update({
-      category: category || "",
-      title,
+      category: cleanCategory,
+      title: cleanTitle,
       points: pts,
     }).eq("id", req.params.id);
     if (error) throw error;
@@ -389,8 +409,8 @@ router.put("/clauses/:id", async (req, res) => {
       const nextVer = vData?.length ? vData[0].version + 1 : 2;
       await supabase.schema("procurement").from("clause_versions").insert({
         clause_id: req.params.id, version: nextVer,
-        title, category: category || "", points: pts,
-        edited_by: editedBy || "Unknown",
+        title: cleanTitle, category: cleanCategory, points: pts,
+        edited_by: cleanEditedBy,
       });
     } catch (ve) { console.warn("Version save skipped:", ve.message); }
     res.json({ success: true });
@@ -408,10 +428,10 @@ router.get("/clauses/:id/versions", async (req, res) => {
     const versions = (data || []).map(v => ({
       id:       v.id,
       version:  v.version,
-      title:    v.title,
-      category: v.category || "",
-      points:   Array.isArray(v.points) ? v.points : [],
-      editedBy: v.edited_by,
+      title:    normalizeNbsp(v.title),
+      category: normalizeNbsp(v.category || ""),
+      points:   sanitizeRichTextDeep(Array.isArray(v.points) ? v.points : []),
+      editedBy: normalizeNbsp(v.edited_by),
       editedAt: v.edited_at,
     }));
     res.json({ versions });
@@ -458,14 +478,15 @@ router.post("/clauses/bulk", async (req, res) => {
 
     const { data: existing } = await supabase.schema("procurement").from("clauses")
       .select("title, type").eq("type", type);
-    const existingKeys = new Set((existing || []).map(r => r.title.trim().toLowerCase()));
+    const existingKeys = new Set((existing || []).map(r => normalizeNbsp(r.title || "").trim().toLowerCase()));
 
     const { data: allCodes } = await supabase.schema("procurement").from("clauses")
       .select("code").eq("type", type);
     const nums = (allCodes || []).map(r => parseInt((r.code || "").replace(`${prefix}-`, "")) || 0);
     let nextNum = nums.length ? Math.max(...nums) + 1 : 1;
 
-    const newRows = rows.filter(r => r.title?.trim() && !existingKeys.has(r.title.trim().toLowerCase()));
+    const cleanRows = sanitizeRichTextDeep(rows || []);
+    const newRows = cleanRows.filter(r => r.title?.trim() && !existingKeys.has(r.title.trim().toLowerCase()));
     const skipped = rows.length - newRows.length;
     if (!newRows.length) return res.json({ success: true, inserted: 0, skipped });
 
@@ -560,6 +581,7 @@ router.get("/vendors", async (_req, res) => {
       docCancelChequeUrl:  r.doc_cancel_cheque_url || "",
       docOtherUrl:         r.doc_other_url         || "",
       docOther2Url:        r.doc_other2_url        || "",
+      siteCodes:           parseJsonArr(r.site_codes),
       createdById:         r.created_by_id         || "",
       createdByName:       r.created_by_name       || "",
     }));
@@ -614,6 +636,7 @@ router.post("/vendors", vendorUpload, async (req, res) => {
       doc_cancel_cheque_url: docCancelChequeUrl  || "",
       doc_other_url:         docOtherUrl         || "",
       doc_other2_url:        docOther2Url        || "",
+      site_codes:            req.body.siteCodes  || "[]",
       created_by_id:         b.createdById       || "",
       created_by_name:       b.createdByName     || "",
     }).select().single();
@@ -670,6 +693,7 @@ router.put("/vendors/:id", vendorUpload, async (req, res) => {
       doc_cancel_cheque_url: newDocCancelCheque  || b.docCancelChequeUrl || "",
       doc_other_url:         newDocOther         || b.docOtherUrl        || "",
       doc_other2_url:        newDocOther2        || b.docOther2Url       || "",
+      site_codes:            b.siteCodes         || "[]",
     }).eq("id", id);
     if (error) throw error;
     res.json({ success: true });
@@ -711,6 +735,7 @@ router.post("/vendors/bulk", async (req, res) => {
       bank_city:       r["Bank City"]              || "",
       bank_state:      r["Bank State"]             || "",
       address:         r["Address"]                || "",
+      site_codes:      JSON.stringify((r["Site Codes"] || "").toString().split(",").map(sc => sc.trim()).filter(Boolean)),
       created_by_id:   req.body.createdById        || null,
       created_by_name: req.body.createdByName      || "Bulk Upload",
     })).filter(r => r.vendor_name);
@@ -837,15 +862,15 @@ router.get("/uom", async (_req, res) => {
 router.post("/uom", async (req, res) => {
   try {
     const { uomName, uomCode, createdById, createdByName } = req.body;
-    const { data, error } = await supabase.from("uom")
-      .insert({ 
+    const { data, error } = await supabase.schema("procurement").from("uom")
+      .insert({
         uom_name: uomName || "", uom_code: uomCode || "",
         created_by_id: createdById || null,
         created_by_name: createdByName || null,
       })
       .select().single();
     if (error) throw error;
-    res.json({ success: true, id: data.id });
+    res.json({ success: true, uom: { uomCode: data.uom_code || uomCode, uomName: data.uom_name || uomName }, id: data.id });
   } catch (err) {
     console.error("UOM add error:", err.message);
     res.status(500).json({ error: err.message });

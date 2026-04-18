@@ -3,15 +3,45 @@ import { Plus, Upload, Search, Pencil, Trash2, X, Package, Image as ImageIcon, E
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import ReactQuill from "react-quill-new";
+import "react-quill-new/dist/quill.snow.css";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
 const PER_PAGE = 10;
 const TABS = ["Supply", "SITC"];
 
+const QUILL_MODULES = {
+  toolbar: [
+    ['bold', 'italic', 'underline', 'strike'],
+    [{ 'color': [] }, { 'background': [] }],
+    [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+    [{ 'indent': '-1'}, { 'indent': '+1' }],
+    [{ 'align': [] }],
+    ['clean']
+  ]
+};
+
+const normalizeRichTextHtml = (value) =>
+  typeof value === "string" ? value.replace(/&nbsp;|&#160;|\u00A0/g, " ") : value;
+
+const getHTML = (points) => {
+  if (!points || !points.length) return "";
+  const normalize = (html) => normalizeRichTextHtml(html);
+  // If it already looks like HTML (from ReactQuill), return first element or whole
+  if (points.length === 1 && (points[0].includes('<') || points[0] === "")) return normalize(points[0]);
+  // Backward compatibility: Convert array of strings to a list
+  return `<ul style="list-style-type: disc; padding-left: 1.5rem;">${points.map(p => `<li>${normalize(p)}</li>`).join('')}</ul>`;
+};
+
 const emptyForm = {
-  materialName: "", specifications: [], category: "", scopeOfWork: [],
-  brands: [], unit: "", remarks: "",
-  image: null, imagePreview: "",
+  materialName: "",
+  specifications: [],
+  category: "",
+  brands: [],
+  unit: "",
+  remarks: "",
+  image: null,
+  imagePreview: null,
 };
 
 /* ── Searchable dropdown ── */
@@ -119,18 +149,17 @@ export default function ItemList() {
   const openAdd = () => { setForm(emptyForm); setEditId(null); setShowModal(true); };
 
   const openEdit = (item) => {
-    setForm({
-      materialName:   item.materialName   || "",
-      specifications: Array.isArray(item.specifications) ? item.specifications : [],
-      category:       item.category       || "",
-      scopeOfWork:  Array.isArray(item.scopeOfWork) ? item.scopeOfWork : [],
-      brands:       Array.isArray(item.brands) ? item.brands : [],
-      unit:         item.unit         || "",
-      remarks:      item.remarks      || "",
-      image:        null,
-      imagePreview: item.imageUrl     || "",
-    });
     setEditId(item.id);
+    setForm({
+      materialName:   item.materialName || "",
+      specifications: [...(item.specifications || []), ...(item.scopeOfWork || [])],
+      category:       item.category || "",
+      brands:         item.brands || [],
+      unit:           item.unit || "",
+      remarks:        item.remarks || "",
+      image:          null,
+      imagePreview:   item.imageUrl || null,
+    });
     setShowModal(true);
   };
 
@@ -149,7 +178,7 @@ export default function ItemList() {
       fd.append("materialName", form.materialName);
       fd.append("specifications", JSON.stringify(form.specifications.filter(s => s.trim())));
       fd.append("category",     form.category);
-      fd.append("scopeOfWork",  JSON.stringify(form.scopeOfWork.filter(s => s.trim())));
+      fd.append("scopeOfWork",  JSON.stringify([]));
       fd.append("brands",       JSON.stringify(form.brands.filter(b => b.trim())));
       fd.append("unit", form.unit);
       fd.append("remarks",      form.remarks);
@@ -174,7 +203,7 @@ export default function ItemList() {
           materialName:   form.materialName,
           specifications: form.specifications.filter(s => s.trim()),
           category:       form.category,
-          scopeOfWork:    form.scopeOfWork.filter(s => s.trim()),
+          scopeOfWork:    [],
           brands:         form.brands.filter(b => b.trim()),
           unit:           form.unit,
           remarks:        form.remarks,
@@ -398,6 +427,15 @@ export default function ItemList() {
 
   return (
     <div className="p-3 sm:p-4 lg:p-6 w-full pb-32">
+      <style>{`
+        .ql-align-center { text-align: center !important; }
+        .ql-align-right { text-align: right !important; }
+        .ql-align-justify { text-align: justify !important; }
+        .quill-content { text-align: justify !important; }
+        .quill-content p, .quill-content div { text-align: justify; }
+        .quill-content ul { list-style-type: disc !important; padding-left: 1.5rem !important; }
+        .quill-content ol { list-style-type: decimal !important; padding-left: 1.5rem !important; }
+      `}</style>
 
       {/* Toast */}
       {toast && (
@@ -570,65 +608,75 @@ export default function ItemList() {
           <table className="w-full border-collapse">
             <thead>
               <tr className="bg-slate-50">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200 sticky-left-0 w-[45px]">S.No</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200 sticky-left-1 w-[95px] whitespace-nowrap">Item Code</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200 sticky left-0 z-10 bg-slate-50 w-[35px]">S.No</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200 sticky left-[35px] z-10 bg-slate-50 w-[80px] whitespace-nowrap">Item Code</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200">Category</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200">Item Name</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200">Specification</th>
-                {isSITC && <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200 whitespace-nowrap" style={{minWidth:'250px'}}>Scope of Work</th>}
+                {isSITC ? (
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200">Item Name & Description</th>
+                ) : (
+                  <>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200">Item Name</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200">Specification</th>
+                  </>
+                )}
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200">Brand(s)</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200">Unit</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200">Remarks</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200 sticky-right-0 w-[90px]">Actions</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border border-slate-200 sticky right-0 z-10 bg-slate-50 w-[75px]">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={isSITC ? 10 : 9} className="text-center py-16 text-slate-400 text-sm border border-slate-200">Loading…</td></tr>
+                <tr><td colSpan={isSITC ? 8 : 9} className="text-center py-16 text-slate-400 text-sm border border-slate-200">Loading…</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={isSITC ? 10 : 9} className="text-center py-16 text-slate-300 font-semibold uppercase tracking-widest text-xs border border-slate-200">No items found</td></tr>
+                <tr><td colSpan={isSITC ? 8 : 9} className="text-center py-16 text-slate-300 font-semibold uppercase tracking-widest text-xs border border-slate-200">No items found</td></tr>
               ) : paginated.map((item, idx) => (
                 <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-4 py-3 text-sm text-slate-400 text-center border border-slate-200 align-top sticky-left-0 w-[45px]">{(page - 1) * PER_PAGE + idx + 1}</td>
-                  <td className="px-4 py-3 text-sm font-mono text-slate-600 border border-slate-200 align-top whitespace-nowrap sticky-left-1 w-[95px]">{item.itemCode}</td>
+                  <td className="px-4 py-3 text-sm text-slate-400 text-center border border-slate-200 align-top sticky left-0 z-10 bg-white w-[35px]">{(page - 1) * PER_PAGE + idx + 1}</td>
+                  <td className="px-4 py-3 text-sm font-mono text-slate-600 border border-slate-200 align-top whitespace-nowrap sticky left-[35px] z-10 bg-white w-[80px]">{item.itemCode}</td>
                   <td className="px-4 py-3 border border-slate-200 align-top">
                     {item.category
                       ? <span className="px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-medium whitespace-nowrap">{item.category}</span>
                       : <span className="text-slate-300 text-sm">—</span>}
                   </td>
-                  <td className="px-4 py-3 text-sm font-semibold text-slate-700 border border-slate-200 align-top whitespace-normal break-words leading-tight">{item.materialName}</td>
-                  <td className="px-4 py-3 border border-slate-200 align-top">
-                    {item.specifications?.length > 0
-                      ? <div className="flex flex-wrap gap-1">
-                          {item.specifications.map((s, i) => (
-                            <span key={i} className="px-2 py-0.5 rounded-xl bg-slate-100 text-slate-600 text-xs whitespace-normal break-words leading-tight">{s}</span>
+                  {isSITC ? (
+                    <td className="px-4 py-3 border border-slate-200 align-top whitespace-normal break-words leading-tight">
+                      <div className="flex flex-col gap-2">
+                        <div className="text-sm font-semibold text-slate-700 leading-tight">{item.materialName}</div>
+                        <div className="space-y-1.5">
+                          {item.specifications?.map((s, i) => (
+                            <div key={i} className="quill-content text-[11px] text-slate-500 leading-tight border-l-2 border-slate-100 pl-2 font-medium" 
+                                 dangerouslySetInnerHTML={{ __html: normalizeRichTextHtml(s) }} />
                           ))}
                         </div>
-                      : <span className="text-slate-300 text-sm">—</span>}
-                  </td>
-                  {isSITC && (
-                    <td className="px-4 py-3 text-sm text-slate-500 border border-slate-200 align-top" style={{minWidth:'250px'}}>
-                      {item.scopeOfWork?.length > 0
-                        ? <div className="flex flex-wrap gap-1">
-                            {item.scopeOfWork.map((s, i) => (
-                              <span key={i} className="px-2 py-0.5 rounded-xl bg-slate-100 text-slate-600 text-xs whitespace-normal break-words leading-tight">{s}</span>
-                            ))}
-                          </div>
-                        : <span className="text-slate-300">—</span>}
+                      </div>
                     </td>
+                  ) : (
+                    <>
+                      <td className="px-4 py-3 text-sm font-semibold text-slate-700 border border-slate-200 align-top whitespace-normal break-words leading-tight">{item.materialName}</td>
+                      <td className="px-4 py-3 border border-slate-200 align-top">
+                        {item.specifications?.length > 0
+                          ? <div className="flex flex-wrap gap-1">
+                              {item.specifications.map((s, i) => (
+                                <span key={i} className="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-600 text-xs whitespace-normal break-words leading-tight">{s}</span>
+                              ))}
+                            </div>
+                          : <span className="text-slate-300 text-sm">—</span>}
+                      </td>
+                    </>
                   )}
                   <td className="px-4 py-3 border border-slate-200 align-top">
                     {item.brands?.length > 0
                       ? <div className="flex flex-wrap gap-1">
                           {item.brands.map((b, i) => (
-                            <span key={i} className="px-2 py-0.5 rounded-xl bg-slate-100 text-slate-600 text-xs whitespace-normal break-words leading-tight">{b}</span>
+                            <span key={i} className="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-600 text-xs whitespace-normal break-words leading-tight">{b}</span>
                           ))}
                         </div>
                       : <span className="text-slate-300 text-sm">—</span>}
                   </td>
                   <td className="px-4 py-3 text-sm text-slate-500 border border-slate-200 align-top whitespace-nowrap">{item.unit || "—"}</td>
                   <td className="px-4 py-3 text-sm text-slate-500 border border-slate-200 align-top whitespace-normal break-words leading-tight">{item.remarks || "—"}</td>
-                  <td className="px-4 py-3 border border-slate-200 align-top sticky-right-0 w-[90px]">
+                  <td className="px-4 py-3 border border-slate-200 align-top sticky right-0 z-10 bg-white shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.05)] w-[75px]">
                     <div className="flex items-center gap-1">
                       <button onClick={() => setViewItem(item)}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all" title="View">
@@ -738,29 +786,22 @@ export default function ItemList() {
                     <p className="text-sm text-slate-700">{viewItem.remarks}</p>
                   </div>
                 )}
-              </div>
-
-              {/* Scope of Work (SITC only) */}
-              {viewItem.itemType === "SITC" && viewItem.scopeOfWork?.length > 0 && (
-                <div className="bg-purple-50 rounded-xl p-4 border border-purple-100">
-                  <p className="text-xs font-semibold text-purple-500 uppercase tracking-wide mb-2">Scope of Work</p>
-                  <ul className="list-disc pl-5 text-sm text-slate-700 leading-relaxed space-y-1">
-                    {viewItem.scopeOfWork.map((s, i) => <li key={i}>{s}</li>)}
-                  </ul>
-                </div>
-              )}
-
-              {/* Specifications */}
-              {viewItem.specifications?.length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Specifications</p>
-                  <div className="flex flex-wrap gap-2">
-                    {viewItem.specifications.map((s, i) => (
-                      <span key={i} className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-medium border border-blue-100">{s}</span>
+                <div className="col-span-full bg-slate-50 rounded-xl p-3 border border-slate-100/50">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Description / Points</p>
+                  <div className="space-y-3">
+                    {viewItem.specifications?.map((s, i) => (
+                      <div key={i} className="flex gap-2">
+                        <span className="text-slate-300 font-mono text-[10px] mt-1 shrink-0">{i + 1}.</span>
+                        <div className="quill-content text-sm text-slate-600 leading-relaxed font-medium flex-1"
+                             dangerouslySetInnerHTML={{ __html: normalizeRichTextHtml(s) }} />
+                      </div>
                     ))}
+                    {(!viewItem.specifications || viewItem.specifications.length === 0) && (
+                      <p className="text-xs text-slate-300 italic">No points listed</p>
+                    )}
                   </div>
                 </div>
-              )}
+              </div>
 
               {/* Brands */}
               {viewItem.brands?.length > 0 && (
@@ -834,59 +875,50 @@ export default function ItemList() {
                     className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-400 text-slate-700" />
                 </div>
 
-                {/* Specifications */}
-                <div className="col-span-2">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Specifications</label>
-                    <button onClick={addSpec} className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1">
-                      <Plus size={12} /> Add
+                {/* Description / Points */}
+                <div className="col-span-full">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Description / Points</label>
+                    <button type="button" onClick={addSpec}
+                      className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-600 hover:bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-100">
+                      <Plus size={10} /> Add Point
                     </button>
                   </div>
-                  {form.specifications.length === 0
-                    ? <p className="text-xs text-slate-400 italic">Click "Add" to add specifications (e.g. OPC-43, OPC-53…)</p>
-                    : <div className="space-y-2">
-                        {form.specifications.map((s, i) => (
-                          <div key={i} className="flex items-center gap-2">
-                            <input value={s} onChange={e => updateSpec(i, e.target.value)}
-                              placeholder={`Specification ${i + 1}`}
-                              className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-slate-400 text-slate-700" />
-                            <button onClick={() => removeSpec(i)}
-                              className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all">
-                              <X size={13} />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                  }
-                </div>
-
-                {/* Scope of Work (SITC only) */}
-                {isSITC && (
-                  <div className="col-span-2">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Scope of Work</label>
-                      <button type="button" onClick={addScope} className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1">
-                        <Plus size={12} /> Add
-                      </button>
-                    </div>
-                    {form.scopeOfWork.length === 0
-                      ? <p className="text-xs text-slate-400 italic">Click "Add" to add scope of work points</p>
-                      : <div className="space-y-2">
-                          {form.scopeOfWork.map((s, i) => (
-                            <div key={i} className="flex items-center gap-2">
-                              <input value={s} onChange={e => updateScope(i, e.target.value)}
-                                placeholder={`Scope ${i + 1}`}
-                                className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-slate-400 text-slate-700" />
-                              <button type="button" onClick={() => removeScope(i)}
-                                className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all">
-                                <X size={13} />
-                              </button>
-                            </div>
-                          ))}
+                  <div className="space-y-4">
+                    {form.specifications.map((s, i) => (
+                      <div key={i} className="flex gap-2 group relative">
+                        <div className="flex-1 border border-slate-200 rounded-2xl overflow-hidden focus-within:ring-2 focus-within:ring-indigo-50 focus-within:border-indigo-400 transition-all bg-white">
+                          {activeTab === "SITC" ? (
+                            <ReactQuill 
+                              theme="snow"
+                              value={s || ""}
+                              onChange={(val) => updateSpec(i, val)}
+                              modules={QUILL_MODULES}
+                              placeholder={`Point ${i + 1}...`}
+                            />
+                          ) : (
+                            <input 
+                              value={s || ""} 
+                              onChange={(e) => updateSpec(i, e.target.value)}
+                              placeholder={`Specification Point ${i + 1}...`}
+                              className="w-full px-4 py-3 text-sm outline-none text-slate-700 bg-white"
+                            />
+                          )}
                         </div>
-                    }
+                        <button type="button" 
+                          onClick={() => removeSpec(i)}
+                          className="w-8 h-8 rounded-xl bg-slate-50 text-slate-300 hover:text-red-500 hover:bg-red-50 flex items-center justify-center shrink-0 border border-slate-100 transition-all mt-1">
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ))}
+                    {form.specifications.length === 0 && (
+                      <div className="text-center py-8 border-2 border-dashed border-slate-100 rounded-3xl bg-slate-50/30">
+                        <p className="text-xs text-slate-400 font-medium">Click "Add Point" to start adding descriptions</p>
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
 
                 {/* Brands */}
                 <div className="col-span-2">

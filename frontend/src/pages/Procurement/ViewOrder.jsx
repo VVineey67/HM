@@ -1,15 +1,42 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { ArrowLeft, Search, Building2, User, Landmark, MapPin, Receipt, ShieldQuestion, FileText, CheckCircle2, Phone, Printer, FileDown, Download, Eye, X } from "lucide-react";
 import OrderPDFTemplate from "./OrderPDFTemplate";
 import html2pdf from "html2pdf.js";
+import { createPdfBlobFromElement, downloadElementAsPdf, printElement } from "./pdfUtils";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
+
+const amountToWords = (amount) => {
+  if (!amount || isNaN(amount) || amount === 0) return "Zero Rupees Only";
+  const a = ["", "One ", "Two ", "Three ", "Four ", "Five ", "Six ", "Seven ", "Eight ", "Nine ", "Ten ", "Eleven ", "Twelve ", "Thirteen ", "Fourteen ", "Fifteen ", "Sixteen ", "Seventeen ", "Eighteen ", "Nineteen "];
+  const b = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+  const numToWords = (n) => {
+    let numStr = n.toString();
+    if (numStr.length > 9) return "Overflow";
+    const nArray = ("000000000" + numStr).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
+    if (!nArray) return "";
+    let str = "";
+    str += nArray[1] != 0 ? (a[Number(nArray[1])] || b[nArray[1][0]] + " " + a[nArray[1][1]]) + "Crore " : "";
+    str += nArray[2] != 0 ? (a[Number(nArray[2])] || b[nArray[2][0]] + " " + a[nArray[2][1]]) + "Lakh " : "";
+    str += nArray[3] != 0 ? (a[Number(nArray[3])] || b[nArray[3][0]] + " " + a[nArray[3][1]]) + "Thousand " : "";
+    str += nArray[4] != 0 ? (a[Number(nArray[4])] || b[nArray[4][0]] + " " + a[nArray[4][1]]) + "Hundred " : "";
+    str += nArray[5] != 0 ? ((str != "") ? "and " : "") + (a[Number(nArray[5])] || b[nArray[5][0]] + " " + a[nArray[5][1]]) : "";
+    return str.trim();
+  };
+  const parts = Number(amount).toFixed(2).split(".");
+  const rs = parseInt(parts[0], 10);
+  const ps = parseInt(parts[1], 10);
+  let res = numToWords(rs) + " Rupees";
+  if (ps > 0) res += " and " + numToWords(ps) + " Paise";
+  return res + " Only";
+};
+
 
 const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
   const [data, setData] = useState({ order: null, items: [] });
   const [approvalData, setApprovalData] = useState({ request: null, timeline: [] });
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("Purchase Details");
+  const [activeTab, setActiveTab] = useState("Order Details");
 
   // Approval Action state
   const [actionModal, setActionModal] = useState({ open: false, type: "" });
@@ -33,15 +60,15 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
     const discountPct = Number(dbT.txDiscountPct || dbT.discount_pct) || 0;
     const grandTotal = Number(dbT.grandTotal) || (subtotal - discAmt + fright + totalGst);
 
-    return { 
+    return {
       subtotal,
       discAmt,
       discountPct,
-      netItems: subtotal - discAmt, 
-      fright, 
-      totalGst, 
-      grandTotal, 
-      frightTax 
+      netItems: subtotal - discAmt,
+      fright,
+      totalGst,
+      grandTotal,
+      frightTax
     };
   }, [data]);
 
@@ -54,17 +81,19 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
       const it = raw[i];
       const itemName = it.material_name || it.items?.material_name || it.item?.material_name || "Unknown Item";
       const unit = it.unit || "";
-      
+
       if (currentHead && currentHead._itemName === itemName && currentHead.unit === unit) {
-        results.push({ ...it, _itemName: itemName, _isSubRow: true });
+        const subIdx = currentHead._rowSpan + 1;
+        results.push({ ...it, _itemName: itemName, _isSubRow: true, _subIdx: subIdx });
         currentHead._rowSpan++;
       } else {
-        const newItem = { 
-          ...it, 
-          _itemName: itemName, 
-          _isSubRow: false, 
-          _rowSpan: 1, 
-          _groupSrNo: results.filter(r => !r._isSubRow).length + 1 
+        const newItem = {
+          ...it,
+          _itemName: itemName,
+          _isSubRow: false,
+          _rowSpan: 1,
+          _subIdx: 1,
+          _groupSrNo: results.filter(r => !r._isSubRow).length + 1
         };
         results.push(newItem);
         currentHead = newItem;
@@ -119,11 +148,9 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
       });
       const data = await res.json();
       if (data.success) {
-        // If the order status was tied to this, you might need an additional call to update purchase_orders status 
-        // or rely on backend sync
         setActionModal({ open: false, type: "" });
         setActionComment("");
-        fetchOrderDetails(); // refresh
+        fetchOrderDetails();
       } else {
         alert(data.error);
       }
@@ -137,7 +164,6 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
     setActionLoading(true);
     try {
       showToast(`Moving to ${newStatus}...`);
-      // 1. Update Status
       const res = await fetch(`${API}/api/orders/${orderId}`, {
         method: "PUT",
         headers: { 'Content-Type': 'application/json' },
@@ -145,7 +171,6 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
       });
       if (!res.ok) throw new Error("Update failed");
 
-      // 2. Init Approval if needed
       if (initApproval) {
         const appRes = await fetch(`${API}/api/approvals/requests`, {
           method: 'POST',
@@ -167,35 +192,24 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
     setActionLoading(false);
   };
 
-  const handleDownload = async () => {
+  const handleSafeDownload = async () => {
     if (pdfLoading) return;
     setPdfLoading(true);
+    const filename = `PO_${data.order?.order_number || "Order"}.pdf`;
     try {
       const element = document.getElementById("view-order-print-area");
-      if (!element) return;
-      
-      const options = {
-        margin: [0, 0, 0, 0],
-        filename: `PO_${data.order.order_number || "Order"}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { 
-          scale: 2, 
-          useCORS: true, 
-          letterRendering: true,
-          logging: false,
-          scrollY: 0
-        },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-      };
-      
-      await html2pdf().from(element).set(options).save();
+      if (!element) { showToast("PDF not ready", "error"); return; }
+      await downloadElementAsPdf({ element, filename });
     } catch (err) {
       console.error("PDF Download error:", err);
-      showToast("Download failed. Please try 'Print PDF' instead.", "error");
+      showToast("Download failed. Please try again.", "error");
     } finally {
       setPdfLoading(false);
     }
+  };
+
+  const handlePrint = () => {
+    window.print();
   };
 
   if (loading) {
@@ -211,8 +225,36 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
   if (!order) return <div className="p-10 text-center">Order not found.</div>;
 
   const getVal = (v) => Array.isArray(v) ? v[0] : v;
+  const normalizeRichTextHtml = (html) =>
+    typeof html === "string"
+      ? html.replace(/&nbsp;|\u00A0/g, " ")
+      : html;
+  const cleanQuillHtml = (html) => {
+    if (!html) return "";
+    return html
+      .replace(/<span class="ql-ui"><\/span>/gi, "")
+      .replace(/<span class="ql-ui"\/>/gi, "")
+      .replace(/\s*data-list="[^"]*"/gi, "");
+  };
+  const renderRichHtml = (html) => cleanQuillHtml(normalizeRichTextHtml(html));
+  const formatSignatureDate = (value) => {
+    if (!value) return "--";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "--";
 
-  // Status-based logic: Draft & Review show LIVE latest data. Others show Frozen Snapshot.
+    const parts = new Intl.DateTimeFormat("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    }).formatToParts(date);
+
+    const day = parts.find((part) => part.type === "day")?.value;
+    const month = parts.find((part) => part.type === "month")?.value;
+    const year = parts.find((part) => part.type === "year")?.value;
+
+    return [day, month, year].filter(Boolean).join(" - ");
+  };
+
   const isKacha = ["Draft", "Review"].includes(order.status);
   const snap = order.snapshot || {};
 
@@ -230,47 +272,107 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
 
   const liveContact = getVal(order.contact_person);
   const contacts = isKacha
-    ? (snap.contacts || (liveContact ? [liveContact] : [])) // For Drafts, we still use the IDs from snapshot but ideally we'd want latest.
+    ? (snap.contacts || (liveContact ? [liveContact] : []))
     : (snap.contacts || (liveContact ? [liveContact] : []));
   const totals = order.totals || {};
+  const isSupply = order.order_type === "Supply";
+  const showModel = (totals.showModel === true || (totals.showModel !== false && groupedItems.some(it => it.model_number)));
+  const showBrand = (totals.showBrand === true || (totals.showBrand !== false && groupedItems.some(it => it.make || it.brand)));
+  const showDiscount = totals.discount_mode === "line";
+  const showRemarks = (totals.showRemarks === true || (totals.showRemarks !== false && groupedItems.some(it => it.remarks)));
 
-  const TABS = ["Purchase Details", "Approvals", "Order Documents", "PDF View", "Goods receipts", "Vendor Invoices", "Payments"];
+
+
+
+  const FALLBACK = "--";
+  const RUPEE = "\u20B9";
+  const vendorDisplayName = vend.vendorName || vend.vendor_name || "Vendor";
+  const vendorSignatoryName = vend.contactPerson || vend.contact_person || vendorDisplayName || FALLBACK;
+  const poDate = formatSignatureDate(order.purchase_order_date || order.created_at);
+  const TABS = ["Order Details", "Approvals", "Order Documents", "PDF View", "Goods receipts", "Vendor Invoices", "Payments"];
 
   return (
     <div className="bg-slate-50 min-h-screen text-sm w-full mx-auto pb-20">
-      {/* Final Print Logic: Perfect Centering & No Clipping */}
       <style>{`
+        .pdf-fit-nowrap {
+          min-width: 0;
+          max-width: 100%;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .quill-content ul { list-style-type: disc !important; padding-left: 1.5rem !important; margin: 4px 0 !important; }
+        .quill-content ol { list-style-type: decimal !important; padding-left: 1.5rem !important; margin: 4px 0 !important; }
+        .quill-content li { display: list-item !important; text-align: justify !important; margin-bottom: 0.2rem !important; }
+        .quill-content p { margin-bottom: 2px !important; text-align: justify !important; }
+        .quill-content strong { font-weight: 700 !important; }
+        .quill-content em { font-style: italic !important; }
+        .quill-content u { text-decoration: underline !important; }
+
+        .order-rich-text,
+        .order-rich-text * {
+          max-width: 100%;
+          white-space: normal !important;
+          word-break: normal !important;
+          overflow-wrap: break-word !important;
+          word-wrap: break-word !important;
+          hyphens: none !important;
+        }
+
+        .order-rich-text p,
+        .order-rich-text div,
+        .order-rich-text span,
+        .order-rich-text li {
+          margin: 0;
+        }
+
+        .order-rich-text ol,
+        .order-rich-text ul {
+          margin: 0;
+          padding-left: 1.25rem;
+        }
+
+        .ql-align-center { text-align: center !important; }
+        .ql-align-right { text-align: right !important; }
+        .ql-align-justify { text-align: justify !important; }
+        .quill-content { text-align: justify !important; }
+        .quill-content p, .quill-content div { text-align: justify; }
+
         @media print {
-          @page { margin: 0; size: auto; }
+          @page { margin: 0; size: A4 portrait; }
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
           body { background: white !important; margin: 0 !important; padding: 0 !important; }
-          
-          .no-print, aside, nav, header, .sidebar, .print\\:hidden, [class*="Tabs"], [class*="Header"] { 
-            display: none !important; 
-          }
 
-          #root > div, main, .bg-slate-50, .bg-slate-200 { 
-            background: transparent !important; 
-            padding: 0 !important; 
-            margin: 0 !important; 
-            display: block !important;
-            overflow: visible !important;
-            height: auto !important;
-          }
-
+          /* Hide everything, show only print area */
+          body * { visibility: hidden !important; }
+          #view-order-print-area,
+          #view-order-print-area * { visibility: visible !important; }
           #view-order-print-area {
             position: absolute !important;
-            left: 10mm !important;
-            right: 10mm !important;
-            top: 10mm !important;
-            width: 190mm !important;
-            background: white !important;
-            box-shadow: none !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 210mm !important;
+            max-width: 210mm !important;
+            margin: 0 !important;
             padding: 0 !important;
-            margin: 0 auto !important;
           }
 
-          /* Force backgrounds to show */
-          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          .page-container {
+            width: 210mm !important;
+            height: 297mm !important;
+            overflow: hidden !important;
+            box-shadow: none !important;
+            border: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            page-break-after: always !important;
+            break-after: page !important;
+          }
+          .page-container:last-child {
+            page-break-after: auto !important;
+            break-after: auto !important;
+          }
         }
       `}</style>
 
@@ -312,8 +414,6 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
                   </button>
                 </>
               )}
-
-
               <button className="p-2 border border-slate-200 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-50 ml-2">
                 <Search size={16} />
               </button>
@@ -322,7 +422,6 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
         </div>
 
         <div className="px-14 pb-4">
-          {/* Delayed numbering logic */}
           {(() => {
             const displayNo = order.order_number?.startsWith("PENDING-") ? "DRAFT" : order.order_number;
             const isDraftNo = displayNo === "DRAFT";
@@ -335,8 +434,6 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
                     {displayNo}
                   </span>
                 </h1>
-                
-                {/* Subject highlight bar */}
                 <div className="mt-3 flex items-center gap-4 bg-indigo-50/50 px-5 py-3 rounded-r-xl border-l-4 border-[#1b3e8a] shadow-sm max-w-4xl">
                   <span className="text-[10px] font-black text-[#1b3e8a] uppercase tracking-[0.2em] shrink-0">Subject :</span>
                   <span className="text-[13px] font-bold text-slate-700 uppercase tracking-tight leading-none">{order.subject || order.order_name || 'N/A'}</span>
@@ -347,7 +444,7 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
         </div>
 
         {/* Tabs */}
-        <div className="px-14 flex gap-6 overflow-x-auto no-scrollbar border-t border-slate-100 pt-3">
+        <div className="px-14 flex gap-6 overflow-x-auto no-scrollbar border-t border-slate-100 pt-3 print:hidden">
           {TABS.map(t => (
             <button
               key={t}
@@ -361,8 +458,8 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
         </div>
       </div>
 
-      {activeTab === "Purchase Details" && (
-        <div className="px-14 py-6 max-w-[1400px]">
+      {activeTab === "Order Details" && (
+        <div className="px-14 py-3 max-w-[1400px] print:hidden">
           {/* Top Info Block */}
           <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
             <div className="flex items-center gap-3 mb-6">
@@ -382,7 +479,7 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div>
                 <p className="text-xs text-slate-400 mb-1">Reference No.</p>
-                <p className="font-semibold text-slate-800">{order.ref_number || '—'}</p>
+                <p className="font-semibold text-slate-800">{order.ref_number || FALLBACK}</p>
               </div>
               <div>
                 <p className="text-xs text-slate-400 mb-1">{order.order_type === 'Supply' ? 'Purchase' : 'Work'} Order No.</p>
@@ -397,147 +494,81 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
               <div><p className="text-xs text-slate-400 mb-1">Created By</p><p className="font-semibold text-slate-800">{order.made_by || "N/A"}</p></div>
               <div className="col-span-2">
                 <p className="text-xs text-slate-400 mb-1">Subject</p>
-                <p className="font-semibold text-slate-800">{order.subject || order.order_name || '—'}</p>
+                <p className="font-semibold text-slate-800">{order.subject || order.order_name || FALLBACK}</p>
               </div>
               <div className="col-span-2">
                 <p className="text-xs text-slate-400 mb-1">Requisition by</p>
-                <p className="font-semibold text-slate-800">{order.request_by || '—'}</p>
+                <p className="font-semibold text-slate-800">{order.request_by || FALLBACK}</p>
               </div>
             </div>
           </div>
 
-          {/* Vendors & Company grids */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-            {/* Vendor Block */}
             <div className="bg-white rounded-xl border border-slate-200 p-6">
               <h3 className="font-bold text-sm text-slate-800 mb-4 flex items-center gap-2">
                 <User size={16} className="text-slate-400" /> Vendor Details
               </h3>
               <p className="font-bold text-slate-900 mb-3 uppercase">{vend.vendorName || vend.vendor_name || 'N/A'}</p>
-
               <div className="space-y-3 text-xs">
-                <div>
-                  <p className="text-slate-400 mb-0.5">Address</p>
-                  <p className="text-slate-700 leading-relaxed">{vend.address || 'N/A'}</p>
-                </div>
-
-                {/* Bank Details */}
+                <div><p className="text-slate-400 mb-0.5">Address</p><p className="text-slate-700 leading-relaxed">{vend.address || 'N/A'}</p></div>
                 <div className="pt-1">
-                  <p className="text-slate-400 mb-1.5 font-semibold uppercase tracking-wide text-[10px]">Bank Details</p>
-                  <div className="space-y-1">
-                    <div className="flex gap-2">
-                      <span className="text-slate-400 w-28 shrink-0">Beneficiary Name</span>
-                      <span className="text-slate-700 font-medium">{vend.accountHolder || vend.account_holder || 'N/A'}</span>
-                    </div>
-                    <div className="flex gap-2">
-                      <span className="text-slate-400 w-28 shrink-0">Bank Name</span>
-                      <span className="text-slate-700 font-medium">{vend.bankName || vend.bank_name || 'N/A'}</span>
-                    </div>
-                    <div className="flex gap-2">
-                      <span className="text-slate-400 w-28 shrink-0">IFSC Code</span>
-                      <span className="text-slate-700 font-medium font-mono">{vend.ifscCode || vend.ifsc_code || 'N/A'}</span>
-                    </div>
-                    <div className="flex gap-2">
-                      <span className="text-slate-400 w-28 shrink-0">Account No</span>
-                      <span className="text-slate-700 font-medium font-mono">{vend.accountNumber || vend.account_number || 'N/A'}</span>
-                    </div>
+                  <p className="text-slate-400 mb-1.5 font-semibold uppercase tracking-wide text-[10px]">BANK DETAILS</p>
+                  <div className="space-y-1.5">
+                    <div className="flex gap-2"><span className="text-slate-400 w-32 shrink-0">Beneficiary Name</span><span className="text-slate-900 font-medium">{vend.beneficiaryName || vend.accountName || vend.vendorName || "N/A"}</span></div>
+                    <div className="flex gap-2"><span className="text-slate-400 w-32 shrink-0">Bank Name</span><span className="text-slate-700 font-medium">{vend.bankName || "N/A"}</span></div>
+                    <div className="flex gap-2"><span className="text-slate-400 w-32 shrink-0">IFSC Code</span><span className="text-slate-700 font-medium font-mono">{vend.ifscCode || vend.ifsc_code || 'N/A'}</span></div>
+                    <div className="flex gap-2"><span className="text-slate-400 w-32 shrink-0">Account No</span><span className="text-slate-700 font-medium font-mono">{vend.accountNumber || vend.account_number || 'N/A'}</span></div>
                   </div>
                 </div>
-
-                {/* Tax Docs */}
-                <div className="pt-1">
-                  <p className="text-slate-400 mb-1.5 font-semibold uppercase tracking-wide text-[10px]">Tax Docs</p>
+                <div className="pt-2">
+                  <p className="text-slate-400 mb-2 font-bold uppercase tracking-widest text-[10px] border-b border-slate-50 pb-1">TAX DOCS</p>
                   <div className="space-y-1">
-                    <div className="flex gap-2">
-                      <span className="text-slate-400 w-28 shrink-0">GST No</span>
-                      <span className={`font-medium font-mono uppercase ${vend.gstin ? 'text-slate-700' : 'text-slate-400 italic'}`}>{vend.gstin || 'NA'}</span>
-                    </div>
-                    <div className="flex gap-2">
-                      <span className="text-slate-400 w-28 shrink-0">Pan No</span>
-                      <span className={`font-medium font-mono uppercase ${vend.pan ? 'text-slate-700' : 'text-slate-400 italic'}`}>{vend.pan || 'NA'}</span>
-                    </div>
-                    <div className="flex gap-2">
-                      <span className="text-slate-400 w-28 shrink-0">Aadhar No</span>
-                      <span className={`font-medium font-mono ${vend.aadharNo || vend.aadhar_no ? 'text-slate-700' : 'text-slate-400 italic'}`}>{vend.aadharNo || vend.aadhar_no || 'NA'}</span>
-                    </div>
-                    <div className="flex gap-2">
-                      <span className="text-slate-400 w-28 shrink-0">MSME No</span>
-                      <span className={`font-medium ${vend.msmeNumber || vend.msme_number ? 'text-slate-700' : 'text-slate-400 italic'}`}>{vend.msmeNumber || vend.msme_number || 'NA'}</span>
-                    </div>
+                    <div className="flex gap-3"><span className="text-slate-400 w-32 shrink-0">GST No</span><span className="font-bold font-mono uppercase text-slate-900 text-[11px]">{vend.gstin || 'NA'}</span></div>
+                    <div className="flex gap-3"><span className="text-slate-400 w-32 shrink-0">Pan No</span><span className="font-bold font-mono uppercase text-slate-900 text-[11px]">{vend.pan || 'NA'}</span></div>
+                    <div className="flex gap-3"><span className="text-slate-400 w-32 shrink-0">Aadhar No</span><span className="font-bold font-mono uppercase text-sky-600 text-[11px] italic">{vend.aadhar || vend.aadhar_no || 'NA'}</span></div>
+                    <div className="flex gap-3"><span className="text-slate-400 w-32 shrink-0">MSME No</span><span className="font-bold font-mono uppercase text-sky-600 text-[11px] italic">{vend.msme || vend.msme_no || 'NA'}</span></div>
                   </div>
                 </div>
-
-                {/* Contact Details */}
-                <div className="pt-1">
-                  <p className="text-slate-400 mb-1.5 font-semibold uppercase tracking-wide text-[10px]">Contact Details</p>
-                  <div className="space-y-1">
-                    <div className="flex gap-2">
-                      <span className="text-slate-400 w-28 shrink-0">Person Name</span>
-                      <span className="text-slate-700 font-medium">{vend.contactPerson || vend.contact_person || 'N/A'}</span>
-                    </div>
-                    <div className="flex gap-2">
-                      <span className="text-slate-400 w-28 shrink-0">Contact No</span>
-                      <span className="text-slate-700 font-medium">{vend.mobile || vend.phone || 'N/A'}</span>
-                    </div>
-                    <div className="flex gap-2">
-                      <span className="text-slate-400 w-28 shrink-0">Email</span>
-                      <span className="text-slate-700 font-medium">{vend.email || 'N/A'}</span>
-                    </div>
+                <div className="pt-2">
+                  <p className="text-slate-400 mb-2 font-bold uppercase tracking-widest text-[10px] border-b border-slate-50 pb-1">CONTACT DETAILS</p>
+                  <div className="space-y-1.5">
+                    <div className="flex gap-2"><span className="text-slate-400 w-32 shrink-0">Person Name</span><span className="text-slate-900 font-bold">{vend.contactPerson || vend.contact_person || 'N/A'}</span></div>
+                    <div className="flex gap-2"><span className="text-slate-400 w-32 shrink-0">Contact No</span><span className="text-slate-700 font-medium">{vend.mobile || vend.phone || 'N/A'}</span></div>
+                    <div className="flex gap-2"><span className="text-slate-400 w-32 shrink-0">Email</span><span className="text-slate-700 font-medium lowercase">{vend.email || 'N/A'}</span></div>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Company Block */}
             <div className="bg-white rounded-xl border border-slate-200 p-6">
               <h3 className="font-bold text-sm text-slate-800 mb-4 flex items-center gap-2">
                 <Building2 size={16} className="text-slate-400" /> Company Details
               </h3>
               <p className="font-bold text-slate-900 mb-3 uppercase">{comp.companyName || comp.company_name || 'N/A'}</p>
-
               <div className="space-y-3 text-xs">
-                <div>
-                  <p className="text-slate-400 mb-0.5">Site Address</p>
-                  <p className="text-slate-700 leading-relaxed">{site.siteAddress || site.site_address || 'N/A'}</p>
-                </div>
-                <div>
-                  <p className="text-slate-400 mb-0.5 mt-2">Contact Person</p>
-                  <div className="space-y-2 mt-1">
-                    {contacts.length > 0 ? (
-                      contacts.map((c, i) => (
-                        <div key={i} className="bg-slate-50/50 rounded-lg p-2 border border-slate-100/50 flex flex-col gap-1">
-                          <div className="flex items-center gap-2 text-slate-800 font-bold uppercase tracking-tight">
-                            <User size={12} className="text-slate-400" />
-                            {c.personName || c.person_name}
-                          </div>
-                          {(c.contactNumber || c.contact_number) && (
-                            <div className="flex items-center gap-2 text-slate-500 font-mono text-[11px]">
-                              <Phone size={10} className="text-slate-300" />
-                              {c.contactNumber || c.contact_number}
-                            </div>
-                          )}
-                        </div>
-                      ))
-                    ) : (
-                      <div className="bg-slate-50 rounded-lg p-2 border border-slate-100 flex flex-col gap-1">
-                        <div className="flex items-center gap-2 text-slate-800 font-bold uppercase tracking-tight">
-                          <User size={12} className="text-slate-400" />
-                          {site.contactName || site.contact_name || 'N/A'}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                <div><p className="text-slate-400 mb-0.5">Site Address</p><p className="text-slate-700 leading-relaxed">{site.siteAddress || site.site_address || 'N/A'}</p></div>
                 <div>
                   <p className="text-slate-400 mb-0.5 mt-2">Billing Address</p>
-                  <p className="text-slate-700 leading-relaxed">
-                    {site.billingAddress || site.billing_address || comp.address || 'N/A'}
-                  </p>
+                  <p className="text-slate-700 leading-relaxed">{site.billingAddress || site.billing_address || comp.address || 'N/A'}</p>
                 </div>
-                <div>
-                  <p className="text-slate-400 mb-0.5 mt-2">GSTIN</p>
-                  <p className="text-slate-700 uppercase">{comp.gstin || 'N/A'}</p>
-                </div>
+                <div><p className="text-slate-400 mb-0.5 mt-2">GSTIN</p><p className="text-slate-700 uppercase">{comp.gstin || 'N/A'}</p></div>
+                {contacts.length > 0 && (
+                  <div className="pt-2">
+                    <p className="text-slate-400 mb-2 font-bold uppercase tracking-widest text-[9px] border-b border-slate-50 pb-1 text-[10px]">Contact Persons</p>
+                    <div className="space-y-2">
+                      {contacts.map((c, i) => (
+                        <div key={i} className="flex flex-col gap-0.5">
+                          <p className="text-slate-900 font-bold text-[11px]">{c.personName || c.person_name}</p>
+                          <div className="flex gap-2 text-[10px] text-slate-500">
+                            <span>{c.designation}</span>
+                            <span>•</span>
+                            <span>{c.contactNumber || c.contact_number}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -553,118 +584,157 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
               <table className="w-full text-left whitespace-nowrap">
                 <thead className="bg-slate-100/30 border-b border-slate-200 text-slate-500 font-bold text-[10px] uppercase tracking-wider">
                   <tr>
-                    <th className="px-5 py-4 text-center w-12 border-r border-slate-200/50">Sr.</th>
-                    <th className="px-5 py-4 text-left min-w-[160px] border-r border-slate-200/50">Item Name</th>
-                    {/* Specification */}
-                    <th className="px-5 py-4 text-left min-w-[200px] border-r border-slate-200/50">Specification</th>
-                    {/* Model Number */}
-                    {(totals.showModel !== false || groupedItems.some(it => it.model_number)) && (
-                      <th className="px-4 py-4 text-left border-r border-slate-200/50">Model No.</th>
+                    <th className="px-3 py-4 text-center w-[35px] border-r border-slate-200/50 sticky left-0 bg-white z-10">S.No</th>
+                    {isSupply ? (
+                      <>
+                        <th className="px-5 py-4 text-left w-[240px] border-r border-slate-200/50">Item Name</th>
+                        <th className="px-5 py-4 text-left w-[360px] border-r border-slate-200/50">Specification</th>
+                      </>
+                    ) : (
+                      <th className="px-5 py-4 text-left border-r border-slate-200/50" style={{ minWidth: '380px' }}>Item Name & Description</th>
                     )}
-                    {(totals.showBrand !== false || groupedItems.some(it => it.brand || it.make || it.item?.make)) && (
-                      <th className="px-4 py-4 text-left border-r border-slate-200/50">Brand</th>
+                    <th className="px-4 py-4 text-center w-[60px] border-r border-slate-200/50">Unit</th>
+                    <th className="px-4 py-4 text-right w-[80px] border-r border-slate-200/50">Qty</th>
+                    <th className="px-4 py-4 text-right w-[100px] border-r border-slate-200/50">Rate</th>
+                    {showDiscount && (
+                      <th className="px-3 py-4 text-right w-[60px] border-r border-slate-200/50 tracking-tighter">Disc%</th>
                     )}
-                    <th className="px-4 py-4 text-center border-r border-slate-200/50">Unit</th>
-                    <th className="px-4 py-4 text-right border-r border-slate-200/50">Qty</th>
-                    <th className="px-4 py-4 text-right border-r border-slate-200/50">Rate</th>
-                    {/* Discount - Only if Line Mode */}
-                    {totals.discount_mode === 'line' && (
-                      <th className="px-4 py-4 text-center border-r border-slate-200/50">Disc%</th>
+                    <th className="px-4 py-4 text-right w-[60px] border-r border-slate-200/50">Tax%</th>
+
+                    {showRemarks && (
+                      <th className="px-4 py-4 text-left w-[120px] border-r border-slate-200/50">Remarks</th>
                     )}
-                    <th className="px-4 py-4 text-right border-r border-slate-200/50">Tax%</th>
+
                     <th className="px-6 py-4 text-right font-black text-indigo-900 bg-indigo-50/30">Amount</th>
-                    {(totals.showRemarks || groupedItems.some(it => it.remarks)) && <th className="px-5 py-4 text-left">Remarks</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {groupedItems.map((it, idx) => (
                     <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
-                      {/* Sr No & Item Name Merged */}
                       {!it._isSubRow && (
-                        <>
-                          <td rowSpan={it._rowSpan} className="px-5 py-6 text-center text-slate-400 font-bold border-r border-slate-200/40 bg-slate-50/30 text-[11px] align-top">
-                            {it._groupSrNo < 10 ? `0${it._groupSrNo}` : it._groupSrNo}
-                          </td>
-                          <td rowSpan={it._rowSpan} className="px-5 py-6 text-slate-800 font-bold uppercase whitespace-normal leading-tight border-r border-slate-200/40 bg-slate-50/30 text-[11px] align-top min-w-[160px]">
-                            {it._itemName}
-                          </td>
-                        </>
+                        <td rowSpan={it._rowSpan} className="px-4 py-3 text-center text-slate-600 font-bold text-[10px] border-r border-slate-200/40 sticky left-0 bg-white z-10 align-top">
+                          {it._groupSrNo < 10 ? `0${it._groupSrNo}` : it._groupSrNo}
+                        </td>
                       )}
 
-                      {/* Specification */}
-                      <td className="px-5 py-6 text-slate-600 font-medium whitespace-normal leading-relaxed text-[11px] border-r border-slate-100/60">
-                        {it.description || "—"}
-                      </td>
-                      {/* Model Number */}
-                      {(totals.showModel !== false || groupedItems.some(it => it.model_number)) && (
-                        <td className="px-4 py-6 text-slate-500 font-semibold text-[10px] uppercase tracking-tight border-r border-slate-100/60">
-                          {it.model_number || "—"}
+                      {isSupply ? (
+                        /* Supply: separate Item Name (rowspan) + Specification columns */
+                        <>
+                          {!it._isSubRow && (
+                            <td rowSpan={it._rowSpan} className="px-5 py-3 text-slate-800 font-bold uppercase whitespace-normal leading-tight border-r border-slate-200/40 text-[11px] min-w-[200px] align-top">
+                              {it._itemName}
+                            </td>
+                          )}
+                          <td className="px-5 py-3 border-r border-slate-100/60 min-w-[280px]">
+                            <div className="space-y-1">
+                              {(() => {
+                                const desc = it.description || it.specification || it.items?.description;
+                                if (!desc) return <span className="text-slate-300 font-bold">---</span>;
+                                let points = [];
+                                try { points = typeof desc === 'string' && (desc.startsWith('[') || desc.startsWith('{')) ? JSON.parse(desc) : (Array.isArray(desc) ? desc : [desc]); } catch (e) { points = [desc]; }
+                                return points.map((p, i) => (
+                                  <div key={i} className="text-[11px] text-slate-600 leading-snug mb-1 last:mb-0">
+                                    <span className="font-medium tracking-tight whitespace-normal">{p.replace(/<[^>]*>/g, '')}</span>
+                                  </div>
+                                ));
+                              })()}
+                              {showModel && it.model_number && (
+                                <div className="text-[10px] mt-0.5"><span className="font-bold text-slate-800">Model No.:</span> <span className="font-semibold text-slate-700">{it.model_number}</span></div>
+                              )}
+                              {showBrand && (() => { const raw = it.make || ""; if (!raw || raw === "[]" || raw === "null") return null; let b = raw; try { const p = JSON.parse(raw); if (Array.isArray(p)) { if (p.length !== 1) return null; b = p[0]; } } catch {} return b ? <div className="text-[10px]"><span className="font-bold text-slate-800">Brand:</span> <span className="font-semibold text-slate-700">{b}</span></div> : null; })()}
+                            </div>
+                          </td>
+                        </>
+                      ) : (
+                        /* SITC/ITC: combined Item Name + Description in one column */
+                        <td className="px-5 py-3 border-r border-slate-100/60 align-top" style={{ minWidth: '380px' }}>
+                          {!it._isSubRow && (
+                            <p className="text-[11px] font-black text-slate-800 uppercase tracking-wide leading-tight mb-2 whitespace-normal">
+                              {it._itemName}
+                            </p>
+                          )}
+                          {it._isSubRow && (
+                            <p className="text-[9px] font-bold text-slate-300 uppercase tracking-widest mb-1.5">Point {it._subIdx}</p>
+                          )}
+                          <div className="space-y-1 whitespace-normal">
+                            {(() => {
+                              const desc = it.description || it.specification || it.items?.description;
+                              if (!desc) return null;
+                              let points = [];
+                              try { points = typeof desc === 'string' && (desc.startsWith('[') || desc.startsWith('{')) ? JSON.parse(desc) : (Array.isArray(desc) ? desc : [desc]); } catch (e) { points = [desc]; }
+                              return points.map((p, i) => (
+                                <div key={i} className="order-rich-text text-[11px] text-slate-600 leading-relaxed whitespace-normal" dangerouslySetInnerHTML={{ __html: p }} />
+                              ));
+                            })()}
+                            {showModel && it.model_number && (
+                              <div className="text-[10px] text-slate-500 mt-1">Model No.: <span className="font-semibold text-slate-700">{it.model_number}</span></div>
+                            )}
+                            {showBrand && (() => { const raw = it.make || ""; if (!raw || raw === "[]" || raw === "null") return null; let b = raw; try { const p = JSON.parse(raw); if (Array.isArray(p)) { if (p.length !== 1) return null; b = p[0]; } } catch {} return b ? <div className="text-[10px]"><span className="font-bold text-slate-800">Brand:</span> <span className="font-semibold text-slate-700">{b}</span></div> : null; })()}
+                          </div>
+                          {it.scope_of_work && (
+                            <div className="mt-3 pt-2 border-t border-slate-100">
+                              <p className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest mb-1">Scope of Work</p>
+                              <div className="order-rich-text text-[10px] text-slate-500 italic leading-relaxed whitespace-normal" dangerouslySetInnerHTML={{ __html: it.scope_of_work }} />
+                            </div>
+                          )}
                         </td>
                       )}
-                      {(totals.showBrand !== false || groupedItems.some(it => it.brand || it.make || it.item?.make)) && (
-                        <td className="px-4 py-6 text-slate-600 font-bold uppercase tracking-tight text-[10px] border-r border-slate-100/60">
-                          {(() => {
-                             const bValue = it.make || it.items?.make || it.brand || "";
-                             if (!bValue || bValue === "[]" || bValue === "null") return "—";
-                             try {
-                               const parsed = JSON.parse(bValue);
-                               return Array.isArray(parsed) ? (parsed.join(", ") || "—") : parsed;
-                             } catch { return bValue; }
-                          })()}
+
+                      <td className="px-4 py-3 text-center text-slate-400 font-bold uppercase text-[9px] border-r border-slate-100/60">{it.unit || "nos"}</td>
+                      <td className="px-4 py-3 text-right text-slate-800 font-bold text-[12px] border-r border-slate-100/60">{Number(it.qty).toLocaleString("en-IN")}</td>
+                      <td className="px-4 py-3 text-right text-slate-600 font-medium text-[11px] border-r border-slate-100/60">{RUPEE}{Number(it.unit_rate).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                      {showDiscount && (
+                        <td className="px-3 py-3 text-right text-rose-500 font-bold text-[11px] border-r border-slate-100/60">{Number(it.discount_pct)}%</td>
+                      )}
+                      <td className="px-4 py-3 text-right text-slate-400 font-bold text-[11px] border-r border-slate-100/60">{Number(it.tax_pct)}%</td>
+
+                      {showRemarks && (
+                        <td className="px-4 py-3 text-left text-slate-500 font-medium text-[10px] border-r border-slate-100/60 whitespace-normal leading-tight">
+                          {it.remarks || FALLBACK}
                         </td>
                       )}
-                      <td className="px-4 py-6 text-center text-slate-400 font-bold uppercase text-[9px] border-r border-slate-100/60">{it.unit || "nos"}</td>
-                      <td className="px-4 py-6 text-right text-slate-800 font-bold text-[12px] border-r border-slate-100/60">{Number(it.qty).toLocaleString("en-IN")}</td>
-                      <td className="px-4 py-6 text-right text-slate-600 font-medium text-[11px] border-r border-slate-100/60">₹{Number(it.unit_rate).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                      
-                      {/* Discount Mapping - Only if Line Mode */}
-                      {totals.discount_mode === 'line' && (
-                        <td className="px-4 py-6 text-center text-rose-500 font-bold text-[11px] border-r border-slate-100/60">
-                          {Number(it.discount_pct)}%
-                        </td>
-                      )}
-                      
-                      <td className="px-4 py-6 text-right text-slate-400 font-bold text-[11px] border-r border-slate-100/60">{Number(it.tax_pct)}%</td>
-                      <td className="px-6 py-6 text-right text-indigo-900 font-bold bg-indigo-50/20 text-[13px]">₹{Number(it.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                      {(totals.showRemarks || groupedItems.some(it => it.remarks)) && (
-                        <td className="px-5 py-6 text-left text-slate-400 font-medium text-[10px] max-w-[140px] truncate leading-tight border-l border-slate-100/60" title={it.remarks}>
-                          {it.remarks || "—"}
-                        </td>
-                      )}
+
+                      <td className="px-6 py-3 text-right text-indigo-900 font-bold bg-indigo-50/20 text-[13px]">{RUPEE}{Number(it.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
 
-            {/* Totals Section */}
             <div className="border-t border-slate-200 bg-slate-50 p-6 flex justify-end">
               <div className="w-full max-w-sm space-y-3 text-sm">
-                <div className="flex justify-between items-center text-slate-500 font-medium">
-                  <span className="text-[11px] uppercase tracking-wider">SubTotal:</span>
-                  <span className="text-slate-800 font-mono font-bold">₹{subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                <div className="flex justify-between items-center text-slate-500 font-medium pb-2 border-b border-slate-100 italic">
+                  <span className="text-[10px] uppercase tracking-wider">SubTotal:</span>
+                  <span className="text-slate-800 font-mono font-bold">{RUPEE} {subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
                 </div>
+
                 {discAmt > 0 && (
-                  <div className="flex justify-between items-center text-rose-500 font-medium border-rose-50 border-y py-1 bg-rose-50/20 px-3">
-                    <span className="text-[11px] uppercase tracking-wider font-extrabold">
-                      TOTAL DISCOUNT {discountPct > 0 ? `(${discountPct}%)` : ""} :
-                    </span>
-                    <span className="font-mono font-black animate-pulse">- ₹{discAmt.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                  <div className="flex justify-between items-center text-rose-500 font-medium">
+                    <span className="text-[10px] uppercase tracking-wider">Discount ({discountPct}%):</span>
+                    <span className="font-mono font-bold">- {RUPEE} {discAmt.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
                   </div>
                 )}
+
                 {fright > 0 && (
-                  <div className="flex justify-between items-center text-slate-500 font-medium">
-                    <span className="text-[11px] uppercase tracking-wider">Freight & Packing ({frightTax}%):</span>
-                    <span className="text-slate-800 font-mono">₹{fright.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                  <div className="flex justify-between items-center text-slate-500 font-medium pb-1">
+                    <span className="text-[10px] uppercase tracking-wider">Freight & Packing ({frightTax}%):</span>
+                    <span className="text-slate-800 font-mono font-bold">{RUPEE} {fright.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
                   </div>
                 )}
-                <div className="flex justify-between items-center text-slate-400 font-medium border-b border-slate-100 pb-3">
-                  <span className="text-[11px] uppercase tracking-wider">GST Tax Amount:</span>
-                  <span className="text-slate-700 font-mono">₹{totalGst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
-                </div>
-                <div className="flex justify-between items-center text-slate-900 font-black py-2 text-xl">
-                  <span className="text-[10px] uppercase tracking-[0.3em] opacity-30">Grand Total:</span>
-                  <span className="font-mono tracking-tighter bg-slate-900 text-white px-4 py-2 rounded-xl shadow-xl shadow-slate-200">₹{grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+
+                {totalGst > 0 && (
+                  <div className="flex justify-between items-center text-slate-500 font-medium pb-1">
+                    <span className="text-[10px] uppercase tracking-wider">GST (Summary):</span>
+                    <span className="text-slate-800 font-mono font-bold">{RUPEE} {totalGst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                  </div>
+                )}
+
+                <div className="flex justify-between items-center text-slate-900 font-black py-4 border-t border-slate-200 mt-2">
+                  <span className="text-[11px] uppercase tracking-[0.3em] opacity-40">Grand Total:</span>
+                  <div className="flex flex-col items-end">
+                    <span className="text-2xl font-mono tracking-tighter bg-slate-900 text-white px-5 py-2.5 rounded-2xl shadow-2xl shadow-slate-200">{RUPEE} {grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                    <p className="mt-2 text-[10px] text-slate-400 font-bold uppercase tracking-tight italic">{amountToWords(grandTotal)}</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -672,437 +742,190 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
 
           {/* Clause Boxes */}
           <div className="space-y-6">
-
             {/* Order Notes */}
             {(order.notes || snap.notes) && (
               <div className="bg-white rounded-xl border border-slate-200 p-6">
                 <h3 className="font-bold text-sm text-slate-800 mb-4 flex items-center gap-2">
                   <FileText size={16} className="text-slate-400" /> Order Notes
                 </h3>
-                <div className="text-sm text-slate-600 prose prose-slate max-w-none">
-                  <div dangerouslySetInnerHTML={{ __html: order.notes || snap.notes }} />
+                <div className="quill-content order-rich-text text-sm text-slate-600 leading-relaxed">
+                  <div dangerouslySetInnerHTML={{ __html: renderRichHtml(order.notes || snap.notes) }} />
+                </div>
+              </div>
+            )}
+            {/* Terms & Conditions */}
+            {(order.terms_conditions?.length > 0 || order.terms?.length > 0 || snap.terms?.length > 0) && (
+              <div className="bg-white rounded-xl border border-slate-200 p-6">
+                <h3 className="font-bold text-sm text-slate-800 mb-4 flex items-center gap-2">
+                  <ShieldQuestion size={16} className="text-slate-400" /> Terms & Conditions
+                </h3>
+                <div className="space-y-3">
+                  {(() => {
+                    const arr = Array.isArray(order.terms_conditions) ? order.terms_conditions : Array.isArray(order.terms) ? order.terms : Array.isArray(snap.terms) ? snap.terms : null;
+                    if (arr && arr.length === 1) return <div className="quill-content order-rich-text text-sm text-slate-600 leading-relaxed" dangerouslySetInnerHTML={{ __html: renderRichHtml(arr[0]) }} />;
+                    if (arr && arr.length > 1) return arr.map((term, i) => (
+                      <div key={i} className="flex gap-3 text-sm text-slate-600">
+                        <span className="text-slate-300 font-bold shrink-0">{String(i + 1).padStart(2, '0')}.</span>
+                        <div className="quill-content order-rich-text flex-1 leading-relaxed" dangerouslySetInnerHTML={{ __html: renderRichHtml(term) }} />
+                      </div>
+                    ));
+                    const single = order.terms_conditions || order.terms || snap.terms;
+                    if (single && !Array.isArray(single)) return <div className="quill-content order-rich-text text-sm text-slate-600 leading-relaxed" dangerouslySetInnerHTML={{ __html: renderRichHtml(single) }} />;
+                    return null;
+                  })()}
                 </div>
               </div>
             )}
 
-            {/* Terms & Conditions */}
-            {order.terms_conditions && order.terms_conditions.length > 0 && (
-              <div className="bg-white rounded-xl border border-slate-200 p-6 overflow-hidden">
-                <h3 className="font-bold text-sm text-slate-800 mb-4 flex items-center gap-2">
-                  <FileText size={16} className="text-slate-400" /> Terms & Conditions
-                </h3>
-                <ul className="text-sm text-slate-600 space-y-3">
-                  {order.terms_conditions.map((point, i) => (
-                    <li key={i} className="flex items-start gap-2 min-w-0">
-                      <span className="text-slate-400 shrink-0 w-5 text-right">{i + 1}.</span>
-                      <div className="min-w-0 break-words leading-relaxed" dangerouslySetInnerHTML={{ __html: point }} />
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
             {/* Payment Terms */}
-            {order.payment_terms && order.payment_terms.length > 0 && (
-              <div className="bg-white rounded-xl border border-slate-200 p-6 overflow-hidden">
+            {(order.payment_terms?.length > 0 || order.paymentTerms?.length > 0 || snap.payment_terms?.length > 0) && (
+              <div className="bg-white rounded-xl border border-slate-200 p-6">
                 <h3 className="font-bold text-sm text-slate-800 mb-4 flex items-center gap-2">
-                  <FileText size={16} className="text-slate-400" /> Payment Terms
+                  <CheckCircle2 size={16} className="text-slate-400" /> Payment Terms
                 </h3>
-                <ul className="text-sm text-slate-600 space-y-3">
-                  {order.payment_terms.map((point, i) => (
-                    <li key={i} className="flex items-start gap-2 min-w-0"><span className="text-slate-400 shrink-0 w-5 text-right">{i + 1}.</span><div className="min-w-0 break-words leading-relaxed" dangerouslySetInnerHTML={{ __html: point }} /></li>
-                  ))}
-                </ul>
+                <div className="space-y-3">
+                  {(() => {
+                    const arr = Array.isArray(order.payment_terms) ? order.payment_terms : Array.isArray(order.paymentTerms) ? order.paymentTerms : Array.isArray(snap.payment_terms) ? snap.payment_terms : null;
+                    if (arr && arr.length === 1) return <div className="quill-content order-rich-text text-sm text-slate-600 leading-relaxed" dangerouslySetInnerHTML={{ __html: renderRichHtml(arr[0]) }} />;
+                    if (arr && arr.length > 1) return arr.map((term, i) => (
+                      <div key={i} className="flex gap-3 text-sm text-slate-600">
+                        <span className="text-slate-300 font-bold shrink-0">{String(i + 1).padStart(2, '0')}.</span>
+                        <div className="quill-content order-rich-text flex-1 leading-relaxed" dangerouslySetInnerHTML={{ __html: renderRichHtml(term) }} />
+                      </div>
+                    ));
+                    const single = order.payment_terms || order.paymentTerms || snap.payment_terms;
+                    if (single && !Array.isArray(single)) return <div className="quill-content order-rich-text text-sm text-slate-600 leading-relaxed" dangerouslySetInnerHTML={{ __html: renderRichHtml(single) }} />;
+                    return null;
+                  })()}
+                </div>
               </div>
             )}
 
             {/* Governing Laws */}
-            {order.governing_laws && order.governing_laws.length > 0 && (
-              <div className="bg-white rounded-xl border border-slate-200 p-6 overflow-hidden">
+            {(order.governing_laws?.length > 0 || order.governingLaws?.length > 0 || snap.governing_laws?.length > 0) && (
+              <div className="bg-white rounded-xl border border-slate-200 p-6">
                 <h3 className="font-bold text-sm text-slate-800 mb-4 flex items-center gap-2">
-                  <FileText size={16} className="text-slate-400" /> Governing Laws
+                  <Landmark size={16} className="text-slate-400" /> Governing Laws
                 </h3>
-                <div className="text-sm text-slate-600 break-words">
-                  {order.governing_laws.map((point, i) => (
-                    <div key={i} dangerouslySetInnerHTML={{ __html: point }} className="mb-2 leading-relaxed" />
-                  ))}
+                <div className="space-y-4">
+                  {(() => {
+                    const arr = order.governing_laws || order.governingLaws || snap.governing_laws;
+                    const items = Array.isArray(arr) ? arr : arr ? [arr] : [];
+                    if (items.length === 1) return <div className="quill-content order-rich-text text-sm text-slate-600 leading-relaxed bg-slate-50/50 p-4 rounded-lg border border-slate-100" dangerouslySetInnerHTML={{ __html: renderRichHtml(items[0]) }} />;
+                    return items.map((law, i) => (
+                      <div key={i} className="quill-content order-rich-text text-sm text-slate-600 leading-relaxed bg-slate-50/50 p-4 rounded-lg border border-slate-100"
+                        dangerouslySetInnerHTML={{ __html: renderRichHtml(law) }} />
+                    ));
+                  })()}
                 </div>
               </div>
             )}
 
             {/* Annexures */}
-            {order.annexures && order.annexures.length > 0 && (
-              <div className="bg-white rounded-xl border border-slate-200 p-6 overflow-hidden">
+            {(order.annexures?.length > 0 || snap.annexures?.length > 0) && (
+              <div className="bg-white rounded-xl border border-slate-200 p-6">
                 <h3 className="font-bold text-sm text-slate-800 mb-4 flex items-center gap-2">
                   <FileText size={16} className="text-slate-400" /> Annexures
                 </h3>
-                <div className="text-sm text-slate-600 break-words">
-                  {order.annexures.map((point, i) => (
-                    <div key={i} dangerouslySetInnerHTML={{ __html: point }} className="mb-2 leading-relaxed" />
-                  ))}
+                <div className="space-y-3">
+                  {(() => {
+                    const arr = Array.isArray(order.annexures) ? order.annexures : Array.isArray(snap.annexures) ? snap.annexures : [];
+                    if (arr.length === 1) return <div className="quill-content order-rich-text text-sm text-slate-600 leading-relaxed" dangerouslySetInnerHTML={{ __html: renderRichHtml(arr[0]) }} />;
+                    return arr.map((anx, i) => (
+                      <div key={i} className="flex gap-3 text-sm text-slate-600">
+                        <span className="text-slate-300 font-bold shrink-0">{String(i + 1).padStart(2, '0')}.</span>
+                        <div className="quill-content order-rich-text flex-1 leading-relaxed" dangerouslySetInnerHTML={{ __html: renderRichHtml(anx) }} />
+                      </div>
+                    ));
+                  })()}
                 </div>
               </div>
             )}
 
-            {/* Authorized Signatures */}
-            <div className="bg-white rounded-xl border border-slate-200 p-8 pb-10">
-              <h3 className="font-bold text-sm text-slate-700 mb-8 flex items-center gap-2 border-b border-slate-100 pb-3">
+            {/* Acceptance Section */}
+            <div className="bg-white rounded-xl border border-slate-200 p-8 pt-6">
+              <h3 className="font-bold text-sm text-slate-800 mb-8 pb-4 border-b border-slate-100 flex items-center gap-2">
                 <User size={16} className="text-slate-400" /> Authorized Signatures
               </h3>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-16">
+                {/* Authorized Side */}
+                <div className="relative">
+                  <p className="font-black text-slate-900 text-[13px] mb-8 uppercase tracking-widest">{comp.companyName || comp.company_name || FALLBACK}</p>
 
-                {/* ── Company Side ── */}
-                <div>
-                  <p className="font-bold text-slate-900 text-sm mb-4 uppercase tracking-wide">
-                    For {comp.companyName || comp.company_name || 'Company'}
-                  </p>
-
-                  {/* Stamp + Signature overlay area — sign overlaps stamp */}
-                  <div className="relative h-28 mb-6">
-                    {/* Stamp — base layer */}
+                  <div className="relative h-28 mb-8">
                     {(comp.stampUrl || comp.stamp_url) && (
-                      <img
-                        src={comp.stampUrl || comp.stamp_url}
-                        alt="Company Stamp"
-                        className="absolute left-0 top-1/2 -translate-y-1/2 h-[100px] w-auto max-w-[110px] object-contain opacity-70"
-                      />
+                      <img src={comp.stampUrl || comp.stamp_url} alt="Stamp"
+                        className="absolute left-0 top-1/2 -translate-y-1/2 h-24 w-auto object-contain opacity-70 mix-blend-multiply" />
                     )}
                     {(comp.signUrl || comp.sign_url) && (
-                      <img
-                        src={comp.signUrl || comp.sign_url}
-                        alt="Signature"
-                        className="absolute left-6 top-1/2 -translate-y-1/2 h-14 w-auto max-w-[150px] object-contain z-10 mix-blend-multiply drop-shadow-md brightness-90 contrast-125"
-                      />
+                      <img src={comp.signUrl || comp.sign_url} alt="Signature"
+                        className="absolute left-4 top-1/2 -translate-y-1/2 h-12 w-auto object-contain z-10" />
                     )}
-                    {/* Fallback if both missing */}
-                    {!(comp.stampUrl || comp.stamp_url) && !(comp.signUrl || comp.sign_url) && (
-                      <div className="absolute bottom-0 left-0">
-                        <div className="border-b-2 border-slate-300 w-48" />
-                      </div>
-                    )}
+
                   </div>
 
-                  <div className="space-y-2 text-xs">
-                    <p className="font-bold text-slate-800 text-xs mb-1">Authorized Signatory</p>
-                    <p className="text-slate-700"><span className="font-bold text-slate-800">Name:</span> {comp.personName || comp.person_name || order.made_by || '—'}</p>
-                    <p className="text-slate-700"><span className="font-bold text-slate-800">Designation:</span> {comp.designation || 'Procurement'}</p>
-                    <p className="text-slate-700 flex items-center gap-2">
-                      <span className="font-bold text-slate-800">Date:</span>
-                      <span className="border-b border-slate-800 min-w-[80px] inline-block text-center font-medium">
-                        {new Date(order.created_at).toLocaleDateString("en-IN")}
-                      </span>
-                    </p>
+                  <p className="text-[12px] font-bold text-slate-400 italic mb-4 tracking-tight">(Authorized Signature)</p>
+                  <div className="space-y-1.5 text-sm text-slate-900">
+                    <p><span className="font-bold text-slate-800">Name:</span> {comp.personName || comp.person_name || order.made_by || FALLBACK} ({comp.designation || "Procurement"})</p>
+                    <p><span className="font-bold text-slate-800 transition-colors">Date:</span> {poDate}</p>
                   </div>
                 </div>
 
-                {/* ── Vendor Side (manual) ── */}
-                <div>
-                  <p className="font-bold text-slate-900 text-sm mb-4 uppercase tracking-wide">
-                    For {vend.vendorName || vend.vendor_name || 'Vendor'}
-                  </p>
-
-                  {/* Blank stamp/sign area */}
-                  <div className="h-24 mb-6 flex items-end">
-                    <div className="border-b-2 border-slate-300 w-48" />
-                  </div>
-
-                  <div className="space-y-2 text-xs">
-                    <p className="font-bold text-slate-800 text-xs mb-1">Authorized Signatory</p>
-                    <p className="text-slate-700"><span className="font-bold text-slate-800">Name:</span> {vend.contactPerson || vend.contact_person || vend.vendorName || vend.vendor_name || '—'}</p>
-                    <p className="text-slate-700"><span className="font-bold text-slate-800">Designation:</span></p>
-                    <p className="text-slate-700 flex items-center gap-2">
-                      <span className="font-bold text-slate-800">Date:</span>
-                      <span className="border-b border-slate-800 min-w-[80px] inline-block"></span>
-                    </p>
+                <div className="flex flex-col items-start md:items-end relative">
+                  <div className="w-full max-w-sm">
+                    <p className="font-black text-slate-900 text-[13px] mb-8 uppercase tracking-widest">{vendorDisplayName}</p>
+                    <div className="h-24 mb-8" />
+                    <p className="text-[12px] font-bold text-slate-400 italic mb-4 tracking-tight">(Agreed & Accepted by)</p>
+                    <div className="space-y-1.5 text-sm text-slate-900">
+                      <p><span className="font-bold text-slate-800">Name:</span> {vendorSignatoryName}</p>
+                      <p><span className="font-bold text-slate-800 transition-colors">Date:</span> </p>
+                    </div>
                   </div>
                 </div>
+
 
               </div>
             </div>
-
           </div>
         </div>
       )}
 
       {activeTab === "Approvals" && (
-        <div className="px-14 py-6 max-w-[1400px]">
-          {/* Approvals Header */}
-          <div className="flex items-center justify-between mb-6 pb-6 border-b border-slate-200">
-            <div>
-              <h2 className="text-xl font-bold text-slate-800 mb-2">
-                {approvalData.request?.workflow?.flow_name || (order.order_type === 'Supply' ? 'Purchase Order Flow' : 'Work Order Flow')}
-              </h2>
-              <div className="flex items-center gap-8 text-sm">
-                <div>
-                  <p className="text-slate-400 text-xs mb-1">Priority</p>
-                  <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-xs font-bold uppercase">Low</span>
-                </div>
-                <div>
-                  <p className="text-slate-400 text-xs mb-1">Date</p>
-                  <p className="font-semibold text-slate-800">{new Date(order.created_at).toLocaleDateString("en-IN")}</p>
-                </div>
-                <div>
-                  <p className="text-slate-400 text-xs mb-1">Requisition by</p>
-                  <p className="font-semibold text-slate-800">{order.request_by || order.made_by || '—'}</p>
-                </div>
-              </div>
-            </div>
-            <div>
-              <button className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-sm flex items-center gap-2 text-sm transition-colors">
-                <FileText size={16} /> Comments
-              </button>
-            </div>
-          </div>
-
-          {/* Approvals Content Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 relative">
-            {/* Subtle grid background */}
-            <div className="absolute inset-0 pointer-events-none opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, black 1px, transparent 0)', backgroundSize: '24px 24px' }}></div>
-
-            {/* Left Column: Timeline */}
-            <div className="lg:col-span-2 relative z-10 pl-4 py-4 space-y-8">
-
-              {approvalData.timeline.length === 0 ? (
-                <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-slate-200">
-                  <p className="text-slate-500 font-medium">No approval workflow configured or attached.</p>
-                  <p className="text-xs text-slate-400 mt-2">Order current status: {order.status}</p>
-                </div>
-              ) : (
-                approvalData.timeline.map((step, idx) => {
-                  const isApproved = step.status === 'Approved';
-                  const isPending = step.status === 'Pending';
-                  const isInProgress = step.status === 'In Progress' || step.status === 'Reverted' || step.status === 'Rejected';
-
-                  const bgGradient = isApproved ? "from-green-600 to-emerald-500" :
-                    isInProgress ? "from-purple-700 to-indigo-600" :
-                      "from-amber-600 to-orange-500";
-
-                  const textAccent1 = isApproved ? "text-green-100" : isInProgress ? "text-indigo-100" : "text-amber-100";
-                  const textAccent2 = isApproved ? "text-green-200" : isInProgress ? "text-indigo-200" : "text-amber-200";
-
-                  return (
-                    <div key={idx} className="relative">
-                      {idx > 0 && <div className="absolute left-8 -top-8 h-8 w-px bg-slate-300"></div>}
-                      {idx < approvalData.timeline.length - 1 && <div className="absolute left-8 top-full h-8 w-px bg-slate-300"></div>}
-                      <div className={`bg-gradient-to-r ${bgGradient} rounded-xl text-white shadow-md overflow-hidden max-w-md`}>
-                        <div className="p-4 flex justify-between items-start">
-                          <div>
-                            <h3 className="font-bold text-lg mb-1">{step.step_number}. {step.action ? step.action : 'Pending Action'}</h3>
-                            <p className={`${textAccent1} text-xs mb-0.5`}><span className="opacity-70">Approver :</span> {step.approver_name}</p>
-                            <p className={`${textAccent2} text-xs`}>{step.approver_designation}</p>
-                          </div>
-                          <span className="px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full text-xs font-bold border border-white/30">
-                            {step.status}
-                          </span>
-                        </div>
-                        <div className="bg-white px-4 py-2 text-xs flex justify-between text-slate-500 font-medium">
-                          <span>
-                            {step.action
-                              ? `${step.action} on ${new Date(step.acted_at).toLocaleDateString("en-IN")}`
-                              : 'Waiting for review...'}
-                          </span>
-                        </div>
-                        {step.comments && (
-                          <div className="bg-slate-50 px-4 py-2 text-xs border-t border-slate-100 text-slate-600 italic">
-                            "{step.comments}"
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })
-              )}
-            </div>
-
-            {/* Right Column: Details Card */}
-            <div className="relative z-10 py-4">
-              <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden sticky top-32">
-                <div className="bg-[#1e3a8a] px-5 py-3 text-white font-bold text-sm">
-                  Review & Approve
-                </div>
-                <div className="p-5 text-sm space-y-4">
-                  <div className="grid grid-cols-[100px_1fr] gap-4">
-                    <span className="text-slate-500 font-medium">Status</span>
-                    <span className="font-bold text-slate-800">{order.status || 'Pending'}</span>
-                  </div>
-                  <div className="grid grid-cols-[100px_1fr] gap-4">
-                    <span className="text-slate-500 font-medium">Vendor</span>
-                    <span className="font-bold text-slate-800 uppercase">{vend.vendorName || vend.vendor_name || '—'}</span>
-                  </div>
-                  <div className="grid grid-cols-[100px_1fr] gap-4">
-                    <span className="text-slate-500 font-medium">Bill To</span>
-                    <span className="font-bold text-slate-800 uppercase">{comp.companyName || comp.company_name || '—'}</span>
-                  </div>
-                  <div className="grid grid-cols-[100px_1fr] gap-4">
-                    <span className="text-slate-500 font-medium">Order Value</span>
-                    <span className="font-bold text-slate-800">₹{(totals.grandTotal || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
-                  </div>
-                  <div className="grid grid-cols-[100px_1fr] gap-4">
-                    <span className="text-slate-500 font-medium">Site</span>
-                    <span className="font-bold text-slate-800 uppercase">{comp.companyName || comp.company_name || '—'}</span>
-                  </div>
-                  <div className="grid grid-cols-[100px_1fr] gap-4">
-                    <span className="text-slate-500 font-medium h-full flex items-start">Stage</span>
-                    <div className="font-bold text-slate-800">
-                      Procurement
-                      <span className="block font-normal text-slate-500 text-xs mt-0.5">(Senior Manager Procurement)</span>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-[100px_1fr] gap-4">
-                    <span className="text-slate-500 font-medium h-full flex items-start">Stage</span>
-                    <div className="font-bold text-slate-800">
-                      {approvalData.request?.status || 'No workflow'}
-                      <span className="block font-normal text-slate-500 text-xs mt-0.5">
-                        {approvalData.timeline?.find(t => t.status === 'In Progress' || t.status === 'Pending' || t.status === 'Reverted')?.approver_designation || ''}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-[100px_1fr] gap-4">
-                    <span className="text-slate-500 font-medium h-full flex items-start">Requestor</span>
-                    <span className="font-bold text-slate-800">{order.request_by || order.made_by || '—'}</span>
+        <div className="px-14 py-3 max-w-[1400px]">
+          <h2 className="text-xl font-bold text-slate-800 mb-6">Approval Workflow</h2>
+          <div className="space-y-8">
+            {approvalData.timeline.length === 0 ? (
+              <div className="p-8 text-center bg-white rounded-xl border border-slate-200 text-slate-400">No approvals found</div>
+            ) : (
+              approvalData.timeline.map((step, idx) => (
+                <div key={idx} className="relative flex gap-4">
+                  <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center shrink-0 z-10">{idx + 1}</div>
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 flex-1">
+                    <h3 className="font-bold text-slate-800">{step.approver_name}</h3>
+                    <p className="text-xs text-slate-500">{step.approver_designation}</p>
+                    <div className="mt-2 text-sm">{step.status}</div>
                   </div>
                 </div>
-
-                {/* Action Panel for Active Approver */}
-                {approvalData.request && (
-                  <div className="p-5 bg-slate-50 border-t border-slate-200 space-y-3">
-                    {['Pending', 'In Progress', 'Reverted'].includes(approvalData.request.status) ? (
-                      <>
-                        <p className="text-xs font-bold uppercase text-slate-500 mb-2">Approver Actions</p>
-                        {(() => {
-                          const currentStep = approvalData.timeline?.find(t => t.status === 'In Progress' || t.status === 'Pending' || t.status === 'Reverted');
-                          const perms = currentStep?.permissions || {};
-
-                          return (
-                            <div className="flex flex-col gap-2">
-                              {perms.approve && (
-                                <button onClick={() => setActionModal({ open: true, type: 'Approved' })} className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-sm shadow-sm transition-colors">
-                                  Approve Request
-                                </button>
-                              )}
-                              {perms.issue && (
-                                <button onClick={() => setActionModal({ open: true, type: 'Issued' })} className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-sm shadow-sm transition-colors">
-                                  Confirm & Issue
-                                </button>
-                              )}
-                              <div className="flex gap-2">
-                                {perms.revert && (
-                                  <button onClick={() => setActionModal({ open: true, type: 'Reverted' })} className="flex-1 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 rounded-lg font-bold text-sm transition-colors">
-                                    Revert
-                                  </button>
-                                )}
-                                {perms.reject && (
-                                  <button onClick={() => setActionModal({ open: true, type: 'Rejected' })} className="flex-1 py-1.5 bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 rounded-lg font-bold text-sm transition-colors">
-                                    Reject
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })()}
-                      </>
-                    ) : (
-                      approvalData.request.status === 'Approved' && (
-                        <>
-                          <p className="text-xs font-bold uppercase text-slate-500 mb-2">Order Management</p>
-                          {approvalData.timeline?.some(t => t.permissions?.recall) && (
-                            <button onClick={() => setActionModal({ open: true, type: 'Recalled' })} className="w-full py-2 bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200 rounded-lg font-bold text-sm transition-colors flex items-center justify-center gap-2">
-                              <ArrowLeft size={16} /> Recall Issued Order
-                            </button>
-                          )}
-                        </>
-                      )
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Action Modal */}
-      {actionModal.open && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
-            <div className="p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-              <h3 className="font-bold text-slate-800">
-                Confirm Action: {actionModal.type === 'Approved' ? 'Approve' : actionModal.type}
-              </h3>
-              <button onClick={() => setActionModal({ open: false, type: "" })} className="text-slate-400 hover:text-rose-500">✖</button>
-            </div>
-            <div className="p-5 space-y-4">
-              <p className="text-sm text-slate-600">
-                {actionModal.type === 'Approved'
-                  ? "Are you sure you want to approve this request? It will move to the next stage."
-                  : `You are about to ${actionModal.type === 'Reverted' ? 'revert' : 'reject'} this order.`}
-              </p>
-              <div>
-                <label className="text-xs font-bold text-slate-500 mb-1 block">Add Comments (Optional)</label>
-                <textarea
-                  value={actionComment}
-                  onChange={e => setActionComment(e.target.value)}
-                  placeholder="Write your review comments here..."
-                  className="w-full border border-slate-300 rounded-xl p-3 text-sm focus:border-indigo-400 outline-none h-24"
-                />
-              </div>
-            </div>
-            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
-              <button disabled={actionLoading} onClick={() => setActionModal({ open: false, type: "" })} className="px-5 py-2 rounded-xl text-slate-600 font-semibold hover:bg-slate-200">Cancel</button>
-              <button disabled={actionLoading} onClick={() => handleApprovalAction(actionModal.type)}
-                className={`px-6 py-2 rounded-xl text-white font-bold shadow-md flex items-center gap-2 ${actionModal.type === 'Approved' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200' :
-                  actionModal.type === 'Reverted' ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-200' :
-                    'bg-rose-600 hover:bg-rose-700 shadow-rose-200'
-                  }`}>
-                {actionLoading ? 'Saving...' : 'Confirm'}
-              </button>
-            </div>
+              ))
+            )}
           </div>
         </div>
       )}
 
       {activeTab === "PDF View" && (
-        <div className="px-4 py-8 bg-slate-200 min-h-[calc(100vh-200px)] flex flex-col items-center custom-scrollbar overflow-y-auto">
-          {/* Action Buttons */}
+        <div className="px-4 py-8 bg-slate-200 min-h-[calc(100vh-200px)] flex flex-col items-center">
           <div className="w-full max-w-[210mm] mb-6 flex justify-end gap-3 print:hidden">
-            <button 
-              onClick={() => window.print()}
-              className="flex items-center gap-2 px-6 py-2.5 bg-slate-700 hover:bg-slate-800 text-white font-bold rounded-xl shadow-lg transition-all active:scale-95 text-xs uppercase tracking-wider"
-            >
+            <button onClick={handlePrint} className="flex items-center gap-2 px-6 py-2.5 bg-slate-700 hover:bg-slate-800 text-white font-bold rounded-xl shadow-lg transition-all text-xs uppercase uppercase transition-all">
               <Printer size={18} /> Print PDF
             </button>
-            <button 
-              disabled={pdfLoading}
-              onClick={handleDownload}
-              className={`flex items-center gap-2 px-6 py-2.5 text-white font-bold rounded-xl shadow-lg transition-all active:scale-95 text-xs uppercase tracking-wider ${pdfLoading ? 'bg-slate-400 cursor-not-allowed' : 'bg-[#1b3e8a] hover:bg-[#16326d]'}`}
-            >
-              {pdfLoading ? (
-                <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              ) : <FileDown size={18} />}
-              {pdfLoading ? "Generating..." : "Download PDF"}
+            <button disabled={pdfLoading} onClick={handleSafeDownload} className={`flex items-center gap-2 px-6 py-2.5 text-white font-bold rounded-xl shadow-lg transition-all text-xs uppercase ${pdfLoading ? 'bg-slate-400' : 'bg-[#1b3e8a] hover:bg-[#16326d]'}`}>
+              {pdfLoading ? "Downloading..." : "Download PDF"}
             </button>
           </div>
-
           <div id="view-order-print-area" className="w-full max-w-[210mm] print:w-full">
-            <OrderPDFTemplate 
-              order={order} 
-              items={items} 
-              comp={comp} 
-              vend={vend} 
-              site={site} 
-              contacts={contacts} 
-            />
+            <OrderPDFTemplate order={order} items={items} comp={comp} vend={vend} site={site} contacts={contacts} />
           </div>
-          
-          <div className="h-20 w-full shrink-0" />
-        </div>
-      )}
-
-      {activeTab !== "Purchase Details" && activeTab !== "Approvals" && activeTab !== "PDF View" && (
-        <div className="p-14 text-center">
-          <h2 className="text-lg font-bold text-slate-400 mb-2">{activeTab}</h2>
-          <p className="text-sm text-slate-300">Feature not yet implemented in this view.</p>
         </div>
       )}
     </div>
@@ -1110,4 +933,3 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
 };
 
 export default ViewOrder;
-

@@ -5,6 +5,19 @@ const supabase = require("../helpers/supabaseHelper");
 
 const upload = multer({ storage: multer.memoryStorage() });
 
+const normalizeNbsp = (value) =>
+  typeof value === "string"
+    ? value.replace(/&nbsp;|&#160;|\u00A0/g, " ")
+    : value;
+
+const sanitizeRichTextDeep = (value) => {
+  if (Array.isArray(value)) return value.map(sanitizeRichTextDeep);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, val]) => [key, sanitizeRichTextDeep(val)]));
+  }
+  return normalizeNbsp(value);
+};
+
 /* ─── Storage upload helper ─── */
 const uploadToStorage = async (bucket, path, buffer, mimetype) => {
   const { error } = await supabase.storage
@@ -119,7 +132,7 @@ router.get("/", async (req, res) => {
       throw error;
     }
     console.log(`Fetched ${data?.length || 0} orders from DB`);
-    res.json({ orders: data || [] });
+    res.json({ orders: sanitizeRichTextDeep(data || []) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -133,6 +146,8 @@ router.post("/", upload.fields([
     const bodyData = JSON.parse(req.body.data || "{}");
     const files    = req.files || {};
     let { mainData, items, nextSerial } = bodyData;
+    mainData = sanitizeRichTextDeep(mainData || {});
+    items = sanitizeRichTextDeep(items || []);
 
     // 1. Handle File Uploads
     let quotationUrl = "";
@@ -207,7 +222,7 @@ router.get("/:id", async (req, res) => {
       .eq("order_id", req.params.id);
     if (itemErr) throw itemErr;
 
-    res.json({ order, items: items || [] });
+    res.json({ order: sanitizeRichTextDeep(order), items: sanitizeRichTextDeep(items || []) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -220,7 +235,9 @@ router.put("/:id", upload.fields([
   try {
     const bodyData = JSON.parse(req.body.data || "{}");
     const files    = req.files || {};
-    const { mainData, items } = bodyData;
+    let { mainData, items } = bodyData;
+    mainData = sanitizeRichTextDeep(mainData || {});
+    items = sanitizeRichTextDeep(items || []);
 
     // Fetch existing urls
     const { data: existing } = await supabase.schema("procurement")
@@ -291,4 +308,3 @@ router.delete("/:id", async (req, res) => {
 });
 
 module.exports = router;
-

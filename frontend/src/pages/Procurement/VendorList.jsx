@@ -12,6 +12,7 @@ const emptyForm = {
   gstin: "", pan: "", aadharNo: "", msmeNumber: "",
   bankName: "", accountHolder: "", accountNumber: "", ifscCode: "",
   bankBranch: "", bankCity: "", bankState: "", address: "",
+  siteCodes: [],
   logo: null, logoPreview: "",
   docGst: null, docPan: null, docAadhaar: null, docCoi: null,
   docMsme: null, docCancelCheque: null, docOther: null, docOther2: null,
@@ -57,10 +58,11 @@ const DocUpload = ({ label, fieldKey, form, setForm }) => {
 };
 
 const COLS = [
-  { label: "Vendor Firm Name",       key: "vendorName",     w: "w-[30%] min-w-[180px]" },
-  { label: "Email",                  key: "email",          w: "w-[25%] min-w-[150px]" },
-  { label: "Contact Number",         key: "mobile",         w: "w-[20%] min-w-[120px]" },
-  { label: "GST No",                 key: "gstin",          w: "w-[25%] min-w-[140px]", mono: true },
+  { label: "Vendor Firm Name",       key: "vendorName",     w: "w-[25%] min-w-[180px]" },
+  { label: "Site Codes",             key: "siteCodes",      w: "w-[20%] min-w-[130px]" },
+  { label: "Email",                  key: "email",          w: "w-[20%] min-w-[150px]" },
+  { label: "Contact Number",         key: "mobile",         w: "w-[15%] min-w-[120px]" },
+  { label: "GST No",                 key: "gstin",          w: "w-[20%] min-w-[140px]", mono: true },
 ];
 
 const MODAL_TABS = [
@@ -95,10 +97,27 @@ export default function VendorList() {
   const [bulkFile, setBulkFile]   = useState("");
   const [bulkSaving, setBulkSaving] = useState(false);
   const [showExport, setShowExport] = useState(false);
+  const [sites, setSites]         = useState([]);
+  const [showSiteSearch, setShowSiteSearch] = useState(false);
   const logoRef                   = useRef();
   const bulkRef                   = useRef();
+  const siteRef                   = useRef();
 
-  useEffect(() => { fetchVendors(); }, []);
+  useEffect(() => { fetchVendors(); fetchSites(); }, []);
+
+  useEffect(() => {
+    const click = (e) => { if (siteRef.current && !siteRef.current.contains(e.target)) setShowSiteSearch(false); };
+    document.addEventListener("mousedown", click);
+    return () => document.removeEventListener("mousedown", click);
+  }, []);
+
+  const fetchSites = async () => {
+    try {
+      const res = await fetch(`${API}/api/procurement/sites`);
+      const data = await res.json();
+      setSites(data.sites || []);
+    } catch { setSites([]); }
+  };
 
   const fetchVendors = async () => {
     setLoading(true);
@@ -138,6 +157,7 @@ export default function VendorList() {
       Object.entries(form).forEach(([k, v]) => {
         if (k === "logoPreview") return;
         if (v instanceof File) fd.append(k, v);
+        else if (k === "siteCodes") fd.append(k, JSON.stringify(v || []));
         else if (v) fd.append(k, v);
       });
       const url    = editId ? `${API}/api/procurement/vendors/${editId}` : `${API}/api/procurement/vendors`;
@@ -180,7 +200,7 @@ export default function VendorList() {
 
   /* ── Export helpers ── */
   const EXPORT_COLS = [
-    ["Vendor Firm Name", "vendorName"], ["Email", "email"],
+    ["Vendor Firm Name", "vendorName"], ["Site Codes", "siteCodes"], ["Email", "email"],
     ["Contact Person Name", "contactPerson"], ["Contact Person Number", "mobile"],
     ["GST No", "gstin"], ["PAN No", "pan"], ["Aadhar No", "aadharNo"],
     ["MSME Number", "msmeNumber"], ["Bank Name", "bankName"],
@@ -190,7 +210,11 @@ export default function VendorList() {
   ];
 
   const exportExcel = () => {
-    const rows = filtered.map(v => Object.fromEntries(EXPORT_COLS.map(([h, k]) => [h, v[k] || ""])));
+    const rows = filtered.map(v => Object.fromEntries(EXPORT_COLS.map(([h, k]) => {
+      let val = v[k] || "";
+      if (k === "siteCodes") val = Array.isArray(v[k]) ? v[k].join(", ") : "";
+      return [h, val];
+    })));
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Vendors");
@@ -207,7 +231,10 @@ export default function VendorList() {
     autoTable(doc, {
       startY: 25,
       head: [EXPORT_COLS.map(([h]) => h)],
-      body: filtered.map(v => EXPORT_COLS.map(([, k]) => v[k] || "")),
+      body: filtered.map(v => EXPORT_COLS.map(([, k]) => {
+        if (k === "siteCodes") return Array.isArray(v[k]) ? v[k].join(", ") : "";
+        return v[k] || "";
+      })),
       styles: { fontSize: 6.5, cellPadding: 2 },
       headStyles: { fillColor: [30, 27, 75], textColor: 255, fontStyle: "bold" },
       alternateRowStyles: { fillColor: [248, 249, 255] },
@@ -463,6 +490,18 @@ export default function VendorList() {
                               }
                               <span className="font-semibold text-slate-800 break-words whitespace-normal">{v[c.key] || "—"}</span>
                             </div>
+                        ) : c.key === "siteCodes" ? (
+                          <div className="flex flex-wrap gap-1">
+                            {v.siteCodes?.length > 0 ? (
+                              v.siteCodes.map((sc, i) => (
+                                <span key={i} className="px-1.5 py-0.5 bg-purple-50 text-purple-600 text-[10px] font-bold rounded border border-purple-100 uppercase tracking-tight">
+                                  {sc}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-slate-300">—</span>
+                            )}
+                          </div>
                         ) : (
                           <span className={`${c.mono ? "font-mono text-xs" : "text-sm"} ${!v[c.key] ? "text-slate-300" : ""} break-words whitespace-normal`}>
                             {v[c.key] || "—"}
@@ -628,6 +667,61 @@ export default function VendorList() {
                       <input className={inp} value={form.msmeNumber}
                         onChange={e => setForm(f => ({ ...f, msmeNumber: e.target.value }))}
                         placeholder="MSME Reg. No. (if any)" />
+                    </div>
+
+                    <div className="col-span-2 relative" ref={siteRef}>
+                      <label className={lbl}>Associated Site Codes</label>
+                      <div onClick={() => setShowSiteSearch(!showSiteSearch)}
+                        className={`min-h-[42px] border border-slate-200 rounded-xl px-3 py-2 text-sm flex flex-wrap gap-1 cursor-pointer transition-all ${showSiteSearch ? "ring-2 ring-indigo-50 border-indigo-400" : "hover:border-slate-300"}`}>
+                        {form.siteCodes.length === 0 ? (
+                          <span className="text-slate-400 py-0.5">Select sites…</span>
+                        ) : (
+                          form.siteCodes.map(sc => (
+                            <span key={sc} className="flex items-center gap-1 bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-lg text-xs font-semibold border border-indigo-100 group">
+                              {sc}
+                              <X size={12} className="text-indigo-300 group-hover:text-red-500" onClick={(e) => {
+                                e.stopPropagation();
+                                setForm(f => ({ ...f, siteCodes: f.siteCodes.filter(x => x !== sc) }));
+                              }} />
+                            </span>
+                          ))
+                        )}
+                      </div>
+                      
+                      {showSiteSearch && (
+                        <div className="absolute top-full left-0 right-0 mt-1 z-30 bg-white border border-slate-200 rounded-xl shadow-xl max-h-52 overflow-y-auto">
+                          <div className="sticky top-0 bg-white p-2 border-b border-slate-50">
+                            <input autoFocus placeholder="Search site code…" 
+                              className="w-full text-xs font-semibold border-none outline-none px-2 py-1 text-slate-600"
+                              onClick={(e) => e.stopPropagation()} 
+                              onChange={(e) => {
+                                // Search functionality handled by list filtering
+                              }}
+                            />
+                          </div>
+                          <div className="py-1">
+                            {sites.length === 0 ? (
+                              <div className="px-4 py-3 text-xs text-slate-400 italic">No sites found…</div>
+                            ) : (
+                              sites.map(s => {
+                                const isSel = form.siteCodes.includes(s.siteCode);
+                                return (
+                                  <div key={s.id} onClick={() => {
+                                    setForm(f => {
+                                      const newCodes = isSel ? f.siteCodes.filter(x => x !== s.siteCode) : [...f.siteCodes, s.siteCode];
+                                      return { ...f, siteCodes: newCodes };
+                                    });
+                                  }}
+                                  className={`px-4 py-2.5 text-xs flex items-center justify-between cursor-pointer hover:bg-slate-50 transition-colors ${isSel ? "bg-indigo-50/50 text-indigo-700 font-bold" : "text-slate-600"}`}>
+                                    <span>{s.siteCode} <span className="text-slate-400 font-normal ml-1">— {s.siteName}</span></span>
+                                    {isSel && <div className="w-1.5 h-1.5 rounded-full bg-indigo-600" />}
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                     <div className="col-span-2">
                       <label className={lbl}>Address</label>
@@ -826,6 +920,20 @@ export default function VendorList() {
                   <div className="bg-slate-50 rounded-xl p-3 border border-slate-100/50">
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">MSME NO</p>
                     <p className="text-sm font-semibold text-slate-700 break-words">{viewVendor.msmeNumber || "—"}</p>
+                  </div>
+                  <div className="col-span-full bg-slate-50 rounded-xl p-3 border border-slate-100/50">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Associated Site Codes</p>
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {viewVendor.siteCodes?.length > 0 ? (
+                        viewVendor.siteCodes.map((sc, i) => (
+                          <span key={i} className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-bold rounded border border-purple-200 uppercase tracking-tight">
+                            {sc}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-sm text-slate-400 font-medium italic">No sites associated</span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

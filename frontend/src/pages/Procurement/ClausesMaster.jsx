@@ -12,6 +12,10 @@ import "react-quill-new/dist/quill.snow.css";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
 const PER_PAGE = 9;
+const normalizeRichTextHtml = (value) =>
+  typeof value === "string"
+    ? value.replace(/&nbsp;|&#160;|\u00A0/g, " ")
+    : value;
 
 /* ── Per-type config ── */
 const TYPE_CONFIG = {
@@ -80,7 +84,7 @@ const getHTML = (points) => {
   if (!points || !points.length) return "";
   
   // Normalize non-breaking spaces from rich text editor to standard spaces so the browser wraps text naturally
-  const normalize = (html) => html.replace(/&nbsp;/ig, ' ').replace(/\u00A0/g, ' ');
+  const normalize = (html) => normalizeRichTextHtml(html);
 
   if (points.length === 1 && (points[0].includes('<') || points[0] === "")) return normalize(points[0]);
   // backwards compatible formatting
@@ -99,6 +103,23 @@ const stripHTMLToText = (html) => {
 };
 
 const joinPoints = (pts) => stripHTMLToText(getHTML(pts)); // for plain-text exports
+
+/* ── Convert Quill v2 HTML to clean renderable HTML ──
+   Quill v2 uses <li data-list="ordered|bullet"><span class="ql-ui"></span>text</li>
+   We strip .ql-ui spans so native <ol>/<ul> CSS renders numbers/bullets correctly */
+const cleanQuillHTML = (html) => {
+  if (!html) return "";
+  // Remove .ql-ui spans (Quill's internal marker hosts)
+  let clean = html.replace(/<span class="ql-ui"><\/span>/gi, "")
+                  .replace(/<span class="ql-ui"\/>/gi, "");
+  // Convert data-list="ordered" li → plain li (inside existing <ol>)
+  // Convert data-list="bullet" li → plain li (inside existing <ul>)
+  clean = clean.replace(/<li data-list="ordered"([^>]*)>/gi, '<li$1>')
+               .replace(/<li data-list="bullet"([^>]*)>/gi, '<li$1>');
+  // Remove any remaining data-list attributes
+  clean = clean.replace(/\s*data-list="[^"]*"/gi, "");
+  return clean;
+};
 
 const QUILL_MODULES = {
   toolbar: [
@@ -244,7 +265,7 @@ export default function ClausesMaster({ type, initialViewId, initialAction, isAc
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({
           type, category: form.category, title: form.title.trim(),
-          points: [form.content], editedBy: editorName,
+          points: [normalizeRichTextHtml(form.content)], editedBy: editorName,
           createdById: userObj.id || "",
           createdByName: userObj.name || "",
         }),
@@ -400,13 +421,7 @@ export default function ClausesMaster({ type, initialViewId, initialAction, isAc
   return (
     <div className="p-6 w-full">
       <style>{`
-        .quill-content ul { list-style-type: disc; padding-left: 1.5rem; margin-bottom: 0.5rem; }
-        .quill-content ol { list-style-type: decimal; padding-left: 1.5rem; margin-bottom: 0.5rem; }
-        .quill-content li { margin-bottom: 0.25rem; }
-        .quill-content p { margin-bottom: 0.25rem; }
-        .quill-content strong { font-weight: bold; }
-        .quill-content em { font-style: italic; }
-        .quill-content u { text-decoration: underline; }
+        /* list styles live in index.css */
         
         /* Fixed Toolbar Logic */
         .ql-toolbar.ql-snow {
@@ -502,7 +517,7 @@ export default function ClausesMaster({ type, initialViewId, initialAction, isAc
                             {/* Version badge */}
                             <div className={`shrink-0 w-9 h-9 rounded-xl flex items-center justify-center font-bold text-sm
                               ${isLatest ? `${numBg} ${numColor}` : "bg-slate-100 text-slate-500"}`}>
-                              V{v.version}
+                              V{idx + 1}
                             </div>
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2 flex-wrap">
@@ -569,7 +584,7 @@ export default function ClausesMaster({ type, initialViewId, initialAction, isAc
                                 Category: <span className="font-semibold text-slate-600">{v.category}</span>
                               </p>
                             )}
-                            <div className="quill-content text-sm text-slate-700 leading-relaxed mt-3" dangerouslySetInnerHTML={{ __html: getHTML(v.points) }} />
+                            <div className="quill-content text-sm text-slate-700 leading-relaxed mt-3" dangerouslySetInnerHTML={{ __html: cleanQuillHTML(getHTML(v.points)) }} />
                           </div>
                         )}
                       </div>
@@ -716,10 +731,10 @@ export default function ClausesMaster({ type, initialViewId, initialAction, isAc
         <div className="py-20 text-center text-slate-300 font-semibold uppercase tracking-widest text-xs">No clauses found</div>
       ) : (
         <>
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-5 items-start">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-5">
             {paginated.map((c) => (
               <div key={c.id}
-                className={`bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden border-l-4 ${borderAccent} ${c.code?.startsWith('TC') ? 'xl:col-span-2' : ''}`}>
+                className={`bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden border-l-4 ${borderAccent} ${c.code?.startsWith('TC') ? 'xl:col-span-2' : ''} flex flex-col h-[220px]`}>
 
                 {/* Card Header */}
                 <div className={`px-5 py-3.5 bg-gradient-to-r ${headerBg} border-b border-slate-100 flex items-center justify-between gap-3`}>
@@ -757,16 +772,16 @@ export default function ClausesMaster({ type, initialViewId, initialAction, isAc
                 </div>
 
                 {/* Card Content */}
-                <div className="px-5 py-4 flex-1">
+                <div className="px-5 py-4 flex-1 min-h-0 overflow-hidden">
                   {c.points.length === 0 ? (
                     <p className="text-xs text-slate-300 italic">No content</p>
                   ) : (
-                    <div className="quill-content text-sm text-slate-700 leading-relaxed max-w-none line-clamp-5" dangerouslySetInnerHTML={{ __html: getHTML(c.points) }} />
+                    <div className="quill-content text-sm text-slate-700 leading-relaxed max-w-none" dangerouslySetInnerHTML={{ __html: cleanQuillHTML(getHTML(c.points)) }} />
                   )}
                 </div>
 
                 {/* Card Footer */}
-                <div className="px-5 py-2.5 border-t border-slate-50 bg-slate-50/50 flex items-center justify-between">
+                <div className="px-5 py-2.5 border-t border-slate-50 bg-slate-50/50 flex items-center justify-between shrink-0">
                   <span className="text-xs text-slate-400">
                     {c.points.length} point{c.points.length !== 1 ? "s" : ""}
                   </span>
@@ -849,7 +864,7 @@ export default function ClausesMaster({ type, initialViewId, initialAction, isAc
 
             {/* Content — scrollable */}
             <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-6">
-              <div className="quill-content text-sm text-slate-700 leading-relaxed max-w-none" dangerouslySetInnerHTML={{ __html: getHTML(viewClause.points) }} />
+              <div className="quill-content text-sm text-slate-700 leading-relaxed max-w-none" dangerouslySetInnerHTML={{ __html: cleanQuillHTML(getHTML(viewClause.points)) }} />
             </div>
 
             {/* Footer */}

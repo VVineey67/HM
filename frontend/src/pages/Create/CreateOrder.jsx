@@ -1,9 +1,22 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { Plus, X, Upload, Save, FileText, ChevronDown, ChevronRight, Check, Building2, MapPin, Truck, Landmark, ShieldCheck, FilePlus, Eye, Loader2, Pencil, Trash2, Download, FileDown, Rocket } from "lucide-react";
+import { Plus, X, Upload, Save, FileText, ChevronDown, ChevronRight, Check, Building2, MapPin, Truck, Landmark, ShieldCheck, FilePlus, Eye, Loader2, Pencil, Trash2, Download, FileDown, Rocket, Printer } from "lucide-react";
 import { FullSiteModal, FullCompanyModal, FullVendorModal, FullViewSiteModal, FullViewCompanyModal, FullViewVendorModal, FullContactModal, FullViewContactModal, FullClauseModal } from "./FullMasterModals";
 import ReactQuill from "react-quill-new";
 import "react-quill-new/dist/quill.snow.css";
 import ViewOrder from "../Procurement/ViewOrder";
+import OrderPDFTemplate from "../Procurement/OrderPDFTemplate";
+import { createPdfBlobFromElement, downloadElementAsPdf, printElement } from "../Procurement/pdfUtils";
+
+const QUILL_MODULES = {
+  toolbar: [
+    ['bold', 'italic', 'underline', 'strike'],
+    [{ color: [] }, { background: [] }],
+    [{ list: 'ordered' }, { list: 'bullet' }],
+    [{ indent: '-1' }, { indent: '+1' }],
+    [{ align: [] }],
+    ['clean']
+  ]
+};
 
 const SCROLLBAR_STYLE = `
   .premium-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -14,8 +27,47 @@ const SCROLLBAR_STYLE = `
 `;
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
+const normalizeRichTextHtml = (value) =>
+  typeof value === "string"
+    ? value.replace(/&nbsp;|&#160;|\u00A0/g, " ")
+    : value;
 
-/* ── helper: INR to Words ── */
+const normalizeRichTextArray = (value) =>
+  Array.isArray(value) ? value.map(normalizeRichTextHtml) : [];
+
+/* Strip Quill v2 internal markers (.ql-ui spans, data-list attrs) so HTML
+   renders as a standard <ol>/<ul> list that native CSS can number/bullet */
+const cleanQuillHTML = (html) => {
+  if (!html) return "";
+  return html
+    .replace(/<span class="ql-ui"><\/span>/gi, "")
+    .replace(/<span class="ql-ui"\/>/gi, "")
+    .replace(/\s*data-list="[^"]*"/gi, "");
+};
+
+/* Get single clean HTML string from a points array (Quill v2 or legacy format) */
+const getCleanHTML = (points) => {
+  if (!points || !points.length) return "";
+  if (points.length === 1 && points[0].includes('<')) return cleanQuillHTML(normalizeRichTextHtml(points[0]));
+  return `<ol>${points.map(p => `<li>${normalizeRichTextHtml(p)}</li>`).join('')}</ol>`;
+};
+
+const stripHtml = (html) => {
+  if (!html) return "";
+  return html
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+};
+
+/* â”€â”€ helper: INR to Words â”€â”€ */
 const amountToWords = (amount) => {
   if (!amount || isNaN(amount) || amount === 0) return "Zero Rupees Only";
   const a = ["", "One ", "Two ", "Three ", "Four ", "Five ", "Six ", "Seven ", "Eight ", "Nine ", "Ten ", "Eleven ", "Twelve ", "Thirteen ", "Fourteen ", "Fifteen ", "Sixteen ", "Seventeen ", "Eighteen ", "Nineteen "];
@@ -49,56 +101,135 @@ const Input = ({ label, value, onChange, placeholder, type = "text", required, m
   </div>
 );
 
-const InlineSelect = ({ value, onChange, options, placeholder, className, disabled, onAdd, addLabel, onEdit }) => {
+const SpecViewModal = ({ html, onClose, onEdit }) => (
+  <div className="fixed inset-0 z-[1100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[80vh] animate-in fade-in zoom-in-95 duration-200">
+      <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-indigo-100 flex items-center justify-center">
+            <Eye size={14} className="text-indigo-600" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-slate-700">Description</h3>
+            <p className="text-[10px] text-slate-400 uppercase tracking-wider font-medium">Full View</p>
+          </div>
+        </div>
+        <button onClick={onClose} className="text-slate-400 hover:text-rose-500 transition-colors bg-white rounded-md p-1 border border-slate-200"><X size={16} /></button>
+      </div>
+      <div className="p-5 overflow-y-auto overflow-x-hidden flex-1 premium-scroll">
+        <div className="quill-content text-sm text-slate-700 leading-relaxed break-words" dangerouslySetInnerHTML={{ __html: html || '' }} />
+      </div>
+      <div className="px-5 py-3 border-t border-slate-100 flex justify-end gap-2 bg-slate-50 shrink-0">
+        <button onClick={onClose} className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-200 transition-colors">Close</button>
+        <button onClick={onEdit} className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors flex items-center gap-1.5 shadow-md shadow-indigo-200">
+          <Pencil size={13} /> Edit
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
+const InlineSelect = ({ value, onChange, options, placeholder, className, disabled, onAdd, addLabel, onEdit, onView, renderHtml, searchable, minDropWidth }) => {
   const [open, setOpen] = useState(false);
   const [pos, setPos]   = useState({ top: 0, left: 0, width: 0 });
+  const [search, setSearch] = useState("");
   const triggerRef = useRef(null);
+  const dropdownRef = useRef(null);
+  const searchRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    if (searchable && searchRef.current) setTimeout(() => searchRef.current?.focus(), 50);
+    const handleScroll = (e) => {
+      if (dropdownRef.current && dropdownRef.current.contains(e.target)) return;
+      setOpen(false);
+    };
+    window.addEventListener("scroll", handleScroll, true);
+    return () => window.removeEventListener("scroll", handleScroll, true);
+  }, [open]);
 
   const openDropdown = () => {
     if (disabled) return;
     const rect = triggerRef.current?.getBoundingClientRect();
     if (rect) {
-      const dropW = Math.max(rect.width, 220);
+      const dropW = Math.max(rect.width, minDropWidth ?? 220);
       const left  = rect.left + dropW > window.innerWidth - 8 ? window.innerWidth - dropW - 8 : rect.left;
       setPos({ top: rect.bottom + 4, left, width: dropW });
     }
+    setSearch("");
     setOpen(true);
   };
 
   const label = options.find(o => o.id === value || o === value);
   const displayLabel = typeof label === "string" ? label : (label?.materialName || label?.itemCode || label?.name || value || "");
 
+  const filteredOptions = searchable && search.trim()
+    ? options.filter(o => {
+        const lbl = typeof o === "string" ? o : (o.materialName || o.itemCode || o.name || "");
+        return lbl.toLowerCase().includes(search.toLowerCase());
+      })
+    : options;
+
   return (
-    <div className="relative w-full" ref={triggerRef}>
+    <div className="relative w-full group/inlsel" ref={triggerRef}>
       <div onClick={openDropdown}
         className={`w-full min-h-[30px] px-2 py-1.5 rounded-md text-xs cursor-pointer border flex items-center gap-1.5 transition-all
           ${disabled ? "opacity-40 cursor-not-allowed bg-slate-50 border-slate-100" : "bg-white border-slate-200 hover:border-indigo-300"}
           ${open ? "border-indigo-400 ring-1 ring-indigo-200" : ""} ${className}`}>
         <span className={`flex-1 text-xs leading-snug whitespace-normal break-words ${!value ? "text-slate-300 italic" : "text-slate-800 font-medium font-inter"}`}>
-          {displayLabel || placeholder}
+          {renderHtml && value ? (
+            <div className="quill-content quill-compact" dangerouslySetInnerHTML={{ __html: normalizeRichTextHtml(displayLabel) }} />
+          ) : (
+            displayLabel || placeholder
+          )}
         </span>
+        {onView && value && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onView(value); }}
+            className="opacity-0 group-hover/inlsel:opacity-100 shrink-0 p-0.5 rounded text-slate-300 hover:text-indigo-500 transition-all"
+            title="View full spec">
+            <Eye size={12} />
+          </button>
+        )}
         <ChevronDown size={10} className={`text-slate-400 shrink-0 transition-transform ${open ? "rotate-180 text-indigo-500" : ""}`} />
       </div>
 
       {open && (
         <>
           <div className="fixed inset-0 z-[999]" onClick={() => setOpen(false)} />
-          <div style={{ position: "fixed", top: pos.top, left: pos.left, width: pos.width, zIndex: 1000 }}
+          <div ref={dropdownRef} style={{ position: "fixed", top: pos.top, left: pos.left, width: pos.width, zIndex: 1000 }}
             className="bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden">
             <div className="px-3 py-1.5 text-[9px] font-bold text-slate-400 uppercase tracking-widest bg-slate-50 border-b border-slate-100">{placeholder}</div>
+            {searchable && (
+              <div className="px-2 py-1.5 border-b border-slate-100">
+                <input
+                  ref={searchRef}
+                  type="text"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  onClick={e => e.stopPropagation()}
+                  placeholder="Search..."
+                  className="w-full text-xs border border-slate-200 rounded-md px-2 py-1 outline-none focus:border-indigo-400 placeholder:text-slate-300"
+                />
+              </div>
+            )}
             <div className="overflow-y-auto max-h-48 premium-scroll">
-              {options.length === 0
+              {filteredOptions.length === 0
                 ? <div className="px-3 py-3 text-center text-xs text-slate-400 italic">No options</div>
-                : options.map((opt, i) => {
+                : filteredOptions.map((opt, i) => {
                     const id  = typeof opt === "string" ? opt : opt.id;
                     const lbl = typeof opt === "string" ? opt : (opt.materialName || opt.itemCode || opt.name || "");
                     const isSel = value === id;
                     return (
                       <div key={i} className={`flex items-center group/opt border-b border-slate-50 last:border-0 ${isSel ? "bg-indigo-50" : "hover:bg-indigo-50"}`}>
-                        <div onClick={(e) => { e.stopPropagation(); onChange({ target: { value: id } }); setOpen(false); }}
+                        <div onClick={(e) => { e.stopPropagation(); onChange({ target: { value: id } }); setOpen(false); setSearch(""); }}
                           className={`flex-1 px-3 py-2 text-xs cursor-pointer flex items-center justify-between transition-colors
                             ${isSel ? "text-indigo-700 font-semibold" : "text-slate-700"}`}>
-                          <span className="whitespace-normal break-words leading-tight">{lbl}</span>
+                          {renderHtml ? (
+                             <div className="whitespace-normal break-words leading-tight quill-content quill-compact" dangerouslySetInnerHTML={{ __html: normalizeRichTextHtml(lbl) }} />
+                          ) : (
+                             <span className="whitespace-normal break-words leading-tight">{lbl}</span>
+                          )}
                           {isSel && <Check size={11} className="text-indigo-600 shrink-0 ml-2" strokeWidth={3}/>}
                         </div>
                         {onEdit && (
@@ -113,9 +244,11 @@ const InlineSelect = ({ value, onChange, options, placeholder, className, disabl
               }
             </div>
             {onAdd && (
-              <div onClick={(e) => { e.stopPropagation(); setOpen(false); onAdd(); }}
-                className="bg-indigo-50/50 hover:bg-indigo-100 text-indigo-600 border-t border-slate-100 font-medium text-[10px] px-3 py-2 text-center cursor-pointer transition-colors flex items-center justify-center gap-1.5 uppercase tracking-wide">
-                <Plus size={12} strokeWidth={3} /> {addLabel || "Create New"}
+              <div onClick={(e) => { e.stopPropagation(); const t = search; setOpen(false); setSearch(""); onAdd(t); }}
+                className={`border-t border-slate-100 font-medium text-[10px] px-3 py-2 text-center transition-colors flex items-center justify-center gap-1.5 uppercase tracking-wide
+                  ${search.trim() ? "bg-indigo-50/50 hover:bg-indigo-100 text-indigo-600 cursor-pointer" : "bg-slate-50 text-slate-300 cursor-default"}`}>
+                <Plus size={12} strokeWidth={3} />
+                {search.trim() ? `${addLabel || "Add"} "${search.trim()}"` : (addLabel || "Add")}
               </div>
             )}
           </div>
@@ -178,7 +311,7 @@ const Select = ({ label, value, onChange, options, valueKey = "id", labelKey = "
               </span>
             ))
           ) : (
-            <span className="text-slate-400 italic">{placeholder || "— Select —"}</span>
+            <span className='text-slate-400 italic'>{placeholder || 'Select...'}</span>
           )}
         </div>
         <ChevronDown size={14} className={`text-slate-400 shrink-0 transition-transform ${open ? "rotate-180" : "ml-2"}`} />
@@ -195,7 +328,7 @@ const Select = ({ label, value, onChange, options, valueKey = "id", labelKey = "
             {!required && !isMulti && (
               <div onClick={() => { onChange({ target: { value: "" } }); setOpen(false); setSearch(""); }}
                    className={`px-3 py-2 text-sm cursor-pointer rounded-lg hover:bg-slate-50 transition-colors ${!value ? "text-slate-400 font-bold" : "text-slate-400"}`}>
-                {placeholder || "— Clear Selection —"}
+                {placeholder || 'Clear Selection'}
               </div>
             )}
             {filteredOptions.length > 0 && <div className="px-3 py-1.5 text-[10px] uppercase font-bold text-slate-400 border-b border-slate-50 mb-1">{filteredOptions.length} results found</div>}
@@ -285,7 +418,7 @@ const MultiDocUpload = ({ label, files, onAdd, onRemove, max = 6, required }) =>
 
 
 function makeSubRow() {
-  return { id: Date.now() + Math.random(), specification: "", scopeOfWork: "", modelNumber: "", make: "", qty: 0, unitRate: 0, discountPct: 0, taxPct: 18, grossAmount: 0, discountAmount: 0, baseAmount: 0, gstAmount: 0, totalAmount: 0, remarks: "" };
+  return { id: Date.now() + Math.random(), specification: "", scopeOfWork: "", modelNumber: "", make: "", hideModel: false, hideBrand: false, qty: 0, unitRate: 0, discountPct: 0, taxPct: 18, grossAmount: 0, discountAmount: 0, baseAmount: 0, gstAmount: 0, totalAmount: 0, remarks: "" };
 }
 function makeGroup() {
   return { id: Date.now(), itemId: "", unit: "", subRows: [makeSubRow()] };
@@ -299,6 +432,8 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
   const [toast, setToast]     = useState(null);
   const [actionModal, setActionModal] = useState({ type: null, data: null });
   const [customInputModal, setCustomInputModal] = useState({ open: false, type: "", groupId: "", subId: "", itemId: "", text: "", originalValue: "" });
+  const [specViewModal, setSpecViewModal] = useState({ open: false, html: '', onEdit: null });
+  const [uomModal, setUomModal] = useState({ open: false, gid: null, name: "", code: "", saving: false });
 
   // Master Data
   const [sites, setSites]         = useState([]);
@@ -307,6 +442,7 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
   const [contacts, setContacts]   = useState([]);
   const [itemsList, setItemsList] = useState([]);
   const [clauses, setClauses]     = useState([]);
+  const [uomList, setUomList]     = useState([]);
 
   // Form State - Header
   const [header, setHeader] = useState({
@@ -387,13 +523,13 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
         priority: order.priority,
         deliveryDate: order.delivery_date ? order.delivery_date.split('T')[0] : "",
         creationDate: order.date_of_creation ? order.date_of_creation.split('T')[0] : "",
-        notes: order.notes || ""
+        notes: normalizeRichTextHtml(order.notes || "")
       });
 
-      setTcPoints(order.terms_conditions || []);
-      setPayPoints(order.payment_terms || []);
-      setGovPoints(order.governing_laws || []);
-      setAnxPoints(order.annexures || []);
+      setTcPoints(normalizeRichTextArray(order.terms_conditions));
+      setPayPoints(normalizeRichTextArray(order.payment_terms));
+      setGovPoints(normalizeRichTextArray(order.governing_laws));
+      setAnxPoints(normalizeRichTextArray(order.annexures));
 
       // 2. Map Settings & Totals
       const t = order.totals || {};
@@ -432,8 +568,10 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
           id: Math.random(),
           specification: it.description,
           scopeOfWork: it.scope_of_work,
-          modelNumber: it.model_number,
-          make: it.make,
+          modelNumber: it.model_number || "",
+          make: it.make || "",
+          hideModel: false,
+          hideBrand: false,
           qty: q,
           unitRate: r,
           discountPct: dPct,
@@ -472,6 +610,8 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
       const co = await coRes.json(); setContacts(co.contacts || []);
       const i = await iRes.json(); setItemsList(i.items || []);
       const cl = await clRes.json(); setClauses(cl.clauses || []);
+      const uomRes = await fetch(`${API}/api/procurement/uom`);
+      const uomData = await uomRes.json(); setUomList(uomData.uoms || []);
     } catch {
       showToast("Failed to load master data.", "error");
     }
@@ -587,7 +727,7 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
       return {
         ...g, itemId: val, unit: found?.unit || "",
         subRows: g.subRows.map(s => ({
-          ...s, specification: "", make: "", scopeOfWork: ""
+          ...s, specification: "", make: "", scopeOfWork: "", modelNumber: "", hideModel: false, hideBrand: false
         }))
       };
     }));
@@ -596,13 +736,53 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
   const handleSubRowChange = (gid, sid, key, val) => {
     setItems(prev => prev.map(g => {
       if (g.id !== gid) return g;
-      return { ...g, subRows: g.subRows.map(s => s.id !== sid ? s : recalcSubRow({ ...s, [key]: val })) };
+      return {
+        ...g, subRows: g.subRows.map(s => {
+          if (s.id !== sid) return s;
+          const updated = { ...s, [key]: val };
+          // When spec changes, clear spec-specific fields so stale values don't carry over
+          if (key === "specification") {
+            updated.modelNumber = "";
+            updated.make = "";
+            updated.hideModel = false;
+            updated.hideBrand = false;
+          }
+          return recalcSubRow(updated);
+        })
+      };
     }));
+  };
+
+  const handleAddCustomUnit = (gid, searchText) => {
+    setUomModal({ open: true, gid, name: searchText || "", code: "", saving: false });
+  };
+
+  const submitUomModal = async () => {
+    const { gid, name, code } = uomModal;
+    if (!name.trim()) return;
+    setUomModal(m => ({ ...m, saving: true }));
+    try {
+      const res = await fetch(`${API}/api/procurement/uom`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uomName: name.trim(), uomCode: code.trim() || name.trim() }),
+      });
+      const data = await res.json();
+      const newUnit = data.uom?.uomCode || data.uom?.uomName || code.trim() || name.trim();
+      const refreshed = await fetch(`${API}/api/procurement/uom`);
+      const refreshedData = await refreshed.json();
+      setUomList(refreshedData.uoms || []);
+      setItems(prev => prev.map(g => g.id !== gid ? g : { ...g, unit: newUnit }));
+      setUomModal({ open: false, gid: null, name: "", code: "", saving: false });
+    } catch {
+      setUomModal(m => ({ ...m, saving: false }));
+    }
   };
 
   const handleSaveCustomInput = async () => {
     const { type, groupId, subId, itemId, text, originalValue } = customInputModal;
-    if (!text.trim()) return setCustomInputModal({ open: false, text: "", type: "", groupId: "", subId: "", itemId: "", originalValue: "" });
+    const isEffectivelyEmpty = !text || !text.trim() || text.trim() === '<p><br></p>' || text.trim() === '<p></p>';
+    if (isEffectivelyEmpty) return setCustomInputModal({ open: false, text: "", type: "", groupId: "", subId: "", itemId: "", originalValue: "" });
     
     // 1. Update subrow immediately
     handleSubRowChange(groupId, subId, type, text.trim());
@@ -650,6 +830,29 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
     } catch(err) {
       console.error(err);
       showToast("Failed to save to master item, but applied to row", "error");
+    }
+  };  const updateSettingsAndClearData = (key, val) => {
+    setSettings(prev => ({ ...prev, [key]: val }));
+    
+    // Clear data if toggling off
+    if (val === false || val === 'none') {
+      setItems(prevItems => prevItems.map(group => ({
+        ...group,
+        subRows: group.subRows.map(row => {
+          const updated = { ...row };
+          if (key === 'model') { updated.modelNumber = ""; updated.hideModel = false; }
+          if (key === 'brand') { updated.make = ""; updated.hideBrand = false; }
+          if (key === 'remarks') updated.remarks = "";
+          if (key === 'discountMode' && val === 'none') {
+            updated.discountPct = 0;
+            updated.discountAmount = 0;
+          }
+          return recalcSubRow(updated);
+        })
+      })));
+
+      if (key === 'discountMode' && val === 'none') setTransactionDiscount(0);
+      if (key === 'frightMode' && val === 'none') setFrightCharges(0);
     }
   };
 
@@ -783,10 +986,10 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
       priority: header.priority || "Medium",
       date_of_creation: header.creationDate || new Date().toISOString(),
       delivery_date: header.deliveryDate || null,
-      terms_conditions: tcPoints,
-      payment_terms: payPoints,
-      governing_laws: govPoints,
-      annexures: anxPoints,
+      terms_conditions: normalizeRichTextArray(tcPoints),
+      payment_terms: normalizeRichTextArray(payPoints),
+      governing_laws: normalizeRichTextArray(govPoints),
+      annexures: normalizeRichTextArray(anxPoints),
       totals: { 
         ...totals, 
         tax_mode: settings.tax ? "line" : "total", 
@@ -796,10 +999,10 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
         showModel: settings.model,
         showRemarks: settings.remarks
       },
-      notes: header.notes || "",
+      notes: normalizeRichTextHtml(header.notes || ""),
       created_by_id: user.id,
       status: submitStatus,
-      snapshot: { ...snapshot, proof_type: files.proof.type, notes: header.notes || "" }
+      snapshot: { ...snapshot, proof_type: files.proof.type, notes: normalizeRichTextHtml(header.notes || "") }
     };
 
     const mappedItems = items.flatMap(g => g.subRows.map(({ id, ...s }) => ({ 
@@ -807,15 +1010,16 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
       unit: g.unit || "",
       description: s.specification || "",
       scope_of_work: s.scopeOfWork || "",
-      model_number: s.modelNumber || "",
-      make: s.make || "",
+      model_number: settings.model && !s.hideModel ? (s.modelNumber || "") : "",
+      make: settings.brand && !s.hideBrand ? (s.make || "") : "",
       qty: Number(s.qty) || 0,
       unit_rate: Number(s.unitRate) || 0,
-      discount_pct: Number(s.discountPct) || 0,
+      discount_pct: settings.discountMode === "line" ? (Number(s.discountPct) || 0) : 0,
       tax_pct: Number(s.taxPct) || 0,
       amount: Number(s.totalAmount) || 0,
-      remarks: s.remarks || ""
+      remarks: settings.remarks ? (s.remarks || "") : ""
     })));
+
 
     setSaving(true);
     try {
@@ -857,28 +1061,31 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
   // Helper to split Clause HTML into separate points
   const splitClauseToPoints = (html) => {
     if (!html) return [];
-    
-    // Create a temporary element to parse HTML
+
     const div = document.createElement("div");
     div.innerHTML = html;
-    
+
+    // Remove Quill v2 marker spans (.ql-ui) — these are empty marker-hosts
+    // that only render content via CSS ::before in the editor context
+    div.querySelectorAll(".ql-ui").forEach(el => el.remove());
+
     // Check if it's a list (ol/ul)
     const listItems = div.querySelectorAll("li");
     if (listItems.length > 0) {
       return Array.from(listItems).map(li => li.innerHTML.trim()).filter(x => x);
     }
-    
+
     // Check if it has paragraphs
     const paragraphs = div.querySelectorAll("p");
     if (paragraphs.length > 0) {
       return Array.from(paragraphs).map(p => p.innerHTML.trim()).filter(x => x && x !== "<br>");
     }
-    
-    // Fallback: Split by double newlines or just return as one array
-    return [html.trim()].filter(x => x);
+
+    // Fallback
+    return [div.innerHTML.trim()].filter(x => x);
   };
 
-  /* ── Clause Component ── */
+  /* â”€â”€ Clause Component â”€â”€ */
   const renderClauses = (title, type, ptsState, setPtsState) => {
     const list = clauses.filter(c => c.type === type);
     return (
@@ -887,23 +1094,20 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
            <div className="w-1.5 h-1.5 rounded-full bg-indigo-400"></div>
            {title}
         </h3>
-        <Select 
+        <Select
           value=""
           onChange={e => {
             const v = e.target.value;
             if(!v) return;
             const c = list.find(x => x.id === v);
             if(c) {
-              // Replace + Split logic: extract separate points from HTML
-              const rawPoints = c.points || [];
-              const allPoints = rawPoints.flatMap(splitClauseToPoints);
-              setPtsState(allPoints);
+              setPtsState([getCleanHTML(c.points)]);
             }
           }}
           options={list} 
           valueKey="id" 
           labelKey="title" 
-          placeholder="— Select from Template —"
+          placeholder="- Select from Template -"
           onAdd={() => setActionModal({ type: 'manageClause', clauseType: type, initialAction: 'add' })}
           addLabel={`Add New`} 
           onView={(c) => setActionModal({ type: 'manageClause', clauseType: type, initialViewId: c.id, initialAction: 'view', setPoints: setPtsState })}
@@ -912,20 +1116,8 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
           <div className="mt-2 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
             <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden relative group/clause">
               {/* Main Clause Content Box */}
-              <div className="divide-y divide-slate-50">
-                {ptsState.map((pt, i) => (
-                  <div key={i} className="flex gap-3 px-5 py-2.5 hover:bg-slate-50/50 transition-colors">
-                    <div className="flex flex-col items-center pt-0.5 shrink-0">
-                      <span className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-[9px] font-black text-slate-500 border border-slate-200/50">
-                        {i + 1}
-                      </span>
-                      {i !== ptsState.length - 1 && <div className="w-[1px] flex-1 bg-slate-100 mt-1.5"></div>}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="quill-content max-w-full break-words prose prose-sm prose-slate leading-normal text-slate-600" dangerouslySetInnerHTML={{ __html: pt }} />
-                    </div>
-                  </div>
-                ))}
+              <div className="px-5 py-3">
+                <div className="quill-content max-w-full break-words prose prose-sm prose-slate leading-normal text-slate-600" dangerouslySetInnerHTML={{ __html: ptsState[0] || "" }} />
               </div>
 
               {/* Action Overlay or Clear Button */}
@@ -951,6 +1143,9 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
               .quill-content ul, .quill-content ol { padding-left: 1rem; margin: 0; }
               .quill-content li { margin-bottom: 0.125rem; }
               .quill-content * { max-width: 100%; word-break: break-word; }
+              .quill-compact p { margin-bottom: 0px !important; text-align: justify !important; }
+              .quill-compact ul, .quill-compact ol { margin: 0 !important; }
+              .quill-content { text-align: justify !important; }
             `}</style>
           </div>
         )}
@@ -1157,7 +1352,7 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Discount</p>
                             <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
                               {[['none','None'],['line','Per Line'],['total','Total']].map(([m,lbl]) => (
-                                <button key={m} onClick={() => setSettings(s => ({ ...s, discountMode: m }))}
+                                <button key={m} onClick={() => updateSettingsAndClearData('discountMode', m)}
                                   className={`flex-1 py-1.5 rounded-md text-[10px] font-bold transition-all ${settings.discountMode===m ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
                                   {lbl}
                                 </button>
@@ -1170,11 +1365,12 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Freight</p>
                             <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
                               {[['none','Off'],['before','+ GST']].map(([m,lbl]) => (
-                                <button key={m} onClick={() => setSettings(s => ({ ...s, frightMode: m }))}
+                                <button key={m} onClick={() => updateSettingsAndClearData('frightMode', m)}
                                   className={`flex-1 py-1.5 rounded-md text-[10px] font-bold transition-all ${settings.frightMode===m ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
                                   {lbl}
                                 </button>
                               ))}
+
                             </div>
                           </div>
                         </div>
@@ -1186,49 +1382,52 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
             </div>
 
             <div className="w-full premium-scroll" style={{overflowX:"auto"}}>
-              <table className="w-full text-xs border-collapse">
+              <table className="text-xs border-collapse" style={{ minWidth: '100%', tableLayout: 'auto' }}>
                 <thead>
                   <tr className="bg-slate-700 border-b border-slate-600">
-                    <th className="px-2 py-2.5 text-[10px] font-bold text-slate-300 uppercase tracking-wider text-center whitespace-nowrap w-9">S.No</th>
-                    <th className="px-2 py-2.5 text-[10px] font-bold text-slate-300 uppercase tracking-wider text-left" style={{ minWidth: '200px' }}>Item Name</th>
-                    <th className="px-2 py-2.5 text-[10px] font-bold text-slate-300 uppercase tracking-wider text-left" style={{ minWidth: '150px' }}>Specification</th>
-                    {["SITC", "ITC"].includes(header.orderType) && <th className="px-2 py-2.5 text-[10px] font-bold text-slate-300 uppercase tracking-wider text-left" style={{ minWidth: '200px' }}>Scope of Work</th>}
+                    <th className="px-2 py-2.5 text-[10px] font-bold text-slate-300 uppercase tracking-wider text-center whitespace-nowrap" style={{ width: '40px' }}>S.No</th>
+                    {["SITC", "ITC"].includes(header.orderType) ? (
+                      <th className="px-2 py-2.5 text-[10px] font-bold text-slate-300 uppercase tracking-wider text-left" style={{ minWidth: '340px' }}>Item Name & Description</th>
+                    ) : (
+                      <>
+                        <th className="px-2 py-2.5 text-[10px] font-bold text-slate-300 uppercase tracking-wider text-left" style={{ minWidth: '200px' }}>Item Name</th>
+                        <th className="px-2 py-2.5 text-[10px] font-bold text-slate-300 uppercase tracking-wider text-left" style={{ minWidth: '180px' }}>Specification</th>
+                      </>
+                    )}
                     {settings.model && (
-                      <th className="px-2 py-2.5 text-[10px] font-bold text-slate-300 uppercase tracking-wider text-left group/th whitespace-nowrap">
-                        <div className="flex items-center gap-1">Model No
-                          <button onClick={() => setSettings(s=>({...s,model:false}))} className="opacity-0 group-hover/th:opacity-100 ml-1 w-4 h-4 rounded bg-rose-500/80 text-white flex items-center justify-center transition-opacity hover:bg-rose-600" title="Remove column"><X size={8} strokeWidth={3}/></button>
+                      <th className="px-2 py-2.5 text-[10px] font-bold text-slate-300 uppercase tracking-wider text-left group/th" style={{ minWidth: '110px' }}>
+                        <div className="flex items-center gap-1 whitespace-nowrap">Model No
+                          <button onClick={() => updateSettingsAndClearData('model', false)} className="opacity-0 group-hover/th:opacity-100 ml-1 w-4 h-4 rounded bg-rose-500/80 text-white flex items-center justify-center transition-opacity hover:bg-rose-600" title="Remove column"><X size={8} strokeWidth={3}/></button>
                         </div>
                       </th>
                     )}
                     {settings.brand && (
-                      <th className="px-2 py-2.5 text-[10px] font-bold text-slate-300 uppercase tracking-wider text-left group/th whitespace-nowrap">
-                        <div className="flex items-center gap-1">Make / Brand
-                          <button onClick={() => setSettings(s=>({...s,brand:false}))} className="opacity-0 group-hover/th:opacity-100 ml-1 w-4 h-4 rounded bg-rose-500/80 text-white flex items-center justify-center transition-opacity hover:bg-rose-600" title="Remove column"><X size={8} strokeWidth={3}/></button>
+                      <th className="px-2 py-2.5 text-[10px] font-bold text-slate-300 uppercase tracking-wider text-left group/th" style={{ minWidth: '120px' }}>
+                        <div className="flex items-center gap-1 whitespace-nowrap">Make / Brand
+                          <button onClick={() => updateSettingsAndClearData('brand', false)} className="opacity-0 group-hover/th:opacity-100 ml-1 w-4 h-4 rounded bg-rose-500/80 text-white flex items-center justify-center transition-opacity hover:bg-rose-600" title="Remove column"><X size={8} strokeWidth={3}/></button>
                         </div>
                       </th>
                     )}
-                    <th className="px-2 py-2.5 text-[10px] font-bold text-slate-300 uppercase tracking-wider text-center whitespace-nowrap w-12">Unit</th>
-                    <th className="px-2 py-2.5 text-[10px] font-bold text-slate-300 uppercase tracking-wider text-center whitespace-nowrap w-14">Qty</th>
-                    <th className="px-2 py-2.5 text-[10px] font-bold text-slate-300 uppercase tracking-wider text-right whitespace-nowrap w-24">Rate (₹)</th>
-                    {settings.discountMode === "line" && <th className="px-2 py-2.5 text-[10px] font-bold text-slate-300 uppercase tracking-wider text-center whitespace-nowrap w-12">Disc%</th>}
+                    <th className="px-2 py-2.5 text-[10px] font-bold text-slate-300 uppercase tracking-wider text-center whitespace-nowrap" style={{ width: '60px' }}>Unit</th>
+                    <th className="px-2 py-2.5 text-[10px] font-bold text-slate-300 uppercase tracking-wider text-center whitespace-nowrap" style={{ width: '90px' }}>Qty</th>
+                    <th className="px-2 py-2.5 text-[10px] font-bold text-slate-300 uppercase tracking-wider text-right whitespace-nowrap" style={{ width: '120px' }}>Rate (₹)</th>
+                    {settings.discountMode === "line" && <th className="px-2 py-2.5 text-[10px] font-bold text-slate-300 uppercase tracking-wider text-center whitespace-nowrap" style={{ width: '70px' }}>Disc%</th>}
                     {settings.tax && (
-                      <th className="px-2 py-2.5 text-[10px] font-bold text-slate-300 uppercase tracking-wider text-center whitespace-nowrap w-14 group/th">
-                        <div className="flex items-center justify-center gap-1 ml-4">GST%
-                          <button onClick={() => setSettings(s=>({...s,tax:false}))} className="opacity-0 group-hover/th:opacity-100 w-4 h-4 rounded bg-rose-500/80 text-white flex items-center justify-center transition-opacity hover:bg-rose-600" title="Move to summary"><X size={8} strokeWidth={3}/></button>
+                      <th className="px-2 py-2.5 text-[10px] font-bold text-slate-300 uppercase tracking-wider text-center whitespace-nowrap group/th" style={{ width: '80px' }}>
+                        <div className="flex items-center justify-center gap-1">GST%
+                          <button onClick={() => updateSettingsAndClearData('tax', false)} className="opacity-0 group-hover/th:opacity-100 w-4 h-4 rounded bg-rose-500/80 text-white flex items-center justify-center transition-opacity hover:bg-rose-600" title="Move to summary"><X size={8} strokeWidth={3}/></button>
                         </div>
                       </th>
                     )}
-                    {settings.tax && (
-                      <th className="px-2 py-2.5 text-[10px] font-bold text-indigo-300 uppercase tracking-wider text-right whitespace-nowrap w-24">Amount (₹)</th>
-                    )}
+                    <th className="px-2 py-2.5 text-[10px] font-bold text-indigo-300 uppercase tracking-wider text-right whitespace-nowrap" style={{ width: '140px' }}>Amount (₹)</th>
                     {settings.remarks && (
-                      <th className="px-2 py-2.5 text-[10px] font-bold text-slate-300 uppercase tracking-wider text-left group/th">
-                        <div className="flex items-center gap-1">Remarks
-                          <button onClick={() => setSettings(s=>({...s,remarks:false}))} className="opacity-0 group-hover/th:opacity-100 ml-1 w-4 h-4 rounded bg-rose-500/80 text-white flex items-center justify-center transition-opacity hover:bg-rose-600" title="Remove column"><X size={8} strokeWidth={3}/></button>
+                      <th className="px-2 py-2.5 text-[10px] font-bold text-slate-300 uppercase tracking-wider text-left group/th" style={{ minWidth: '140px' }}>
+                        <div className="flex items-center gap-1 whitespace-nowrap">Remarks
+                          <button onClick={() => updateSettingsAndClearData('remarks', false)} className="opacity-0 group-hover/th:opacity-100 ml-1 w-4 h-4 rounded bg-rose-500/80 text-white flex items-center justify-center transition-opacity hover:bg-rose-600" title="Remove column"><X size={8} strokeWidth={3}/></button>
                         </div>
                       </th>
                     )}
-                    <th className="sticky right-0 bg-slate-700"></th>
+                    <th className="sticky right-0 bg-slate-700" style={{ width: '32px' }}></th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-slate-100">
@@ -1248,97 +1447,163 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
                             </td>
                           )}
 
-                          {/* Item — rowspan */}
-                          {isFirst && (
-                            <td rowSpan={group.subRows.length} className="px-2 py-2 align-middle border-r border-slate-100">
-                              <div className="border-l-2 border-indigo-300 pl-1.5">
-                                <InlineSelect value={group.itemId} onChange={e => handleGroupChange(group.id, e.target.value)}
-                                  options={itemsList.filter(i => i.itemType === header.orderType)} placeholder="Select Item..." />
-                                {group.itemId && (
-                                  <button onClick={() => addSubRow(group.id)}
-                                    className="mt-1 flex items-center gap-0.5 text-[9px] font-bold text-indigo-400 hover:text-indigo-600 px-1 rounded hover:bg-indigo-50 transition-colors">
-                                    <Plus size={9} strokeWidth={3}/> Add Spec
-                                  </button>
+                          {["SITC", "ITC"].includes(header.orderType) ? (
+                            <td className="px-3 py-2 border-r border-slate-100 min-w-[320px]">
+                              {isFirst && (
+                                <div className="mb-3 pb-3 border-b border-slate-100/50">
+                                  <p className="text-[9px] font-black text-indigo-500 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
+                                    <span className="w-1 h-3 bg-indigo-500 rounded-full"></span>
+                                    Item / Service Name
+                                  </p>
+                                  <InlineSelect value={group.itemId} onChange={e => handleGroupChange(group.id, e.target.value)}
+                                    options={itemsList.filter(i => header.orderType === "ITC" ? ["SITC","ITC"].includes(i.itemType) : i.itemType === header.orderType)} placeholder="Select Item..." />
+                                </div>
+                              )}
+                              <div className={!isFirst ? "pl-4 border-l-2 border-slate-100 mt-1" : "mt-1"}>
+                                {isFirst ? (
+                                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Technical Description</p>
+                                ) : (
+                                  <p className="text-[8px] font-bold text-slate-300 uppercase tracking-tighter mb-1">Point {sIdx + 1}</p>
                                 )}
+                                <div className="text-justify">
+                                  <InlineSelect value={sub.specification} onChange={e => handleSubRowChange(group.id, sub.id, "specification", e.target.value)}
+                                    options={itemData?.specifications || []} placeholder="— Spec —" disabled={!group.itemId} renderHtml={true}
+                                    onAdd={() => setCustomInputModal({ open: true, type: "specification", groupId: group.id, subId: sub.id, itemId: group.itemId, text: "", originalValue: "" })}
+                                    onEdit={(val) => setCustomInputModal({ open: true, type: "specification", groupId: group.id, subId: sub.id, itemId: group.itemId, text: val, originalValue: val })}
+                                    onView={(val) => setSpecViewModal({ open: true, html: val, onEdit: () => { setSpecViewModal({ open: false, html: '', onEdit: null }); setCustomInputModal({ open: true, type: 'specification', groupId: group.id, subId: sub.id, itemId: group.itemId, text: val, originalValue: val }); } })}
+                                    addLabel="+ Type Custom Spec" />
+                                </div>
                               </div>
+                              {isFirst && group.itemId && (
+                                <button onClick={() => addSubRow(group.id)}
+                                  className="mt-3 flex items-center gap-1.5 text-[9px] font-bold text-indigo-500 hover:text-indigo-700 px-2.5 py-1.5 rounded-xl bg-indigo-50 overflow-hidden relative group/btn transition-all border border-indigo-100/50">
+                                  <Plus size={10} strokeWidth={3}/> Add Description Point
+                                  <div className="absolute inset-0 bg-indigo-600 opacity-0 group-hover/btn:opacity-10 transition-opacity"></div>
+                                </button>
+                              )}
                             </td>
-                          )}
+                          ) : (
+                            <>
+                              {/* Item — rowspan (Standard PO) */}
+                              {isFirst && (
+                                <td rowSpan={group.subRows.length} className="px-2 py-2 align-middle border-r border-slate-100">
+                                  <div className="border-l-2 border-indigo-300 pl-1.5">
+                                    <InlineSelect value={group.itemId} onChange={e => handleGroupChange(group.id, e.target.value)}
+                                      options={itemsList.filter(i => header.orderType === "ITC" ? ["SITC","ITC"].includes(i.itemType) : i.itemType === header.orderType)} placeholder="Select Item..." />
+                                    {group.itemId && (
+                                      <button onClick={() => addSubRow(group.id)}
+                                        className="mt-1 flex items-center gap-0.5 text-[9px] font-bold text-indigo-400 hover:text-indigo-600 px-1 rounded hover:bg-indigo-50 transition-colors">
+                                        <Plus size={9} strokeWidth={3}/> Add Spec
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              )}
 
-                          {/* Spec */}
-                          <td className="px-2 py-2">
-                            <InlineSelect value={sub.specification} onChange={e => handleSubRowChange(group.id, sub.id, "specification", e.target.value)}
-                              options={itemData?.specifications || []} placeholder="— Spec —" disabled={!group.itemId} 
-                              onAdd={() => setCustomInputModal({ open: true, type: "specification", groupId: group.id, subId: sub.id, itemId: group.itemId, text: sub.specification || "", originalValue: "" })} 
-                              onEdit={(val) => setCustomInputModal({ open: true, type: "specification", groupId: group.id, subId: sub.id, itemId: group.itemId, text: val, originalValue: val })}
-                              addLabel="+ Type Custom Spec" />
-                          </td>
-
-                          {/* Scope of Work — SITC / ITC only */}
-                          {["SITC", "ITC"].includes(header.orderType) && (
-                            <td className="px-2 py-2">
-                              <InlineSelect value={sub.scopeOfWork} onChange={e => handleSubRowChange(group.id, sub.id, "scopeOfWork", e.target.value)}
-                                options={itemData?.scopeOfWork || []} placeholder="— Scope —" disabled={!group.itemId}
-                                onAdd={() => setCustomInputModal({ open: true, type: "scopeOfWork", groupId: group.id, subId: sub.id, itemId: group.itemId, text: sub.scopeOfWork || "", originalValue: "" })} 
-                                onEdit={(val) => setCustomInputModal({ open: true, type: "scopeOfWork", groupId: group.id, subId: sub.id, itemId: group.itemId, text: val, originalValue: val })}
-                                addLabel="+ Type Custom Scope" />
-                            </td>
+                              {/* Spec (Standard PO) */}
+                              <td className="px-2 py-2">
+                                <InlineSelect value={sub.specification} onChange={e => handleSubRowChange(group.id, sub.id, "specification", e.target.value)}
+                                  options={itemData?.specifications || []} placeholder="— Spec —" disabled={!group.itemId} renderHtml={true}
+                                  onAdd={() => setCustomInputModal({ open: true, type: "specification", groupId: group.id, subId: sub.id, itemId: group.itemId, text: "", originalValue: "" })}
+                                  onEdit={(val) => setCustomInputModal({ open: true, type: "specification", groupId: group.id, subId: sub.id, itemId: group.itemId, text: val, originalValue: val })}
+                                  onView={(val) => setSpecViewModal({ open: true, html: val, onEdit: () => { setSpecViewModal({ open: false, html: '', onEdit: null }); setCustomInputModal({ open: true, type: 'specification', groupId: group.id, subId: sub.id, itemId: group.itemId, text: val, originalValue: val }); } })}
+                                  addLabel="+ Type Custom Spec" />
+                              </td>
+                            </>
                           )}
 
                           {/* Model */}
                           {settings.model && (
-                            <td className="px-2 py-2">
-                              <input type="text" value={sub.modelNumber} onChange={e => handleSubRowChange(group.id, sub.id, "modelNumber", e.target.value)}
-                                className="w-full text-xs text-slate-700 bg-white border border-slate-200 rounded-md px-2 py-1.5 outline-none focus:border-indigo-400 placeholder:text-slate-300 placeholder:italic" placeholder="Model #" />
+                            <td className="px-2 py-2" style={{ minWidth: '110px' }}>
+                              {sub.hideModel ? (
+                                <button onClick={() => handleSubRowChange(group.id, sub.id, "hideModel", false)}
+                                  className="w-full text-[10px] text-slate-300 border border-dashed border-slate-200 rounded-md px-2 py-1.5 text-center hover:border-indigo-300 hover:text-indigo-400 transition-all">
+                                  + Add
+                                </button>
+                              ) : (
+                                <div className="flex items-center gap-1">
+                                  <input type="text" value={sub.modelNumber} onChange={e => handleSubRowChange(group.id, sub.id, "modelNumber", e.target.value)}
+                                    className="flex-1 min-w-0 text-xs text-slate-700 bg-white border border-slate-200 rounded-md px-2 py-1.5 outline-none focus:border-indigo-400 placeholder:text-slate-300 placeholder:italic" placeholder="Model #" />
+                                  <button onClick={() => { handleSubRowChange(group.id, sub.id, "modelNumber", ""); handleSubRowChange(group.id, sub.id, "hideModel", true); }}
+                                    className="shrink-0 text-slate-300 hover:text-red-400 transition-colors p-0.5 rounded">
+                                    <X size={11} strokeWidth={2.5} />
+                                  </button>
+                                </div>
+                              )}
                             </td>
                           )}
 
                           {/* Brand */}
                           {settings.brand && (
-                            <td className="px-2 py-2">
-                              <InlineSelect value={sub.make} onChange={e => handleSubRowChange(group.id, sub.id, "make", e.target.value)}
-                                options={itemData?.brands || []} placeholder="Brand" disabled={!group.itemId}
-                                onAdd={() => setCustomInputModal({ open: true, type: "make", groupId: group.id, subId: sub.id, itemId: group.itemId, text: sub.make || "", originalValue: "" })} 
-                                onEdit={(val) => setCustomInputModal({ open: true, type: "make", groupId: group.id, subId: sub.id, itemId: group.itemId, text: val, originalValue: val })}
-                                addLabel="+ Add New Brand" />
+                            <td className="px-1 py-2" style={{ minWidth: '120px' }}>
+                              {sub.hideBrand ? (
+                                <button onClick={() => handleSubRowChange(group.id, sub.id, "hideBrand", false)}
+                                  className="w-full text-[10px] text-slate-300 border border-dashed border-slate-200 rounded-md px-2 py-1.5 text-center hover:border-indigo-300 hover:text-indigo-400 transition-all">
+                                  + Add
+                                </button>
+                              ) : (
+                                <div className="flex items-center gap-1">
+                                  <div className="flex-1 min-w-0">
+                                    <InlineSelect value={sub.make} onChange={e => handleSubRowChange(group.id, sub.id, "make", e.target.value)}
+                                      options={itemData?.brands || []} placeholder="Brand" disabled={!group.itemId}
+                                      onAdd={() => setCustomInputModal({ open: true, type: "make", groupId: group.id, subId: sub.id, itemId: group.itemId, text: sub.make || "", originalValue: "" })}
+                                      onEdit={(val) => setCustomInputModal({ open: true, type: "make", groupId: group.id, subId: sub.id, itemId: group.itemId, text: val, originalValue: val })}
+                                      addLabel="+ Add New Brand" />
+                                  </div>
+                                  <button onClick={() => { handleSubRowChange(group.id, sub.id, "make", ""); handleSubRowChange(group.id, sub.id, "hideBrand", true); }}
+                                    className="shrink-0 text-slate-300 hover:text-red-400 transition-colors p-0.5 rounded">
+                                    <X size={11} strokeWidth={2.5} />
+                                  </button>
+                                </div>
+                              )}
                             </td>
                           )}
 
-                          {/* Unit — rowspan */}
+                          {/* Unit — rowspan, editable from UOM list */}
                           {isFirst && (
-                            <td rowSpan={group.subRows.length} className="px-1 py-2 text-center align-middle bg-slate-50 border-x border-slate-100">
-                              <span className="text-[11px] font-semibold text-slate-500">{group.unit || "—"}</span>
+                            <td rowSpan={group.subRows.length} className="py-2 px-1 text-center align-middle bg-slate-50 border-x border-slate-100 whitespace-nowrap" style={{ width: '80px' }}>
+                              <InlineSelect
+                                value={group.unit || ""}
+                                onChange={e => setItems(prev => prev.map(g => g.id !== group.id ? g : { ...g, unit: e.target.value }))}
+                                options={uomList.map(u => u.uomCode || u.uomName)}
+                                placeholder="Unit"
+                                searchable={true}
+                                minDropWidth={160}
+                                onAdd={(searchText) => handleAddCustomUnit(group.id, searchText)}
+                                addLabel="+ Add"
+                              />
                             </td>
                           )}
 
                           {/* Qty */}
-                          <td className="px-1 py-2">
+                          <td className="px-1 py-2 whitespace-nowrap" style={{ width: '90px' }}>
                             <input type="number" value={sub.qty || ""} onChange={e => handleSubRowChange(group.id, sub.id, "qty", Number(e.target.value))}
-                              className="w-full text-center text-xs font-bold text-slate-800 bg-white border border-slate-200 rounded-md px-1 py-1.5 outline-none focus:border-indigo-400" placeholder="0" />
+                              className="text-center text-xs font-bold text-slate-800 bg-white border border-slate-200 rounded-md px-1 py-1.5 outline-none focus:border-indigo-400" style={{ width: '78px' }} placeholder="0" />
                           </td>
 
                           {/* Rate */}
-                          <td className="px-1 py-2">
+                          <td className="px-1 py-2 whitespace-nowrap" style={{ width: '120px' }}>
                             <div className="relative">
                               <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] text-slate-300">₹</span>
                               <input type="number" value={sub.unitRate || ""} onChange={e => handleSubRowChange(group.id, sub.id, "unitRate", Number(e.target.value))}
-                                className="w-full text-right text-xs font-bold text-slate-800 bg-white border border-slate-200 rounded-md pl-4 pr-1 py-1.5 outline-none focus:border-indigo-400" placeholder="0.00" />
+                                className="text-right text-xs font-bold text-slate-800 bg-white border border-slate-200 rounded-md pl-4 pr-1 py-1.5 outline-none focus:border-indigo-400" style={{ width: '108px' }} placeholder="0.00" />
                             </div>
                           </td>
 
                           {/* Disc */}
                           {settings.discountMode === "line" && (
-                            <td className="px-1 py-2">
+                            <td className="px-1 py-2 whitespace-nowrap" style={{ width: '70px' }}>
                               <input type="number" value={sub.discountPct || ""} onChange={e => handleSubRowChange(group.id, sub.id, "discountPct", Number(e.target.value))}
-                                className="w-full text-center text-xs font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-md py-1.5 outline-none focus:border-indigo-400" placeholder="%" />
+                                className="text-center text-xs font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-md py-1.5 outline-none focus:border-indigo-400" style={{ width: '58px' }} placeholder="%" />
                             </td>
                           )}
 
                           {/* GST % */}
                           {settings.tax && (
-                            <td className="px-1 py-2">
+                            <td className="px-1 py-2 whitespace-nowrap" style={{ width: '80px' }}>
                               <div className="relative">
                                 <select value={sub.taxPct} onChange={e => handleSubRowChange(group.id, sub.id, "taxPct", Number(e.target.value))}
-                                  className="w-full appearance-none text-center text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-md px-1 py-1.5 outline-none focus:border-indigo-400 cursor-pointer">
+                                  className="appearance-none text-center text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-md px-1 py-1.5 outline-none focus:border-indigo-400 cursor-pointer" style={{ width: '68px' }}>
                                   <option value="0">0%</option><option value="5">5%</option><option value="12">12%</option><option value="18">18%</option><option value="28">28%</option>
                                 </select>
                                 <ChevronDown size={9} className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none"/>
@@ -1347,7 +1612,7 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
                           )}
 
                           {/* Amount (Total) */}
-                          <td className="px-2 py-2 text-right text-xs font-bold text-indigo-600 bg-indigo-50/50 font-mono border-l border-indigo-100">
+                          <td className="px-2 py-2 text-right text-xs font-bold text-indigo-600 bg-indigo-50/50 font-mono border-l border-indigo-100 whitespace-nowrap" style={{ width: '140px' }}>
                             {(() => {
                                const p = totals.processedItems.find(x => x.id === sub.id);
                                return (p?.total || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 });
@@ -1356,7 +1621,7 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
 
                           {/* Remarks */}
                           {settings.remarks && (
-                            <td className="px-2 py-2">
+                            <td className="px-2 py-2" style={{ minWidth: '140px' }}>
                               <input type="text" value={sub.remarks} onChange={e => handleSubRowChange(group.id, sub.id, "remarks", e.target.value)}
                                 className="w-full text-xs text-slate-500 bg-slate-50 border border-transparent rounded-md px-2 py-1.5 focus:bg-white focus:border-indigo-300 outline-none italic" placeholder="Remarks..." />
                             </td>
@@ -1477,7 +1742,7 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
             </div>
           </div>
 
-          {/* ── ORDER NOTES (RICH TEXT) ── */}
+          {/* â”€â”€ ORDER NOTES (RICH TEXT) â”€â”€ */}
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden mb-6">
             <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
               <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center">
@@ -1584,13 +1849,66 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
       {actionModal.type === "editContact" && <FullContactModal companies={companies} editData={actionModal.data} onClose={() => setActionModal({ type: null })} onSuccess={fetchMasterData} />}
       {actionModal.type === "viewContact" && <FullViewContactModal contact={actionModal.data} onClose={() => setActionModal({ type: null })} onEdit={(d) => setActionModal({ type: "editContact", data: d })} />}
     
-      {/* ── CUSTOM INPUT MODAL ── */}
+      {/* SPEC VIEW MODAL */}
+      {specViewModal.open && (
+        <SpecViewModal
+          html={specViewModal.html}
+          onClose={() => setSpecViewModal({ open: false, html: '', onEdit: null })}
+          onEdit={specViewModal.onEdit}
+        />
+      )}
+
+      {/* UOM MODAL */}
+      {uomModal.open && (
+        <div className="fixed inset-0 z-[1100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center">
+              <h3 className="font-bold text-slate-800 text-sm">Add UOM</h3>
+              <button onClick={() => setUomModal({ open: false, gid: null, name: "", code: "", saving: false })} className="text-slate-400 hover:text-slate-600 transition-colors"><X size={16} /></button>
+            </div>
+            <div className="px-5 py-5 space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">UOM Name <span className="text-rose-400">*</span></label>
+                <input
+                  autoFocus
+                  type="text"
+                  value={uomModal.name}
+                  onChange={e => setUomModal(m => ({ ...m, name: e.target.value }))}
+                  onKeyDown={e => e.key === "Enter" && submitUomModal()}
+                  placeholder="e.g. Kilogram"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-100 placeholder:text-slate-300"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">UOM Code</label>
+                <input
+                  type="text"
+                  value={uomModal.code}
+                  onChange={e => setUomModal(m => ({ ...m, code: e.target.value }))}
+                  onKeyDown={e => e.key === "Enter" && submitUomModal()}
+                  placeholder="e.g. kg"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-100 placeholder:text-slate-300"
+                />
+              </div>
+            </div>
+            <div className="px-5 py-4 border-t border-slate-100 flex justify-end gap-3">
+              <button onClick={() => setUomModal({ open: false, gid: null, name: "", code: "", saving: false })} className="px-4 py-2 text-sm text-slate-500 hover:text-slate-700 transition-colors">Cancel</button>
+              <button onClick={submitUomModal} disabled={!uomModal.name.trim() || uomModal.saving}
+                className="px-5 py-2 bg-slate-900 hover:bg-slate-700 disabled:opacity-40 text-white text-sm font-bold rounded-xl transition-colors flex items-center gap-2">
+                {uomModal.saving && <Loader2 size={13} className="animate-spin" />} Add UOM
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CUSTOM INPUT MODAL */}
       {customInputModal.open && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
               <h3 className="text-sm font-bold text-slate-700">
-                {customInputModal.originalValue ? "Edit" : "Add Custom"} {customInputModal.type === "scopeOfWork" ? "Scope of Work" : (customInputModal.type === "specification" ? "Specification" : "Make / Brand")}
+                {customInputModal.originalValue ? "Edit" : "Add Custom"} {customInputModal.type === "scopeOfWork" ? "Scope of Work" : (customInputModal.type === "specification" ? "Description" : "Make / Brand")}
               </h3>
               <button onClick={() => setCustomInputModal({ open: false })} className="text-slate-400 hover:text-rose-500 transition-colors bg-white rounded-md p-1 border border-slate-200"><X size={16} /></button>
             </div>
@@ -1598,9 +1916,22 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
               <label className="block text-[11px] font-bold text-slate-500 mb-2 uppercase tracking-wide">
                 {customInputModal.originalValue ? "Update Value" : "Enter New Value"}
               </label>
-              <textarea autoFocus value={customInputModal.text} onChange={e => setCustomInputModal(prev => ({...prev, text: e.target.value}))} 
-                className="w-full text-sm border border-slate-300 rounded-xl p-3 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 transition-all min-h-[120px]" 
-                placeholder="Type here..." />
+              {customInputModal.type === "specification" ? (
+                <div className="border border-slate-300 rounded-xl overflow-hidden focus-within:border-indigo-400 focus-within:ring-4 focus-within:ring-indigo-100 transition-all">
+                  <ReactQuill
+                    theme="snow"
+                    value={customInputModal.text || ""}
+                    onChange={val => setCustomInputModal(prev => ({ ...prev, text: val }))}
+                    modules={QUILL_MODULES}
+                    placeholder="Type description here..."
+                    style={{ minHeight: '180px' }}
+                  />
+                </div>
+              ) : (
+                <textarea autoFocus value={customInputModal.text} onChange={e => setCustomInputModal(prev => ({...prev, text: e.target.value}))}
+                  className="w-full text-sm border border-slate-300 rounded-xl p-3 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 transition-all min-h-[120px]"
+                  placeholder="Type here..." />
+              )}
               <p className="text-[10px] text-slate-400 mt-2 font-medium">
                 This will be {customInputModal.originalValue ? "updated" : "added"} in this row AND saved permanently to the item master.
               </p>
@@ -1622,11 +1953,11 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
           initialAction={actionModal.initialAction}
           initialViewId={actionModal.initialViewId}
           onClose={() => setActionModal({ type: null })} 
-          onSuccess={(selectedPoints) => { 
-            fetchMasterData(); 
+          onSuccess={(selectedPoints) => {
+            fetchMasterData();
             if (selectedPoints) {
-              const allPoints = selectedPoints.flatMap(splitClauseToPoints);
-              if (actionModal.setPoints) actionModal.setPoints(allPoints);
+              const html = getCleanHTML(selectedPoints);
+              if (actionModal.setPoints) actionModal.setPoints([html]);
             }
             setActionModal({ type: null }); 
           }} 
@@ -1643,6 +1974,14 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState(null);
   const [activeTab, setActiveTab] = useState("All");
+  const [pdfPreview, setPdfPreview] = useState(null);
+  const [pdfPreviewLoading, setPdfPreviewLoading] = useState(false);
+  const [pdfDownloading, setPdfDownloading] = useState(false);
+  const [preparedPdfUrl, setPreparedPdfUrl] = useState("");
+  const [preparedPdfName, setPreparedPdfName] = useState("");
+  const [pdfPreparing, setPdfPreparing] = useState(false);
+  const pdfPreviewRef = useRef(null);
+  const preparedPdfPromiseRef = useRef(null);
 
   const TABS = ["All", "Draft", "Review", "Pending Issue", "Issued", "Rejected", "Revert", "Recall"];
 
@@ -1702,7 +2041,7 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
   const showToast = (msg, type = "success") => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
 
   // Convert image URL to Base64 to embed in PDF
-  const getBase64Image = async (url) => {
+  const _getBase64Image = async (url) => {
     if (!url) return null;
     try {
       const response = await fetch(url);
@@ -1715,7 +2054,7 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
     } catch { return null; }
   };
 
-  const exportPDF = async (orderId) => {
+  const _exportPDF = async (orderId) => {
     try {
       showToast("Generating PDF... Please wait.");
       
@@ -1736,12 +2075,12 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
       const sVend = snap.vendor || order.vendors || {};
       const sSite = snap.site || order.sites || {};
 
-      const logoB64 = await getBase64Image(sComp.logoUrl || sComp.logo_url);
-      const signB64 = await getBase64Image(sComp.signUrl || sComp.sign_url);
+      const logoB64 = await _getBase64Image(sComp.logoUrl || sComp.logo_url);
+      const signB64 = await _getBase64Image(sComp.signUrl || sComp.sign_url);
       
       let cursorY = 15;
 
-      /* ── HEADER ── */
+      /* â”€â”€ HEADER â”€â”€ */
       if (logoB64) doc.addImage(logoB64, "PNG", 15, cursorY, 30, 20, "", "FAST");
       
       doc.setFont("helvetica", "bold");
@@ -1757,7 +2096,7 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
       doc.line(15, cursorY, pageWidth - 15, cursorY);
       cursorY += 8;
 
-      /* ── TITLE & META ── */
+      /* â”€â”€ TITLE & META â”€â”€ */
       doc.setFont("helvetica", "bold"); doc.setFontSize(16);
       doc.text(order.order_type === "Supply" ? "PURCHASE ORDER" : "WORK ORDER", pageWidth / 2, cursorY, { align: "center" });
       cursorY += 10;
@@ -1773,7 +2112,7 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
       doc.setFont("helvetica", "bold"); doc.text("Ref No:", 15, cursorY); doc.setFont("helvetica", "normal"); doc.text(order.ref_number || "N/A", 40, cursorY);
       cursorY += 12;
 
-      /* ── BOXES ── */
+      /* â”€â”€ BOXES â”€â”€ */
       doc.setDrawColor(0); doc.setLineWidth(0.2);
       // VENDOR
       doc.rect(15, cursorY, 85, 35); doc.setFont("helvetica", "bold"); doc.text("VENDOR / BILL TO:", 18, cursorY + 5);
@@ -1787,7 +2126,7 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
       doc.setFontSize(8); doc.text(doc.splitTextToSize(sSite.siteAddress || sSite.site_address || "", 85), 108, cursorY + 16);
       cursorY += 45;
 
-      /* ── TABLE ── */
+      /* â”€â”€ TABLE â”€â”€ */
       const tableHead = [["S.No", "Description", "UOM", "Qty", "Rate (Rs)", "Tax %", "Amount (Rs)"]];
       const tableBody = items.map((it, i) => [
         i + 1, it.description + (it.scope_of_work ? `\nScope: ${it.scope_of_work}` : ""),
@@ -1802,7 +2141,7 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
       });
       cursorY = doc.lastAutoTable.finalY + 10;
 
-      /* ── TOTALS ── */
+      /* â”€â”€ TOTALS â”€â”€ */
       doc.setFont("helvetica", "bold"); doc.setFontSize(10); const totalsObj = order.totals || {}; const tY = cursorY;
       doc.text("Subtotal:", 145, tY, { align: "right" }); doc.setFont("helvetica", "normal"); doc.text((totalsObj.subtotal || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 }), 190, tY, { align: "right" });
       doc.setFont("helvetica", "bold"); doc.text("GST:", 145, tY + 6, { align: "right" }); doc.setFont("helvetica", "normal"); doc.text((totalsObj.gst || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 }), 190, tY + 6, { align: "right" });
@@ -1810,7 +2149,7 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
       doc.setFontSize(9); doc.text(`Amount in Words:`, 15, tY); doc.setFont("helvetica", "italic"); doc.text(totalsObj.words || "", 15, tY + 6);
       cursorY += 25;
 
-      /* ── NOTES ── */
+      /* â”€â”€ NOTES â”€â”€ */
       if (order.notes && order.notes.trim() !== "" && order.notes !== "<p><br></p>") {
         if (cursorY > pageHeight - 60) { doc.addPage(); cursorY = 20; }
         doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.text("ORDER NOTES:", 15, cursorY);
@@ -1818,10 +2157,10 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
         doc.setFont("helvetica", "normal"); doc.setFontSize(9);
         
         // Basic HTML to text conversion for PDF
-        const cleanNotes = order.notes
+        const cleanNotes = normalizeRichTextHtml(order.notes)
           .replace(/<br\s*\/?>/gi, "\n")
           .replace(/<\/p>/gi, "\n")
-          .replace(/<li>/gi, "• ")
+          .replace(/<li>/gi, "â€¢ ")
           .replace(/<\/li>/gi, "\n")
           .replace(/<[^>]+>/g, ""); // strip remaining tags
           
@@ -1830,12 +2169,12 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
         cursorY += (noteLines.length * 5) + 8;
       }
 
-      /* ── CLAUSES ── */
+      /* â”€â”€ CLAUSES â”€â”€ */
       if (cursorY > pageHeight - 80) { doc.addPage(); cursorY = 20; }
       
-      const tc = order.terms_conditions || []; 
-      const pt = order.payment_terms || []; 
-      const gl = order.governing_laws || [];
+      const tc = normalizeRichTextArray(order.terms_conditions || []); 
+      const pt = normalizeRichTextArray(order.payment_terms || []); 
+      const gl = normalizeRichTextArray(order.governing_laws || []);
       const anx = order.annexures || [];
 
       const printClauses = (title, arr) => {
@@ -1851,7 +2190,7 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
       printClauses("Governing Laws:", gl);
       printClauses("Annexures:", anx);
 
-      /* ── FOOTER ── */
+      /* â”€â”€ FOOTER â”€â”€ */
       const footerY = pageHeight - 45; if (cursorY > footerY) { doc.addPage(); }
       doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.text(`For ${sComp.companyName || sComp.company_name || ""}`, pageWidth - 15, footerY, { align: "right" });
       if (signB64) doc.addImage(signB64, "PNG", pageWidth - 55, footerY + 2, 40, 15, "", "FAST");
@@ -1862,6 +2201,140 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
       doc.save(`Order_${order.order_number.replace(/\//g, "_")}.pdf`);
       showToast("PDF exported successfully!");
     } catch (err) { console.error(err); showToast("Error generating PDF", "error"); }
+  };
+
+  const buildPdfPayload = ({ order, items }) => {
+    const snap = order.snapshot || {};
+    const isKacha = ["Draft", "Review"].includes(order.status);
+    const getVal = (v) => Array.isArray(v) ? v[0] : v;
+    const comp = isKacha ? (getVal(order.companies) || snap.company || {}) : (snap.company || getVal(order.companies) || {});
+    const vend = isKacha ? (getVal(order.vendors) || snap.vendor || {}) : (snap.vendor || getVal(order.vendors) || {});
+    const site = isKacha ? (getVal(order.sites) || snap.site || {}) : (snap.site || getVal(order.sites) || {});
+    const liveContact = getVal(order.contact_person);
+    const contacts = snap.contacts || (liveContact ? [liveContact] : []);
+    return { order, items, comp, vend, site, contacts };
+  };
+
+  const clearPreparedPdf = () => {
+    if (preparedPdfUrl) URL.revokeObjectURL(preparedPdfUrl);
+    setPreparedPdfUrl("");
+    setPreparedPdfName("");
+    setPdfPreparing(false);
+    preparedPdfPromiseRef.current = null;
+  };
+
+  useEffect(() => () => {
+    if (preparedPdfUrl) URL.revokeObjectURL(preparedPdfUrl);
+  }, [preparedPdfUrl]);
+
+  useEffect(() => {
+    if (!pdfPreview || pdfPreviewLoading || !pdfPreviewRef.current) return;
+
+    clearPreparedPdf();
+    setPdfPreparing(true);
+
+    const filename = `PO_${pdfPreview.order?.order_number || "Order"}.pdf`;
+    const preparePromise = (async () => {
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      const blob = await createPdfBlobFromElement({ element: pdfPreviewRef.current });
+      return { blob, filename };
+    })();
+
+    preparedPdfPromiseRef.current = preparePromise;
+
+    preparePromise
+      .then(({ blob, filename: readyName }) => {
+        setPreparedPdfUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return URL.createObjectURL(blob);
+        });
+        setPreparedPdfName(readyName);
+      })
+      .catch((err) => {
+        console.error("Background PDF preparation failed:", err);
+      })
+      .finally(() => {
+        if (preparedPdfPromiseRef.current === preparePromise) {
+          setPdfPreparing(false);
+        }
+      });
+  }, [pdfPreview, pdfPreviewLoading]);
+
+  const openPDFPreview = async (orderId) => {
+    clearPreparedPdf();
+    setPdfPreviewLoading(true);
+    try {
+      const res = await fetch(`${API}/api/orders/${orderId}`);
+      if (!res.ok) throw new Error("Failed to fetch order");
+      const payload = await res.json();
+      setPdfPreview(buildPdfPayload(payload));
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to load PDF preview", "error");
+    } finally {
+      setPdfPreviewLoading(false);
+    }
+  };
+
+  const handlePDFDownload = async () => {
+    if (pdfDownloading) return;
+    if (!pdfPreviewRef.current || !pdfPreview) {
+      showToast("PDF not ready, please wait", "error");
+      return;
+    }
+
+    setPdfDownloading(true);
+    try {
+      if (preparedPdfUrl) {
+        const anchor = document.createElement("a");
+        anchor.href = preparedPdfUrl;
+        anchor.download = preparedPdfName || `PO_${pdfPreview.order?.order_number || "Order"}.pdf`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+      } else if (preparedPdfPromiseRef.current) {
+        const { blob, filename } = await preparedPdfPromiseRef.current;
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = filename;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } else {
+        showToast("Generating PDF... Please wait.");
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        await downloadElementAsPdf({
+          element: pdfPreviewRef.current,
+          filename: `PO_${pdfPreview.order?.order_number || "Order"}.pdf`,
+        });
+      }
+      showToast("PDF downloaded successfully!");
+    } catch (err) {
+      console.error(err);
+      showToast("PDF download failed", "error");
+    } finally {
+      setPdfDownloading(false);
+    }
+  };
+
+  const handlePDFPrint = async () => {
+    if (!pdfPreviewRef.current || !pdfPreview) {
+      showToast("PDF not ready, please wait", "error");
+      return;
+    }
+
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      await printElement({
+        element: pdfPreviewRef.current,
+        title: pdfPreview.order?.order_number || "Order PDF",
+      });
+    } catch (err) {
+      console.error(err);
+      showToast("Print failed", "error");
+    }
   };
 
   const getTabCount = (tabName) => {
@@ -1882,6 +2355,56 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
         <div className={`fixed top-5 right-5 z-50 px-4 py-3 rounded-xl text-sm font-medium shadow-lg
           ${toast.type === "error" ? "bg-red-50 text-red-700 border border-red-200" : "bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>
           {toast.msg}
+        </div>
+      )}
+
+      {(pdfPreview || pdfPreviewLoading) && (
+        <div className="fixed inset-0 z-50 flex">
+          <div className="flex-1 bg-black/50" onClick={() => setPdfPreview(null)} />
+          <div className="w-full max-w-[860px] bg-slate-200 flex flex-col h-full shadow-2xl">
+            <div className="bg-white border-b border-slate-200 px-5 py-3 flex items-center justify-between shrink-0">
+              <span className="font-bold text-slate-700 text-sm">PDF Preview</span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handlePDFPrint}
+                  className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white font-bold rounded-lg text-xs uppercase tracking-wider transition-all">
+                  <Printer size={14} /> Print
+                </button>
+                <button
+                  disabled={pdfDownloading}
+                  onClick={handlePDFDownload}
+                  className={`flex items-center gap-2 px-4 py-2 text-white font-bold rounded-lg text-xs uppercase tracking-wider transition-all ${pdfDownloading ? 'bg-slate-400 cursor-not-allowed' : 'bg-[#1b3e8a] hover:bg-[#16326d]'}`}>
+                  {pdfDownloading
+                    ? <div className="h-3 w-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    : <FileDown size={14} />}
+                  {pdfDownloading ? "Downloading..." : pdfPreparing ? "Preparing PDF..." : "Download PDF"}
+                </button>
+                <button
+                  onClick={() => { clearPreparedPdf(); setPdfPreview(null); }}
+                  className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-all">
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              {pdfPreviewLoading ? (
+                <div className="flex items-center justify-center h-64">
+                  <div className="h-8 w-8 border-4 border-[#1b3e8a] border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : (
+                <div ref={pdfPreviewRef}>
+                  <OrderPDFTemplate
+                    order={pdfPreview.order}
+                    items={pdfPreview.items}
+                    comp={pdfPreview.comp}
+                    vend={pdfPreview.vend}
+                    site={pdfPreview.site}
+                    contacts={pdfPreview.contacts}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -1939,7 +2462,7 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
         
         {loading ? (
            <div className="p-10 text-center text-slate-400 text-sm italic font-medium animate-pulse">
-             📦 Syncing orders... Please wait.
+             ðŸ“¦ Syncing orders... Please wait.
            </div>
         ) : (
           <div className="overflow-x-auto w-full rounded-b-2xl">
@@ -1982,9 +2505,9 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
                   </tr>
                 ) : filtered.map(o => {
                   const snap = o.snapshot || {};
-                  const cCode = snap.company?.companyCode || o.companies?.company_code || "—";
-                  const sCode = snap.site?.siteCode || o.sites?.site_code || "—";
-                  const vName = snap.vendor?.vendorName || o.vendors?.vendor_name || "—";
+                  const cCode = snap.company?.companyCode || o.companies?.company_code || "-";
+                  const sCode = snap.site?.siteCode || o.sites?.site_code || "-";
+                  const vName = snap.vendor?.vendorName || o.vendors?.vendor_name || "-";
                   
                   const typeCode = o.order_type === "Supply" ? "PO" : "WO";
                   const prefix = `${cCode}/${sCode}/${typeCode}/`;
@@ -1999,12 +2522,12 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
                         <span title={sCode}>{sCode}</span>
                       </td>
                       <td className="px-4 py-3.5 border-b border-r border-slate-200 bg-white group-hover:bg-indigo-50/30 transition-colors font-mono">
-                        <span className={`font-bold text-[11px] ${displayNo ? "text-slate-900" : "text-slate-300"}`} title={displayNo || '—'}>
+                        <span className={`font-bold text-[11px] ${displayNo ? "text-slate-900" : "text-slate-300"}`} title={displayNo || '-'}>
                           {displayNo
                             ? <button onClick={() => onViewClick(o.id)} className="hover:text-indigo-600 hover:underline hover:decoration-indigo-300 underline-offset-4 transition-all text-left">
                                 {displayNo}
                               </button>
-                            : "—"
+                            : "-"
                           }
                         </span>
                       </td>
@@ -2021,7 +2544,7 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
                         {new Date(o.date_of_creation || o.created_at).toLocaleDateString("en-IN")}
                       </td>
                       <td className="px-4 py-3.5 border-b border-r border-slate-100 text-slate-700 text-xs font-semibold">
-                        <span title={o.subject}>{o.subject || "—"}</span>
+                        <span title={o.subject}>{o.subject || "-"}</span>
                       </td>
                       <td className="px-4 py-3.5 border-b border-r border-slate-100 text-slate-700 text-xs font-bold uppercase tracking-tight">
                         <span title={vName}>{vName}</span>
@@ -2062,9 +2585,11 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
                             title="Delete">
                             <Trash2 size={13} />
                           </button>
-                          <button onClick={() => exportPDF(o.id)} 
-                            className="h-8 w-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-800 hover:text-slate-900 border-slate-300 hover:bg-white transition-all shadow-sm"
-                            title="Export PDF">
+                          <button
+                            disabled={pdfPreviewLoading}
+                            onClick={() => openPDFPreview(o.id)}
+                            className={`h-8 w-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-800 border-slate-300 transition-all shadow-sm ${pdfPreviewLoading ? "opacity-50 cursor-not-allowed" : "hover:text-slate-900 hover:bg-white"}`}
+                            title={pdfPreviewLoading ? "Preparing PDF" : "Export PDF"}>
                             <FileDown size={14} strokeWidth={2.5}/>
                           </button>
                         </div>
@@ -2083,9 +2608,14 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
 
 // ============== MAIN CONTROLLER ==============
 export default function CreateOrderWrapper({ project, editOrderId, onEditComplete }) {
-  const [view, setView] = useState("list"); // "list" | "create" | "view"
+  const [view, setView] = useState("list");
   const [viewId, setViewId] = useState(null);
   const [localEditId, setLocalEditId] = useState(null);
+
+  useEffect(() => {
+    sessionStorage.removeItem("bms_co_view");
+    sessionStorage.removeItem("bms_co_view_id");
+  }, []);
 
   // Auto-switch to create view if editOrderId is provided from global state (App.jsx)
   useEffect(() => {
@@ -2120,3 +2650,4 @@ export default function CreateOrderWrapper({ project, editOrderId, onEditComplet
     />
   );
 }
+
