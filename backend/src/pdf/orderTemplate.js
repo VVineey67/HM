@@ -15,7 +15,7 @@ const css = `
   /* Keep page 1 slightly tighter */
   @page :first { margin-top: 27mm; }
   * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; color: #000; font-family: Aptos; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html, body { margin: 0; padding: 0; color: #000; font-family: Verdana; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   body { font-size: 10px; line-height: 1.35; }
   :root { --box-line: 1px solid #444; }
 
@@ -480,7 +480,7 @@ const renderHeaderTemplate = (order, comp, logoDataUri = "") => {
     ? "position: absolute; left: 0; bottom: 6px; max-height: 72px; max-width: 190px; object-fit: contain; object-position: left bottom; display:block;"
     : "position: absolute; left: 0; bottom: 0; max-height: 90px; max-width: 250px; object-fit: contain; object-position: left bottom; display:block;";
   return `
-    <div style="font-family: Aptos; width: 100%; padding: 8px 10mm 0; box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+    <div style="font-family: Verdana; width: 100%; padding: 8px 10mm 0; box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
       <div style="position: relative; height: 65px; width: 100%;">
         ${logoDataUri ? `<img src="${logoDataUri}" style="${logoStyle}" />` : ""}
         <span style="position: absolute; right: 0; bottom: 22px; background:#000; color:#fff; padding: 7px 28px 7px 38px; font-weight: 900; font-size: 15px; letter-spacing: .8px; clip-path: polygon(14% 0, 100% 0, 100% 100%, 0% 100%); display: inline-block; line-height: 1;">${title}</span>
@@ -512,7 +512,7 @@ const renderFooterTemplate = (comp) => {
   const name = comp.company_name || comp.companyName || "";
   const address = comp.address || "";
   return `
-    <div style="font-family: Aptos; width: 100%; padding: 2.5mm 10mm 0.5mm; box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; position: relative; min-height: 16mm;">
+    <div style="font-family: Verdana; width: 100%; padding: 2.5mm 10mm 0.5mm; box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; position: relative; min-height: 16mm;">
       <div style="height: 0.8px; background: #000; width: 100%; margin-bottom: 6px;"></div>
       <div style="text-align: center; padding: 0 52px 0 52px;">
         <div style="font-weight: 700; font-size: 11px; line-height: 1.15;">${escapeHtml(name)}</div>

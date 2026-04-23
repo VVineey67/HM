@@ -580,7 +580,7 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
                           <p className="text-slate-900 font-bold text-[11px]">{c.personName || c.person_name}</p>
                           <div className="flex gap-2 text-[10px] text-slate-500">
                             <span>{c.designation}</span>
-                            <span>•</span>
+                            <span>ï¿½</span>
                             <span>{c.contactNumber || c.contact_number}</span>
                           </div>
                         </div>
@@ -946,7 +946,7 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
             <div className="flex justify-center px-4 pb-8 bg-slate-300">
               <iframe
                 title="Order PDF"
-                src={`${API}/api/orders/${data.order.id}/pdf?t=${Date.now()}#toolbar=0&navpanes=0&statusbar=0&messages=0&view=FitH`}
+                src={`${API}/api/orders/${data.order.id}/preview?t=${Date.now()}`}
                 className="bg-white shadow-xl"
                 style={{ border: 0, width: "210mm", maxWidth: "100%", height: "297mm" }}
               />
