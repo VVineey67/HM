@@ -859,7 +859,7 @@ export const FullViewContactModal = ({ contact, onClose, onEdit }) => {
 // CLAUSE MODAL (Mounts full ClausesMaster inside a popup)
 // ─────────────────────────────────────────────────────────────────
 
-import ClausesMaster from "../Procurement/ClausesMaster";
+import ClausesMaster from "../Procurement/clauses/ClausesMaster";
 
 export const FullClauseModal = ({ type, onClose, onSuccess, initialViewId, initialAction }) => {
   return (

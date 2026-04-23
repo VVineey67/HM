@@ -1,11 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { Plus, X, Upload, Save, FileText, ChevronDown, ChevronRight, Check, Building2, MapPin, Truck, Landmark, ShieldCheck, FilePlus, Eye, Loader2, Pencil, Trash2, Download, FileDown, Rocket, Printer } from "lucide-react";
+import { Plus, X, Upload, Save, FileText, ChevronDown, ChevronRight, Check, Building2, MapPin, Truck, Landmark, ShieldCheck, FilePlus, Eye, Loader2, Pencil, Trash2, Download, FileDown, Rocket } from "lucide-react";
 import { FullSiteModal, FullCompanyModal, FullVendorModal, FullViewSiteModal, FullViewCompanyModal, FullViewVendorModal, FullContactModal, FullViewContactModal, FullClauseModal } from "./FullMasterModals";
 import ReactQuill from "react-quill-new";
 import "react-quill-new/dist/quill.snow.css";
 import ViewOrder from "../Procurement/ViewOrder";
-import OrderPDFTemplate from "../Procurement/OrderPDFTemplate";
-import { createPdfBlobFromElement, downloadElementAsPdf, printElement } from "../Procurement/pdfUtils";
 
 const QUILL_MODULES = {
   toolbar: [
@@ -67,7 +65,7 @@ const stripHtml = (html) => {
     .trim();
 };
 
-/* â”€â”€ helper: INR to Words â”€â”€ */
+/* ── helper: INR to Words ── */
 const amountToWords = (amount) => {
   if (!amount || isNaN(amount) || amount === 0) return "Zero Rupees Only";
   const a = ["", "One ", "Two ", "Three ", "Four ", "Five ", "Six ", "Seven ", "Eight ", "Nine ", "Ten ", "Eleven ", "Twelve ", "Thirteen ", "Fourteen ", "Fifteen ", "Sixteen ", "Seventeen ", "Eighteen ", "Nineteen "];
@@ -1065,7 +1063,7 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
     const div = document.createElement("div");
     div.innerHTML = html;
 
-    // Remove Quill v2 marker spans (.ql-ui) — these are empty marker-hosts
+    // Remove Quill v2 marker spans (.ql-ui) � these are empty marker-hosts
     // that only render content via CSS ::before in the editor context
     div.querySelectorAll(".ql-ui").forEach(el => el.remove());
 
@@ -1085,7 +1083,7 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
     return [div.innerHTML.trim()].filter(x => x);
   };
 
-  /* â”€â”€ Clause Component â”€â”€ */
+  /* ── Clause Component ── */
   const renderClauses = (title, type, ptsState, setPtsState) => {
     const list = clauses.filter(c => c.type === type);
     return (
@@ -1265,7 +1263,7 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
                   <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">Proof Type *</label>
                   <select value={files.proof.type} onChange={e => setFiles(prev => ({ ...prev, proof: { ...prev.proof, type: e.target.value } }))}
                     className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-indigo-400 bg-white">
-                    <option value="">— Select Type —</option>
+                    <option value="">� Select Type �</option>
                     <option value="Comparative Docs">Comparative Docs</option>
                     <option value="Mail Proof Doc">Mail Proof Doc</option>
                   </select>
@@ -1410,7 +1408,7 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
                     )}
                     <th className="px-2 py-2.5 text-[10px] font-bold text-slate-300 uppercase tracking-wider text-center whitespace-nowrap" style={{ width: '60px' }}>Unit</th>
                     <th className="px-2 py-2.5 text-[10px] font-bold text-slate-300 uppercase tracking-wider text-center whitespace-nowrap" style={{ width: '90px' }}>Qty</th>
-                    <th className="px-2 py-2.5 text-[10px] font-bold text-slate-300 uppercase tracking-wider text-right whitespace-nowrap" style={{ width: '120px' }}>Rate (₹)</th>
+                    <th className="px-2 py-2.5 text-[10px] font-bold text-slate-300 uppercase tracking-wider text-right whitespace-nowrap" style={{ width: '120px' }}>Rate (?)</th>
                     {settings.discountMode === "line" && <th className="px-2 py-2.5 text-[10px] font-bold text-slate-300 uppercase tracking-wider text-center whitespace-nowrap" style={{ width: '70px' }}>Disc%</th>}
                     {settings.tax && (
                       <th className="px-2 py-2.5 text-[10px] font-bold text-slate-300 uppercase tracking-wider text-center whitespace-nowrap group/th" style={{ width: '80px' }}>
@@ -1419,7 +1417,7 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
                         </div>
                       </th>
                     )}
-                    <th className="px-2 py-2.5 text-[10px] font-bold text-indigo-300 uppercase tracking-wider text-right whitespace-nowrap" style={{ width: '140px' }}>Amount (₹)</th>
+                    <th className="px-2 py-2.5 text-[10px] font-bold text-indigo-300 uppercase tracking-wider text-right whitespace-nowrap" style={{ width: '140px' }}>Amount (?)</th>
                     {settings.remarks && (
                       <th className="px-2 py-2.5 text-[10px] font-bold text-slate-300 uppercase tracking-wider text-left group/th" style={{ minWidth: '140px' }}>
                         <div className="flex items-center gap-1 whitespace-nowrap">Remarks
@@ -1440,7 +1438,7 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
                           ${isFirst && gIdx > 0 ? "border-t-2 border-slate-300" : ""}
                           ${!isFirst ? "bg-slate-50/60 hover:bg-slate-100/60" : "bg-white hover:bg-indigo-50/30"}`}>
 
-                          {/* S.No — rowspan */}
+                          {/* S.No � rowspan */}
                           {isFirst && (
                             <td rowSpan={group.subRows.length} className="px-1 py-2 text-center align-middle border-r border-slate-100">
                               <span className="text-[11px] font-bold text-slate-400">{(gIdx+1).toString().padStart(2,"0")}</span>
@@ -1467,7 +1465,7 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
                                 )}
                                 <div className="text-justify">
                                   <InlineSelect value={sub.specification} onChange={e => handleSubRowChange(group.id, sub.id, "specification", e.target.value)}
-                                    options={itemData?.specifications || []} placeholder="— Spec —" disabled={!group.itemId} renderHtml={true}
+                                    options={itemData?.specifications || []} placeholder="� Spec �" disabled={!group.itemId} renderHtml={true}
                                     onAdd={() => setCustomInputModal({ open: true, type: "specification", groupId: group.id, subId: sub.id, itemId: group.itemId, text: "", originalValue: "" })}
                                     onEdit={(val) => setCustomInputModal({ open: true, type: "specification", groupId: group.id, subId: sub.id, itemId: group.itemId, text: val, originalValue: val })}
                                     onView={(val) => setSpecViewModal({ open: true, html: val, onEdit: () => { setSpecViewModal({ open: false, html: '', onEdit: null }); setCustomInputModal({ open: true, type: 'specification', groupId: group.id, subId: sub.id, itemId: group.itemId, text: val, originalValue: val }); } })}
@@ -1484,7 +1482,7 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
                             </td>
                           ) : (
                             <>
-                              {/* Item — rowspan (Standard PO) */}
+                              {/* Item � rowspan (Standard PO) */}
                               {isFirst && (
                                 <td rowSpan={group.subRows.length} className="px-2 py-2 align-middle border-r border-slate-100">
                                   <div className="border-l-2 border-indigo-300 pl-1.5">
@@ -1503,7 +1501,7 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
                               {/* Spec (Standard PO) */}
                               <td className="px-2 py-2">
                                 <InlineSelect value={sub.specification} onChange={e => handleSubRowChange(group.id, sub.id, "specification", e.target.value)}
-                                  options={itemData?.specifications || []} placeholder="— Spec —" disabled={!group.itemId} renderHtml={true}
+                                  options={itemData?.specifications || []} placeholder="� Spec �" disabled={!group.itemId} renderHtml={true}
                                   onAdd={() => setCustomInputModal({ open: true, type: "specification", groupId: group.id, subId: sub.id, itemId: group.itemId, text: "", originalValue: "" })}
                                   onEdit={(val) => setCustomInputModal({ open: true, type: "specification", groupId: group.id, subId: sub.id, itemId: group.itemId, text: val, originalValue: val })}
                                   onView={(val) => setSpecViewModal({ open: true, html: val, onEdit: () => { setSpecViewModal({ open: false, html: '', onEdit: null }); setCustomInputModal({ open: true, type: 'specification', groupId: group.id, subId: sub.id, itemId: group.itemId, text: val, originalValue: val }); } })}
@@ -1559,7 +1557,7 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
                             </td>
                           )}
 
-                          {/* Unit — rowspan, editable from UOM list */}
+                          {/* Unit � rowspan, editable from UOM list */}
                           {isFirst && (
                             <td rowSpan={group.subRows.length} className="py-2 px-1 text-center align-middle bg-slate-50 border-x border-slate-100 whitespace-nowrap" style={{ width: '80px' }}>
                               <InlineSelect
@@ -1584,7 +1582,7 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
                           {/* Rate */}
                           <td className="px-1 py-2 whitespace-nowrap" style={{ width: '120px' }}>
                             <div className="relative">
-                              <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] text-slate-300">₹</span>
+                              <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] text-slate-300">?</span>
                               <input type="number" value={sub.unitRate || ""} onChange={e => handleSubRowChange(group.id, sub.id, "unitRate", Number(e.target.value))}
                                 className="text-right text-xs font-bold text-slate-800 bg-white border border-slate-200 rounded-md pl-4 pr-1 py-1.5 outline-none focus:border-indigo-400" style={{ width: '108px' }} placeholder="0.00" />
                             </div>
@@ -1657,14 +1655,14 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
               <div className="p-5 space-y-2.5">
                 <div className="flex justify-between text-xs font-medium text-slate-500 pb-2 border-b border-slate-100">
                   <span>Subtotal</span>
-                  <span className="font-mono font-semibold text-slate-700">₹ {totals.subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                  <span className="font-mono font-semibold text-slate-700">? {totals.subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
                 </div>
 
                 {settings.discountMode === "line" && totals.lineDiscountSum > 0 && (
                   <div className="flex justify-between items-center text-xs font-medium text-rose-500">
                     <span>Discount (Line)</span>
                     <span className="font-mono font-semibold">
-                      − ₹ {totals.lineDiscountSum.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                      - ? {totals.lineDiscountSum.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                     </span>
                   </div>
                 )}
@@ -1684,7 +1682,7 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
                         <span className="text-[11px] text-rose-400 font-bold pr-1.5">%</span>
                       </div>
                       <span className="font-mono font-semibold text-rose-500 w-[90px] text-right">
-                        − ₹ {(Number(totals.txDiscountAmt) || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                        - ? {(Number(totals.txDiscountAmt) || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                       </span>
                     </div>
                   </div>
@@ -1724,14 +1722,14 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
                     )}
                   </div>
                   <span className="font-mono font-semibold text-slate-700 w-[120px] text-right">
-                    ₹ {(Number(totals.gst) || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    ? {(Number(totals.gst) || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                   </span>
                 </div>
 
                 <div className="pt-3 border-t-2 border-slate-200 mt-1 space-y-1.5">
                   <div className="flex justify-between items-center">
                     <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Grand Total</p>
-                    <p className="text-2xl font-black text-indigo-600 font-mono">₹ {totals.grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
+                    <p className="text-2xl font-black text-indigo-600 font-mono">? {totals.grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
                   </div>
                   <p className="text-[11px] text-slate-400 italic leading-snug">
                     {header.orderType === "Supply" ? "Total Purchase Order Value: " : "Total Work Order Value: "}
@@ -1742,7 +1740,7 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
             </div>
           </div>
 
-          {/* â”€â”€ ORDER NOTES (RICH TEXT) â”€â”€ */}
+          {/* ── ORDER NOTES (RICH TEXT) ── */}
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden mb-6">
             <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
               <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center">
@@ -1974,14 +1972,9 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState(null);
   const [activeTab, setActiveTab] = useState("All");
-  const [pdfPreview, setPdfPreview] = useState(null);
-  const [pdfPreviewLoading, setPdfPreviewLoading] = useState(false);
+  const [pdfPreviewId, setPdfPreviewId] = useState(null);
+  const [pdfPreviewNonce, setPdfPreviewNonce] = useState(0);
   const [pdfDownloading, setPdfDownloading] = useState(false);
-  const [preparedPdfUrl, setPreparedPdfUrl] = useState("");
-  const [preparedPdfName, setPreparedPdfName] = useState("");
-  const [pdfPreparing, setPdfPreparing] = useState(false);
-  const pdfPreviewRef = useRef(null);
-  const preparedPdfPromiseRef = useRef(null);
 
   const TABS = ["All", "Draft", "Review", "Pending Issue", "Issued", "Rejected", "Revert", "Recall"];
 
@@ -2080,7 +2073,7 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
       
       let cursorY = 15;
 
-      /* â”€â”€ HEADER â”€â”€ */
+      /* ── HEADER ── */
       if (logoB64) doc.addImage(logoB64, "PNG", 15, cursorY, 30, 20, "", "FAST");
       
       doc.setFont("helvetica", "bold");
@@ -2096,7 +2089,7 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
       doc.line(15, cursorY, pageWidth - 15, cursorY);
       cursorY += 8;
 
-      /* â”€â”€ TITLE & META â”€â”€ */
+      /* ── TITLE & META ── */
       doc.setFont("helvetica", "bold"); doc.setFontSize(16);
       doc.text(order.order_type === "Supply" ? "PURCHASE ORDER" : "WORK ORDER", pageWidth / 2, cursorY, { align: "center" });
       cursorY += 10;
@@ -2112,7 +2105,7 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
       doc.setFont("helvetica", "bold"); doc.text("Ref No:", 15, cursorY); doc.setFont("helvetica", "normal"); doc.text(order.ref_number || "N/A", 40, cursorY);
       cursorY += 12;
 
-      /* â”€â”€ BOXES â”€â”€ */
+      /* ── BOXES ── */
       doc.setDrawColor(0); doc.setLineWidth(0.2);
       // VENDOR
       doc.rect(15, cursorY, 85, 35); doc.setFont("helvetica", "bold"); doc.text("VENDOR / BILL TO:", 18, cursorY + 5);
@@ -2126,7 +2119,7 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
       doc.setFontSize(8); doc.text(doc.splitTextToSize(sSite.siteAddress || sSite.site_address || "", 85), 108, cursorY + 16);
       cursorY += 45;
 
-      /* â”€â”€ TABLE â”€â”€ */
+      /* ── TABLE ── */
       const tableHead = [["S.No", "Description", "UOM", "Qty", "Rate (Rs)", "Tax %", "Amount (Rs)"]];
       const tableBody = items.map((it, i) => [
         i + 1, it.description + (it.scope_of_work ? `\nScope: ${it.scope_of_work}` : ""),
@@ -2141,7 +2134,7 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
       });
       cursorY = doc.lastAutoTable.finalY + 10;
 
-      /* â”€â”€ TOTALS â”€â”€ */
+      /* ── TOTALS ── */
       doc.setFont("helvetica", "bold"); doc.setFontSize(10); const totalsObj = order.totals || {}; const tY = cursorY;
       doc.text("Subtotal:", 145, tY, { align: "right" }); doc.setFont("helvetica", "normal"); doc.text((totalsObj.subtotal || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 }), 190, tY, { align: "right" });
       doc.setFont("helvetica", "bold"); doc.text("GST:", 145, tY + 6, { align: "right" }); doc.setFont("helvetica", "normal"); doc.text((totalsObj.gst || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 }), 190, tY + 6, { align: "right" });
@@ -2149,7 +2142,7 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
       doc.setFontSize(9); doc.text(`Amount in Words:`, 15, tY); doc.setFont("helvetica", "italic"); doc.text(totalsObj.words || "", 15, tY + 6);
       cursorY += 25;
 
-      /* â”€â”€ NOTES â”€â”€ */
+      /* ── NOTES ── */
       if (order.notes && order.notes.trim() !== "" && order.notes !== "<p><br></p>") {
         if (cursorY > pageHeight - 60) { doc.addPage(); cursorY = 20; }
         doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.text("ORDER NOTES:", 15, cursorY);
@@ -2160,7 +2153,7 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
         const cleanNotes = normalizeRichTextHtml(order.notes)
           .replace(/<br\s*\/?>/gi, "\n")
           .replace(/<\/p>/gi, "\n")
-          .replace(/<li>/gi, "â€¢ ")
+          .replace(/<li>/gi, "• ")
           .replace(/<\/li>/gi, "\n")
           .replace(/<[^>]+>/g, ""); // strip remaining tags
           
@@ -2169,7 +2162,7 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
         cursorY += (noteLines.length * 5) + 8;
       }
 
-      /* â”€â”€ CLAUSES â”€â”€ */
+      /* ── CLAUSES ── */
       if (cursorY > pageHeight - 80) { doc.addPage(); cursorY = 20; }
       
       const tc = normalizeRichTextArray(order.terms_conditions || []); 
@@ -2190,7 +2183,7 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
       printClauses("Governing Laws:", gl);
       printClauses("Annexures:", anx);
 
-      /* â”€â”€ FOOTER â”€â”€ */
+      /* ── FOOTER ── */
       const footerY = pageHeight - 45; if (cursorY > footerY) { doc.addPage(); }
       doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.text(`For ${sComp.companyName || sComp.company_name || ""}`, pageWidth - 15, footerY, { align: "right" });
       if (signB64) doc.addImage(signB64, "PNG", pageWidth - 55, footerY + 2, 40, 15, "", "FAST");
@@ -2203,138 +2196,30 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
     } catch (err) { console.error(err); showToast("Error generating PDF", "error"); }
   };
 
-  const buildPdfPayload = ({ order, items }) => {
-    const snap = order.snapshot || {};
-    const isKacha = ["Draft", "Review"].includes(order.status);
-    const getVal = (v) => Array.isArray(v) ? v[0] : v;
-    const comp = isKacha ? (getVal(order.companies) || snap.company || {}) : (snap.company || getVal(order.companies) || {});
-    const vend = isKacha ? (getVal(order.vendors) || snap.vendor || {}) : (snap.vendor || getVal(order.vendors) || {});
-    const site = isKacha ? (getVal(order.sites) || snap.site || {}) : (snap.site || getVal(order.sites) || {});
-    const liveContact = getVal(order.contact_person);
-    const contacts = snap.contacts || (liveContact ? [liveContact] : []);
-    return { order, items, comp, vend, site, contacts };
-  };
-
-  const clearPreparedPdf = () => {
-    if (preparedPdfUrl) URL.revokeObjectURL(preparedPdfUrl);
-    setPreparedPdfUrl("");
-    setPreparedPdfName("");
-    setPdfPreparing(false);
-    preparedPdfPromiseRef.current = null;
-  };
-
-  useEffect(() => () => {
-    if (preparedPdfUrl) URL.revokeObjectURL(preparedPdfUrl);
-  }, [preparedPdfUrl]);
-
-  useEffect(() => {
-    if (!pdfPreview || pdfPreviewLoading || !pdfPreviewRef.current) return;
-
-    clearPreparedPdf();
-    setPdfPreparing(true);
-
-    const filename = `PO_${pdfPreview.order?.order_number || "Order"}.pdf`;
-    const preparePromise = (async () => {
-      await new Promise((resolve) => setTimeout(resolve, 80));
-      const blob = await createPdfBlobFromElement({ element: pdfPreviewRef.current });
-      return { blob, filename };
-    })();
-
-    preparedPdfPromiseRef.current = preparePromise;
-
-    preparePromise
-      .then(({ blob, filename: readyName }) => {
-        setPreparedPdfUrl((prev) => {
-          if (prev) URL.revokeObjectURL(prev);
-          return URL.createObjectURL(blob);
-        });
-        setPreparedPdfName(readyName);
-      })
-      .catch((err) => {
-        console.error("Background PDF preparation failed:", err);
-      })
-      .finally(() => {
-        if (preparedPdfPromiseRef.current === preparePromise) {
-          setPdfPreparing(false);
-        }
-      });
-  }, [pdfPreview, pdfPreviewLoading]);
-
-  const openPDFPreview = async (orderId) => {
-    clearPreparedPdf();
-    setPdfPreviewLoading(true);
-    try {
-      const res = await fetch(`${API}/api/orders/${orderId}`);
-      if (!res.ok) throw new Error("Failed to fetch order");
-      const payload = await res.json();
-      setPdfPreview(buildPdfPayload(payload));
-    } catch (err) {
-      console.error(err);
-      showToast("Failed to load PDF preview", "error");
-    } finally {
-      setPdfPreviewLoading(false);
-    }
+  const openPDFPreview = (orderId) => {
+    setPdfPreviewNonce(Date.now());
+    setPdfPreviewId(orderId);
   };
 
   const handlePDFDownload = async () => {
-    if (pdfDownloading) return;
-    if (!pdfPreviewRef.current || !pdfPreview) {
-      showToast("PDF not ready, please wait", "error");
-      return;
-    }
-
+    if (!pdfPreviewId || pdfDownloading) return;
     setPdfDownloading(true);
     try {
-      if (preparedPdfUrl) {
-        const anchor = document.createElement("a");
-        anchor.href = preparedPdfUrl;
-        anchor.download = preparedPdfName || `PO_${pdfPreview.order?.order_number || "Order"}.pdf`;
-        document.body.appendChild(anchor);
-        anchor.click();
-        anchor.remove();
-      } else if (preparedPdfPromiseRef.current) {
-        const { blob, filename } = await preparedPdfPromiseRef.current;
-        const url = URL.createObjectURL(blob);
-        const anchor = document.createElement("a");
-        anchor.href = url;
-        anchor.download = filename;
-        document.body.appendChild(anchor);
-        anchor.click();
-        anchor.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-      } else {
-        showToast("Generating PDF... Please wait.");
-        await new Promise((resolve) => setTimeout(resolve, 40));
-        await downloadElementAsPdf({
-          element: pdfPreviewRef.current,
-          filename: `PO_${pdfPreview.order?.order_number || "Order"}.pdf`,
-        });
-      }
+      const res = await fetch(`${API}/api/orders/${pdfPreviewId}/pdf?download=1&t=${pdfPreviewNonce || Date.now()}`);
+      if (!res.ok) throw new Error("PDF failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `PO_${pdfPreviewId}.pdf`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
       showToast("PDF downloaded successfully!");
     } catch (err) {
       console.error(err);
       showToast("PDF download failed", "error");
-    } finally {
-      setPdfDownloading(false);
     }
-  };
-
-  const handlePDFPrint = async () => {
-    if (!pdfPreviewRef.current || !pdfPreview) {
-      showToast("PDF not ready, please wait", "error");
-      return;
-    }
-
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 40));
-      await printElement({
-        element: pdfPreviewRef.current,
-        title: pdfPreview.order?.order_number || "Order PDF",
-      });
-    } catch (err) {
-      console.error(err);
-      showToast("Print failed", "error");
-    }
+    setPdfDownloading(false);
   };
 
   const getTabCount = (tabName) => {
@@ -2358,18 +2243,13 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
         </div>
       )}
 
-      {(pdfPreview || pdfPreviewLoading) && (
+      {pdfPreviewId && (
         <div className="fixed inset-0 z-50 flex">
-          <div className="flex-1 bg-black/50" onClick={() => setPdfPreview(null)} />
+          <div className="flex-1 bg-black/50" onClick={() => setPdfPreviewId(null)} />
           <div className="w-full max-w-[860px] bg-slate-200 flex flex-col h-full shadow-2xl">
             <div className="bg-white border-b border-slate-200 px-5 py-3 flex items-center justify-between shrink-0">
               <span className="font-bold text-slate-700 text-sm">PDF Preview</span>
               <div className="flex items-center gap-2">
-                <button
-                  onClick={handlePDFPrint}
-                  className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white font-bold rounded-lg text-xs uppercase tracking-wider transition-all">
-                  <Printer size={14} /> Print
-                </button>
                 <button
                   disabled={pdfDownloading}
                   onClick={handlePDFDownload}
@@ -2377,32 +2257,21 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
                   {pdfDownloading
                     ? <div className="h-3 w-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     : <FileDown size={14} />}
-                  {pdfDownloading ? "Downloading..." : pdfPreparing ? "Preparing PDF..." : "Download PDF"}
+                  {pdfDownloading ? "Downloading..." : "Download PDF"}
                 </button>
                 <button
-                  onClick={() => { clearPreparedPdf(); setPdfPreview(null); }}
+                  onClick={() => setPdfPreviewId(null)}
                   className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-all">
                   <X size={18} />
                 </button>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-4">
-              {pdfPreviewLoading ? (
-                <div className="flex items-center justify-center h-64">
-                  <div className="h-8 w-8 border-4 border-[#1b3e8a] border-t-transparent rounded-full animate-spin" />
-                </div>
-              ) : (
-                <div ref={pdfPreviewRef}>
-                  <OrderPDFTemplate
-                    order={pdfPreview.order}
-                    items={pdfPreview.items}
-                    comp={pdfPreview.comp}
-                    vend={pdfPreview.vend}
-                    site={pdfPreview.site}
-                    contacts={pdfPreview.contacts}
-                  />
-                </div>
-              )}
+            <div className="flex-1 bg-slate-300">
+              <iframe
+                title="Order PDF"
+                src={`${API}/api/orders/${pdfPreviewId}/pdf?t=${pdfPreviewNonce}#toolbar=0&navpanes=0&statusbar=0&messages=0&view=FitH`}
+                className="w-full h-full border-0 bg-white"
+              />
             </div>
           </div>
         </div>
@@ -2462,7 +2331,7 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
         
         {loading ? (
            <div className="p-10 text-center text-slate-400 text-sm italic font-medium animate-pulse">
-             ðŸ“¦ Syncing orders... Please wait.
+             📦 Syncing orders... Please wait.
            </div>
         ) : (
           <div className="overflow-x-auto w-full rounded-b-2xl">
@@ -2586,10 +2455,9 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
                             <Trash2 size={13} />
                           </button>
                           <button
-                            disabled={pdfPreviewLoading}
                             onClick={() => openPDFPreview(o.id)}
-                            className={`h-8 w-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-800 border-slate-300 transition-all shadow-sm ${pdfPreviewLoading ? "opacity-50 cursor-not-allowed" : "hover:text-slate-900 hover:bg-white"}`}
-                            title={pdfPreviewLoading ? "Preparing PDF" : "Export PDF"}>
+                            className="h-8 w-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-800 border-slate-300 transition-all shadow-sm hover:text-slate-900 hover:bg-white"
+                            title="Export PDF">
                             <FileDown size={14} strokeWidth={2.5}/>
                           </button>
                         </div>
@@ -2650,4 +2518,3 @@ export default function CreateOrderWrapper({ project, editOrderId, onEditComplet
     />
   );
 }
-

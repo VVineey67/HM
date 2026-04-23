@@ -1,8 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { ArrowLeft, Search, Building2, User, Landmark, MapPin, Receipt, ShieldQuestion, FileText, CheckCircle2, Phone, Printer, FileDown, Download, Eye, X } from "lucide-react";
-import OrderPDFTemplate from "./OrderPDFTemplate";
-import html2pdf from "html2pdf.js";
-import { createPdfBlobFromElement, downloadElementAsPdf, printElement } from "./pdfUtils";
+import { ArrowLeft, Search, Building2, User, Landmark, MapPin, Receipt, ShieldQuestion, FileText, CheckCircle2, Phone, FileDown, Download, Eye, X } from "lucide-react";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
@@ -74,32 +71,45 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
 
   const groupedItems = React.useMemo(() => {
     const raw = data.items || [];
-    const results = [];
-    let currentHead = null;
+    const normalizeGroupText = (value) =>
+      String(value || "")
+        .trim()
+        .replace(/\s+/g, " ")
+        .toLowerCase();
+    const groups = [];
+    const groupIndexByKey = new Map();
 
     for (let i = 0; i < raw.length; i++) {
       const it = raw[i];
-      const itemName = it.material_name || it.items?.material_name || it.item?.material_name || "Unknown Item";
-      const unit = it.unit || "";
+      const itemNameRaw = it.material_name || it.items?.material_name || it.item?.material_name || "Unknown Item";
+      const itemName = String(itemNameRaw || "").trim() || "Unknown Item";
+      const unit = String(it.unit || "").trim();
+      const itemGroupKey = normalizeGroupText(itemName);
+      const unitGroupKey = normalizeGroupText(unit);
+      const groupKey = `${itemGroupKey}__${unitGroupKey}`;
 
-      if (currentHead && currentHead._itemName === itemName && currentHead.unit === unit) {
-        const subIdx = currentHead._rowSpan + 1;
-        results.push({ ...it, _itemName: itemName, _isSubRow: true, _subIdx: subIdx });
-        currentHead._rowSpan++;
+      if (groupIndexByKey.has(groupKey)) {
+        const group = groups[groupIndexByKey.get(groupKey)];
+        const subIdx = group.head._rowSpan + 1;
+        group.rows.push({ ...it, _itemName: group.head._itemName, _isSubRow: true, _subIdx: subIdx });
+        group.head._rowSpan++;
       } else {
-        const newItem = {
+        const head = {
           ...it,
           _itemName: itemName,
           _isSubRow: false,
           _rowSpan: 1,
           _subIdx: 1,
-          _groupSrNo: results.filter(r => !r._isSubRow).length + 1
+          _itemGroupKey: itemGroupKey,
+          _unitGroupKey: unitGroupKey,
+          _groupSrNo: groups.length + 1
         };
-        results.push(newItem);
-        currentHead = newItem;
+        groups.push({ head, rows: [head] });
+        groupIndexByKey.set(groupKey, groups.length - 1);
       }
     }
-    return results;
+
+    return groups.flatMap((group) => group.rows);
   }, [data.items]);
 
   useEffect(() => {
@@ -192,25 +202,34 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
     setActionLoading(false);
   };
 
-  const handleSafeDownload = async () => {
+  const handleSafeDownload = async (download = true) => {
+    const orderId = data?.order?.id;
+    if (!orderId) { showToast("Order not ready", "error"); return; }
     if (pdfLoading) return;
     setPdfLoading(true);
-    const filename = `PO_${data.order?.order_number || "Order"}.pdf`;
     try {
-      const element = document.getElementById("view-order-print-area");
-      if (!element) { showToast("PDF not ready", "error"); return; }
-      await downloadElementAsPdf({ element, filename });
+      const url = `${API}/api/orders/${orderId}/pdf${download ? "?download=1" : ""}`;
+      if (download) {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error("PDF generation failed");
+        const blob = await res.blob();
+        const href = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = href;
+        a.download = `PO_${data.order?.order_number || "Order"}.pdf`;
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(href);
+      } else {
+        window.open(url, "_blank");
+      }
     } catch (err) {
-      console.error("PDF Download error:", err);
-      showToast("Download failed. Please try again.", "error");
+      console.error("PDF error:", err);
+      showToast("PDF failed. Please try again.", "error");
     } finally {
       setPdfLoading(false);
     }
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
 
   if (loading) {
     return (
@@ -561,7 +580,7 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
                           <p className="text-slate-900 font-bold text-[11px]">{c.personName || c.person_name}</p>
                           <div className="flex gap-2 text-[10px] text-slate-500">
                             <span>{c.designation}</span>
-                            <span>â€¢</span>
+                            <span>•</span>
                             <span>{c.contactNumber || c.contact_number}</span>
                           </div>
                         </div>
@@ -652,6 +671,9 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
                             <p className="text-[11px] font-black text-slate-800 uppercase tracking-wide leading-tight mb-2 whitespace-normal">
                               {it._itemName}
                             </p>
+                          )}
+                          {it._rowSpan > 1 && !it._isSubRow && (
+                            <p className="text-[9px] font-bold text-slate-300 uppercase tracking-widest mb-1.5">Point 1</p>
                           )}
                           {it._isSubRow && (
                             <p className="text-[9px] font-bold text-slate-300 uppercase tracking-widest mb-1.5">Point {it._subIdx}</p>
@@ -914,18 +936,22 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
       )}
 
       {activeTab === "PDF View" && (
-        <div className="px-4 py-8 bg-slate-200 min-h-[calc(100vh-200px)] flex flex-col items-center">
-          <div className="w-full max-w-[210mm] mb-6 flex justify-end gap-3 print:hidden">
-            <button onClick={handlePrint} className="flex items-center gap-2 px-6 py-2.5 bg-slate-700 hover:bg-slate-800 text-white font-bold rounded-xl shadow-lg transition-all text-xs uppercase uppercase transition-all">
-              <Printer size={18} /> Print PDF
-            </button>
-            <button disabled={pdfLoading} onClick={handleSafeDownload} className={`flex items-center gap-2 px-6 py-2.5 text-white font-bold rounded-xl shadow-lg transition-all text-xs uppercase ${pdfLoading ? 'bg-slate-400' : 'bg-[#1b3e8a] hover:bg-[#16326d]'}`}>
-              {pdfLoading ? "Downloading..." : "Download PDF"}
+        <div className="bg-slate-200">
+          <div className="px-4 py-3 flex justify-end print:hidden">
+            <button disabled={pdfLoading} onClick={() => handleSafeDownload(true)} className={`flex items-center gap-2 px-6 py-2.5 text-white font-bold rounded-xl shadow-lg transition-all text-xs uppercase ${pdfLoading ? 'bg-slate-400' : 'bg-[#1b3e8a] hover:bg-[#16326d]'}`}>
+              <Download size={14} /> {pdfLoading ? "Working..." : "Download PDF"}
             </button>
           </div>
-          <div id="view-order-print-area" className="w-full max-w-[210mm] print:w-full">
-            <OrderPDFTemplate order={order} items={items} comp={comp} vend={vend} site={site} contacts={contacts} />
-          </div>
+          {data?.order?.id && (
+            <div className="flex justify-center px-4 pb-8 bg-slate-300">
+              <iframe
+                title="Order PDF"
+                src={`${API}/api/orders/${data.order.id}/pdf?t=${Date.now()}#toolbar=0&navpanes=0&statusbar=0&messages=0&view=FitH`}
+                className="bg-white shadow-xl"
+                style={{ border: 0, width: "210mm", maxWidth: "100%", height: "297mm" }}
+              />
+            </div>
+          )}
         </div>
       )}
     </div>

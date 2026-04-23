@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const express  = require("express");
 const router   = express.Router();
 const multer   = require("multer");
@@ -292,6 +293,138 @@ router.put("/:id", upload.fields([
     res.json({ success: true });
   } catch (err) {
     console.error("Order update error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ════════════════════════════════════
+   PDF GENERATION (Puppeteer)
+   ════════════════════════════════════ */
+const { renderPdf } = require("../services/pdfService");
+const { renderOrderHtml, renderHeaderTemplate, renderFooterTemplate, renderPreviewHeader } = require("../pdf/orderTemplate");
+
+const loadOrderForRender = async (orderId) => {
+  const { data: order, error: orderErr } = await supabase.schema("procurement")
+    .from("purchase_orders")
+    .select("*, sites(*), companies(*), vendors(*), contact_person:contacts(*)")
+    .eq("id", orderId)
+    .single();
+  if (orderErr) throw orderErr;
+
+  const { data: items, error: itemErr } = await supabase.schema("procurement")
+    .from("purchase_order_items")
+    .select("*, items(*)")
+    .eq("order_id", orderId);
+  if (itemErr) throw itemErr;
+
+  const cleanOrder = sanitizeRichTextDeep(order);
+  const cleanItems = sanitizeRichTextDeep(items || []).map((row) => ({
+    ...row,
+    material_name: row.material_name || row.items?.material_name,
+  }));
+  const comp = cleanOrder.companies || {};
+  const vend = cleanOrder.vendors || {};
+  const site = cleanOrder.sites || {};
+  // Use contacts from snapshot (same as ViewOrder component)
+  const finalContacts = cleanOrder.snapshot?.contacts || [];
+  
+  return { cleanOrder, cleanItems, comp, vend, site, contacts: finalContacts };
+};
+
+router.get("/:id/preview", async (req, res) => {
+  try {
+    const { cleanOrder, cleanItems, comp, vend, site, contacts } = await loadOrderForRender(req.params.id);
+    const logoDataUri = await fetchAsDataUri(comp.logo_url || comp.logoUrl);
+    const stampDataUri = await fetchAsDataUri(comp.stamp_url || comp.stampUrl);
+    const signDataUri = await fetchAsDataUri(comp.sign_url || comp.signUrl);
+    const compWithImages = { ...comp, stampDataUri, signDataUri };
+    const html = renderOrderHtml(
+      {
+        order: cleanOrder,
+        items: cleanItems,
+        comp: compWithImages,
+        vend,
+        site,
+        contacts,
+        previewHeaderHtml: renderPreviewHeader(cleanOrder, comp, logoDataUri),
+      },
+      { preview: true }
+    );
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.end(html);
+  } catch (err) {
+    console.error("PDF preview error:", err);
+    res.status(500).send(`<pre>${err.message}</pre>`);
+  }
+});
+
+const logoCache = new Map();
+const LOGO_TTL_MS = 60 * 60 * 1000;
+
+const fetchAsDataUri = async (url) => {
+  if (!url) return "";
+  const cached = logoCache.get(url);
+  if (cached && Date.now() - cached.t < LOGO_TTL_MS) return cached.v;
+  try {
+    const r = await fetch(url);
+    if (!r.ok) return "";
+    const ct = r.headers.get("content-type") || "image/png";
+    const buf = Buffer.from(await r.arrayBuffer());
+    const v = `data:${ct};base64,${buf.toString("base64")}`;
+    logoCache.set(url, { v, t: Date.now() });
+    return v;
+  } catch (e) {
+    console.warn("Logo fetch failed:", e.message);
+    return "";
+  }
+};
+
+const pdfCache = new Map();
+const PDF_CACHE_MAX = 50;
+
+router.get("/:id/pdf", async (req, res) => {
+  try {
+    const { cleanOrder, cleanItems, comp, vend, site, contacts } = await loadOrderForRender(req.params.id);
+    const stampDataUri = await fetchAsDataUri(comp.stamp_url || comp.stampUrl);
+    const signDataUri = await fetchAsDataUri(comp.sign_url || comp.signUrl);
+    const compWithImages = { ...comp, stampDataUri, signDataUri };
+    const html = renderOrderHtml({ order: cleanOrder, items: cleanItems, comp: compWithImages, vend, site, contacts });
+    const logoDataUri = await fetchAsDataUri(comp.logo_url || comp.logoUrl);
+    const headerTemplate = renderHeaderTemplate(cleanOrder, comp, logoDataUri);
+    const footerTemplate = renderFooterTemplate(comp);
+    const cacheKey = crypto
+      .createHash("sha1")
+      .update([
+        cleanOrder.id,
+        cleanOrder.updated_at || cleanOrder.created_at || "",
+        html,
+        headerTemplate,
+        footerTemplate,
+      ].join("__"))
+      .digest("hex");
+
+    let pdfBuffer = pdfCache.get(cacheKey);
+    if (!pdfBuffer) {
+      pdfBuffer = await renderPdf(html, {
+        headerTemplate,
+        footerTemplate,
+      });
+      if (pdfCache.size >= PDF_CACHE_MAX) pdfCache.delete(pdfCache.keys().next().value);
+      pdfCache.set(cacheKey, pdfBuffer);
+    }
+
+    const disposition = req.query.download === "1" ? "attachment" : "inline";
+    const filename = `${cleanOrder.order_number || "order"}.pdf`.replace(/[\/\\]/g, "_");
+
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `${disposition}; filename="${filename}"`);
+    res.setHeader("Content-Length", pdfBuffer.length);
+    res.end(pdfBuffer);
+  } catch (err) {
+    console.error("PDF generation error:", err);
     res.status(500).json({ error: err.message });
   }
 });

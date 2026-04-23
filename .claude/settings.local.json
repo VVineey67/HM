@@ -15,7 +15,9 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git push:*)",
-      "Bash(curl -sv \"https://hm-production-7401.up.railway.app/\")"
+      "Bash(curl -sv \"https://hm-production-7401.up.railway.app/\")",
+      "Bash(cp \"d:/Next/BMS/frontend/src/pages/Procurement/OrderPDFTemplate.jsx\" \"d:/Next/BMS/frontend/src/pages/Procurement/SitcPDF.jsx\")",
+      "Bash(cp \"d:/Next/BMS/frontend/src/pages/Procurement/OrderPDFTemplate.jsx\" \"d:/Next/BMS/frontend/src/pages/Procurement/SupplyPDF.jsx\")"
     ]
   }
 }

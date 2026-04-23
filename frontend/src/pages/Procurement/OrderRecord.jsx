@@ -1,20 +1,8 @@
-import React, { useState, useEffect, useRef } from "react";
-import { List, Search, Trash2, Eye, Pencil, FileDown, Rocket, X, Printer } from "lucide-react";
-import html2pdf from "html2pdf.js";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
+import React, { useState, useEffect } from "react";
+import { List, Search, Trash2, Eye, Pencil, FileDown, Rocket, X } from "lucide-react";
 import ViewOrder from "./ViewOrder";
-import OrderPDFTemplate from "./OrderPDFTemplate";
-import { createPdfBlobFromElement, downloadElementAsPdf, printElement } from "./pdfUtils";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
-const normalizeRichTextHtml = (value) =>
-  typeof value === "string"
-    ? value.replace(/&nbsp;|&#160;|\u00A0/g, " ")
-    : value;
-
-const normalizeRichTextArray = (value) =>
-  Array.isArray(value) ? value.map(normalizeRichTextHtml) : [];
 
 export default function OrderRecord(props) {
   const { project } = props;
@@ -24,10 +12,9 @@ export default function OrderRecord(props) {
   const [toast, setToast] = useState(null);
   const [viewOrderId, setViewOrderId] = useState(() => sessionStorage.getItem("bms_view_order_id") || null);
   const [activeTab, setActiveTab] = useState("All");
-  const [pdfPreview, setPdfPreview] = useState(null); // { order, items, comp, vend, site, contacts }
-  const [pdfPreviewLoading, setPdfPreviewLoading] = useState(false);
+  const [pdfPreviewId, setPdfPreviewId] = useState(null);
+  const [pdfPreviewNonce, setPdfPreviewNonce] = useState(0);
   const [pdfDownloading, setPdfDownloading] = useState(false);
-  const pdfRef = useRef(null);
 
   const TABS = ["All", "Draft", "Review", "Pending Issue", "Issued", "Rejected", "Revert", "Recall"];
 
@@ -93,395 +80,30 @@ export default function OrderRecord(props) {
     } catch { showToast("Failed to delete", "error"); }
   };
 
-  const openPDFPreview = async (orderId) => {
-    clearPreparedPdf();
-    setPdfPreviewLoading(true);
-    try {
-      const res = await fetch(`${API}/api/orders/${orderId}`);
-      const json = await res.json();
-      const { order, items } = json;
-      const snap = order.snapshot || {};
-      const isKacha = ["Draft", "Review"].includes(order.status);
-      const getVal = (v) => Array.isArray(v) ? v[0] : v;
-      const comp = isKacha ? (getVal(order.companies) || snap.company || {}) : (snap.company || getVal(order.companies) || {});
-      const vend = isKacha ? (getVal(order.vendors) || snap.vendor || {}) : (snap.vendor || getVal(order.vendors) || {});
-      const site = isKacha ? (getVal(order.sites) || snap.site || {}) : (snap.site || getVal(order.sites) || {});
-      const liveContact = getVal(order.contact_person);
-      const contacts = snap.contacts || (liveContact ? [liveContact] : []);
-      setPdfPreview({ order, items, comp, vend, site, contacts });
-    } catch {
-      showToast("Failed to load PDF preview", "error");
-    }
-    setPdfPreviewLoading(false);
+  const openPDFPreview = (orderId) => {
+    setPdfPreviewNonce(Date.now());
+    setPdfPreviewId(orderId);
   };
 
-  const _handlePDFDownload = async () => {
-    if (pdfDownloading) return;
-    const element = document.getElementById("order-record-pdf-area");
-    if (!element) { showToast("PDF not ready, please wait", "error"); return; }
+  const handlePDFDownload = async () => {
+    if (!pdfPreviewId || pdfDownloading) return;
     setPdfDownloading(true);
     try {
-      const fixColors = (src, dst) => {
-        const cs = window.getComputedStyle(src);
-        const props = ['color','background-color','border-top-color','border-bottom-color','border-left-color','border-right-color'];
-        props.forEach(p => { const v = cs.getPropertyValue(p); if (v) dst.style.setProperty(p, v, 'important'); });
-        dst.style.boxShadow = 'none';
-        for (let i = 0; i < src.children.length; i++) {
-          if (dst.children[i]) fixColors(src.children[i], dst.children[i]);
-        }
-      };
-      const clone = element.cloneNode(true);
-      fixColors(element, clone);
-      clone.style.cssText = "position:fixed;top:-9999px;left:0;width:210mm;z-index:-1;";
-      document.body.appendChild(clone);
-
-      const options = {
-        margin: [0, 0, 0, 0],
-        filename: `PO_${pdfPreview?.order?.order_number || "Order"}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, letterRendering: true, logging: false, scrollY: 0, windowWidth: 794 },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-      };
-      await html2pdf().from(clone).set(options).save();
-      document.body.removeChild(clone);
-    } catch (err) {
-      console.error("PDF error:", err);
+      const res = await fetch(`${API}/api/orders/${pdfPreviewId}/pdf?download=1&t=${pdfPreviewNonce || Date.now()}`);
+      if (!res.ok) throw new Error("PDF failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `PO_${pdfPreviewId}.pdf`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
       showToast("Download failed", "error");
     }
     setPdfDownloading(false);
   };
 
-  const handleSafePDFDownload = async () => {
-    if (pdfDownloading) return;
-    const element = pdfRef.current;
-    if (!element) { showToast("PDF not ready, please wait", "error"); return; }
-    setPdfDownloading(true);
-    try {
-      await downloadElementAsPdf({
-        element,
-        filename: `PO_${pdfPreview?.order?.order_number || "Order"}.pdf`,
-      });
-    } catch (err) {
-      console.error("PDF error:", err);
-      showToast("Download failed", "error");
-    } finally {
-      setPdfDownloading(false);
-    }
-  };
-
-  const handlePDFPrint = async () => {
-    try {
-      const element = document.getElementById("order-record-pdf-area");
-      if (!element) { showToast("PDF not ready, please wait", "error"); return; }
-      await printElement({ element, title: pdfPreview?.order?.order_number || "Order PDF" });
-    } catch (err) {
-      console.error("PDF print error:", err);
-      showToast(err.message?.includes("Popup") ? "Allow popups for this site to print" : "Print failed", "error");
-    }
-  };
-
-  // Convert image URL to Base64 to embed in PDF
-  const getBase64Image = async (url) => {
-    if (!url) return null;
-    try {
-      const response = await fetch(url);
-      const blob = await response.blob();
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result);
-        reader.readAsDataURL(blob);
-      });
-    } catch {
-      return null;
-    }
-  };
-
-  /* ════════════════════════════════════════════════════════
-     PROFESSIONAL PDF EXPORT
-     ════════════════════════════════════════════════════════ */
-  const _exportPDF = async (orderId) => {
-    try {
-      showToast("Generating PDF... Please wait.");
-      const res = await fetch(`${API}/api/orders/${orderId}`);
-      const { order, items } = await res.json();
-      
-      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const pageHeight = doc.internal.pageSize.getHeight();
-      
-      const snap = order.snapshot || {};
-      const sComp = snap.company || order.companies || {};
-      const sVend = snap.vendor || order.vendors || {};
-      const sSite = snap.site || order.sites || {};
-
-      // Load Images
-      const logoB64 = await getBase64Image(sComp.logoUrl || sComp.logo_url);
-      const signB64 = await getBase64Image(sComp.signUrl || sComp.sign_url);
-      
-      let cursorY = 15;
-
-      /* ── HEADER SECTION ── */
-      if (logoB64) {
-        doc.addImage(logoB64, "PNG", 15, cursorY, 30, 20, "", "FAST");
-      }
-      
-      // Company Details (Right aligned)
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(14);
-      doc.text(sComp.companyName?.toUpperCase() || sComp.company_name?.toUpperCase() || "", pageWidth - 15, cursorY + 5, { align: "right" });
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      doc.text(sComp.address || "", pageWidth - 15, cursorY + 10, { align: "right" });
-      doc.text(`GSTIN: ${sComp.gstin || "N/A"}`, pageWidth - 15, cursorY + 14, { align: "right" });
-      
-      cursorY += 25;
-      
-      // Separator
-      doc.setDrawColor(200, 200, 200); doc.setLineWidth(0.5); doc.line(15, cursorY, pageWidth - 15, cursorY);
-      cursorY += 8;
-
-      /* ── ORDER TITLE & METADATA ── */
-      doc.setFont("helvetica", "bold"); doc.setFontSize(16);
-      doc.text(order.order_type === "Supply" ? "PURCHASE ORDER" : "WORK ORDER", pageWidth / 2, cursorY, { align: "center" });
-      cursorY += 10;
-      
-      doc.setFontSize(10);
-      
-      // Meta Grid
-      doc.text("Order No:", 15, cursorY);
-      doc.setFont("helvetica", "normal");
-      doc.text(order.order_number, 40, cursorY);
-      
-      doc.setFont("helvetica", "bold");
-      doc.text("Date:", pageWidth / 2 + 10, cursorY);
-      doc.setFont("helvetica", "normal");
-      doc.text(new Date(order.created_at).toLocaleDateString("en-IN"), pageWidth / 2 + 30, cursorY);
-      
-      cursorY += 6;
-      doc.setFont("helvetica", "bold");
-      doc.text("Subject:", 15, cursorY);
-      doc.setFont("helvetica", "normal");
-      doc.text(order.subject || "N/A", 40, cursorY);
-      
-      cursorY += 6;
-      doc.setFont("helvetica", "bold");
-      doc.text("Ref No:", 15, cursorY);
-      doc.setFont("helvetica", "normal");
-      doc.text(order.ref_number || "N/A", 40, cursorY);
-
-      cursorY += 12;
-
-      /* ── ADDRESSES ── */
-      doc.setDrawColor(0); doc.setLineWidth(0.2);
-      
-      // left box: VENDOR (Bill to)
-      doc.rect(15, cursorY, 85, 35);
-      doc.setFont("helvetica", "bold");
-      doc.text("VENDOR / BILL TO:", 18, cursorY + 5);
-      doc.setFont("helvetica", "normal");
-      doc.text(sVend.vendorName || sVend.vendor_name || "", 18, cursorY + 11);
-      doc.setFontSize(8);
-      const vendorAddr = doc.splitTextToSize(sVend.address || "", 80);
-      doc.text(vendorAddr, 18, cursorY + 16);
-      doc.text(`GSTIN: ${sVend.gstin || "N/A"}`, 18, cursorY + 31);
-      
-      // right box: SITE (Ship to)
-      doc.rect(105, cursorY, 90, 35);
-      doc.setFont("helvetica", "bold"); doc.setFontSize(10);
-      doc.text("SHIP TO / DELIVERY SITE:", 108, cursorY + 5);
-      doc.setFont("helvetica", "normal");
-      doc.text(sSite.siteName || sSite.site_name || "", 108, cursorY + 11);
-      doc.setFontSize(8);
-      const siteAddr = doc.splitTextToSize(sSite.siteAddress || sSite.site_address || "", 85);
-      doc.text(siteAddr, 108, cursorY + 16);
-
-      cursorY += 45;
-
-      /* ── ITEMS TABLE ── */
-      const tableHead = [["S.No", "Description", "UOM", "Qty", "Rate (Rs)", "Tax %", "Amount (Rs)"]];
-      const tableBody = items.map((it, i) => [
-        i + 1,
-        // Include scope of work if WO
-        it.description + (it.scope_of_work ? `\nScope: ${it.scope_of_work}` : ""),
-        it.unit?.toUpperCase() || "",
-        it.qty || 0,
-        Number(it.unit_rate).toLocaleString("en-IN", { minimumFractionDigits: 2 }),
-        it.tax_pct || "0",
-        Number(it.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 }),
-      ]);
-
-      autoTable(doc, {
-        startY: cursorY,
-        head: tableHead,
-        body: tableBody,
-        theme: "grid",
-        styles: { fontSize: 8, cellPadding: 3 },
-        headStyles: { fillColor: [40, 50, 70], textColor: 255, fontStyle: "bold" },
-        columnStyles: {
-          0: { cellWidth: 10, halign: "center" },
-          1: { cellWidth: "auto" },
-          2: { cellWidth: 15, halign: "center" },
-          3: { cellWidth: 15, halign: "center" },
-          4: { cellWidth: 25, halign: "right" },
-          5: { cellWidth: 15, halign: "center" },
-          6: { cellWidth: 30, halign: "right" },
-        },
-      });
-
-      cursorY = doc.lastAutoTable.finalY + 10;
-
-      /* ── TOTALS ── */
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(10);
-      const totalsObj = order.totals || {};
-      const tY = cursorY;
-      doc.text("Subtotal:", 145, tY, { align: "right" });
-      doc.setFont("helvetica", "normal");
-      doc.text((totalsObj.subtotal || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 }), 190, tY, { align: "right" });
-      
-      doc.setFont("helvetica", "bold");
-      doc.text("GST:", 145, tY + 6, { align: "right" });
-      doc.setFont("helvetica", "normal");
-      doc.text((totalsObj.gst || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 }), 190, tY + 6, { align: "right" });
-      
-      doc.setFont("helvetica", "bold");
-      doc.text("Grand Total:", 145, tY + 12, { align: "right" });
-      doc.text((totalsObj.grandTotal || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 }), 190, tY + 12, { align: "right" });
-
-      doc.setFontSize(9);
-      doc.text(`Amount in Words:`, 15, tY);
-      doc.setFont("helvetica", "italic");
-      doc.text(totalsObj.words || "", 15, tY + 6);
-      
-      cursorY += 25;
-
-      /* ── NOTES ── */
-      if (order.notes && order.notes.trim() !== "" && order.notes !== "<p><br></p>") {
-        if (cursorY > pageHeight - 60) { doc.addPage(); cursorY = 20; }
-        doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.text("ORDER NOTES:", 15, cursorY);
-        cursorY += 6;
-        doc.setFont("helvetica", "normal"); doc.setFontSize(9);
-        
-        // Basic HTML to text conversion for PDF
-        const cleanNotes = normalizeRichTextHtml(order.notes)
-          .replace(/<br\s*\/?>/gi, "\n")
-          .replace(/<\/p>/gi, "\n")
-          .replace(/<li>/gi, "• ")
-          .replace(/<\/li>/gi, "\n")
-          .replace(/<[^>]+>/g, ""); // strip remaining tags
-          
-        const noteLines = doc.splitTextToSize(cleanNotes.trim(), 180);
-        doc.text(noteLines, 15, cursorY);
-        cursorY += (noteLines.length * 5) + 8;
-      }
-
-      /* ── CLAUSES ── */
-      // Check if page break needed
-      if (cursorY > pageHeight - 80) {
-        doc.addPage();
-        cursorY = 20;
-      }
-      
-      const tc = normalizeRichTextArray(order.terms_conditions || []);
-      const pt = normalizeRichTextArray(order.payment_terms || []);
-      const gl = normalizeRichTextArray(order.governing_laws || []);
-      const anx = normalizeRichTextArray(order.annexures || []);
-      
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(10);
-      
-      if (tc.length) {
-        doc.text("Terms & Conditions:", 15, cursorY);
-        cursorY += 5;
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(8);
-        tc.forEach((t, i) => {
-          const lines = doc.splitTextToSize(`${i+1}. ${t}`, 180);
-          doc.text(lines, 15, cursorY);
-          cursorY += (lines.length * 4) + 1;
-        });
-        cursorY += 5;
-      }
-
-      if (pt.length) {
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(10);
-        doc.text("Payment Terms:", 15, cursorY);
-        cursorY += 5;
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(8);
-        pt.forEach((t, i) => {
-          const lines = doc.splitTextToSize(`${i+1}. ${t}`, 180);
-          doc.text(lines, 15, cursorY);
-          cursorY += (lines.length * 4) + 1;
-        });
-        cursorY += 5;
-      }
-
-      if (gl.length) {
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(10);
-        doc.text("Governing Laws:", 15, cursorY);
-        cursorY += 5;
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(8);
-        gl.forEach((t, i) => {
-          const lines = doc.splitTextToSize(`${i+1}. ${t}`, 180);
-          doc.text(lines, 15, cursorY);
-          cursorY += (lines.length * 4) + 1;
-        });
-        cursorY += 5;
-      }
-
-      if (anx.length) {
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(10);
-        doc.text("Annexures:", 15, cursorY);
-        cursorY += 5;
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(8);
-        anx.forEach((t, i) => {
-          const lines = doc.splitTextToSize(`${i+1}. ${t}`, 180);
-          doc.text(lines, 15, cursorY);
-          cursorY += (lines.length * 4) + 1;
-        });
-        cursorY += 5;
-      }
-
-      /* ── FOOTER & SIGNATORY ── */
-      const footerY = pageHeight - 45;
-      if (cursorY > footerY) {
-         doc.addPage();
-      }
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(10);
-      doc.text(`For ${order.companies?.company_name || ""}`, pageWidth - 15, footerY, { align: "right" });
-      
-      if (signB64) {
-        doc.addImage(signB64, "PNG", pageWidth - 55, footerY + 2, 40, 15, "", "FAST");
-      }
-      
-      doc.setFont("helvetica", "normal");
-      doc.text("Authorised Signatory", pageWidth - 15, footerY + 20, { align: "right" });
-      
-      // Footer borders
-      doc.setDrawColor(200, 200, 200);
-      doc.setLineWidth(0.5);
-      doc.line(15, pageHeight - 15, pageWidth - 15, pageHeight - 15);
-      doc.setFontSize(8);
-      doc.setTextColor(150, 150, 150);
-      doc.text("This is a computer generated document.", pageWidth / 2, pageHeight - 10, { align: "center" });
-
-      doc.save(`Order_${order.order_number.replace(/\//g, "_")}.pdf`);
-      showToast("PDF exported successfully!");
-
-    } catch (err) {
-      console.error(err);
-      showToast("Error generating PDF", "error");
-    }
-  };
 
   const filtered = orders.filter(o => {
     const matchesSearch = 
@@ -572,9 +194,9 @@ export default function OrderRecord(props) {
               <tbody className="bg-white">
                 {filtered.map(o => {
                   const snap = o.snapshot || {};
-                  const vName = snap.vendor?.vendorName || snap.vendor?.vendor_name || o.vendors?.vendor_name || "—";
-                  const sCode = snap.site?.siteCode || snap.site?.site_code || o.sites?.site_code || "—";
-                  const cCode = snap.company?.companyCode || snap.company?.company_code || o.companies?.company_code || "—";
+                  const vName = snap.vendor?.vendorName || snap.vendor?.vendor_name || o.vendors?.vendor_name || "�";
+                  const sCode = snap.site?.siteCode || snap.site?.site_code || o.sites?.site_code || "�";
+                  const cCode = snap.company?.companyCode || snap.company?.company_code || o.companies?.company_code || "�";
                   
                   const typeCode = o.order_type === "Supply" ? "PO" : "WO";
                   const prefix = `${cCode}/${sCode}/${typeCode}/`;
@@ -588,9 +210,9 @@ export default function OrderRecord(props) {
                       <td className="px-3 py-3.5 border-b border-r border-slate-100 font-bold text-indigo-600 text-xs" style={{maxWidth:'65px', overflow:'hidden'}}>
                         <span style={{display:'block', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} title={sCode}>{sCode}</span>
                       </td>
-                      <td className="px-3 py-3.5 border-b border-r border-slate-200 font-mono font-bold text-xs" style={{maxWidth:'110px', overflow:'hidden'}} title={displayNo || '—'}>
+                      <td className="px-3 py-3.5 border-b border-r border-slate-200 font-mono font-bold text-xs" style={{maxWidth:'110px', overflow:'hidden'}} title={displayNo || '�'}>
                         <span style={{display:'block', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} className={displayNo ? "text-slate-800" : "text-slate-300"}>
-                          {displayNo || "—"}
+                          {displayNo || "�"}
                         </span>
                       </td>
                       <td className="px-3 py-3.5 border-b border-r border-slate-100">
@@ -603,7 +225,7 @@ export default function OrderRecord(props) {
                       </td>
                       <td className="px-3 py-3.5 border-b border-r border-slate-100 text-slate-500 text-[11px] font-medium" style={{whiteSpace:'nowrap'}}>{new Date(o.date_of_creation || o.created_at).toLocaleDateString("en-IN")}</td>
                       <td className="px-3 py-3.5 border-b border-r border-slate-100 text-slate-700 text-xs font-semibold" style={{overflow:'hidden'}}>
-                        <span style={{display:'block', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} title={o.subject}>{o.subject || "—"}</span>
+                        <span style={{display:'block', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} title={o.subject}>{o.subject || "�"}</span>
                       </td>
                       <td className="px-3 py-3.5 border-b border-r border-slate-100 text-slate-700 text-xs font-medium" style={{overflow:'hidden'}}>
                         <span style={{display:'block', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} title={vName}>{vName}</span>
@@ -658,52 +280,32 @@ export default function OrderRecord(props) {
       </div>
       )}
 
-      {/* PDF Preview Side Panel */}
-      {(pdfPreview || pdfPreviewLoading) && (
+      {pdfPreviewId && (
         <div className="fixed inset-0 z-50 flex">
-          {/* Backdrop */}
-          <div className="flex-1 bg-black/50" onClick={() => setPdfPreview(null)} />
-          {/* Panel */}
+          <div className="flex-1 bg-black/50" onClick={() => setPdfPreviewId(null)} />
           <div className="w-full max-w-[860px] bg-slate-200 flex flex-col h-full shadow-2xl">
-            {/* Panel Header */}
             <div className="bg-white border-b border-slate-200 px-5 py-3 flex items-center justify-between shrink-0">
               <span className="font-bold text-slate-700 text-sm">PDF Preview</span>
               <div className="flex items-center gap-2">
-                <button onClick={handlePDFPrint}
-                  className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white font-bold rounded-lg text-xs uppercase tracking-wider transition-all">
-                  <Printer size={14} /> Print
-                </button>
-                <button disabled={pdfDownloading} onClick={handleSafePDFDownload}
+                <button disabled={pdfDownloading} onClick={handlePDFDownload}
                   className={`flex items-center gap-2 px-4 py-2 text-white font-bold rounded-lg text-xs uppercase tracking-wider transition-all ${pdfDownloading ? 'bg-slate-400 cursor-not-allowed' : 'bg-[#1b3e8a] hover:bg-[#16326d]'}`}>
                   {pdfDownloading
                     ? <div className="h-3 w-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     : <FileDown size={14} />}
                   {pdfDownloading ? "Downloading..." : "Download PDF"}
                 </button>
-                <button onClick={() => { clearPreparedPdf(); setPdfPreview(null); }}
+                <button onClick={() => setPdfPreviewId(null)}
                   className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-all">
                   <X size={18} />
                 </button>
               </div>
             </div>
-            {/* PDF Content */}
-            <div className="flex-1 overflow-y-auto p-4">
-              {pdfPreviewLoading ? (
-                <div className="flex items-center justify-center h-64">
-                  <div className="h-8 w-8 border-4 border-[#1b3e8a] border-t-transparent rounded-full animate-spin" />
-                </div>
-              ) : (
-                <div id="order-record-pdf-area" ref={pdfRef}>
-                  <OrderPDFTemplate
-                    order={pdfPreview.order}
-                    items={pdfPreview.items}
-                    comp={pdfPreview.comp}
-                    vend={pdfPreview.vend}
-                    site={pdfPreview.site}
-                    contacts={pdfPreview.contacts}
-                  />
-                </div>
-              )}
+            <div className="flex-1 bg-slate-300">
+              <iframe
+                title="Order PDF"
+                src={`${API}/api/orders/${pdfPreviewId}/pdf?t=${pdfPreviewNonce}#toolbar=0&navpanes=0&statusbar=0&messages=0&view=FitH`}
+                className="w-full h-full border-0 bg-white"
+              />
             </div>
           </div>
         </div>

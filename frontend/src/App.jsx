@@ -64,14 +64,14 @@ import VendorList from "./pages/Procurement/VendorList";
 import CompanyList from "./pages/Procurement/CompanyList";
 import CreateOrder from "./pages/Procurement/CreateOrder";
 import OrderRecord from "./pages/Procurement/OrderRecord";
-import TermCondition from "./pages/Procurement/TermCondition";
-import PaymentTerms from "./pages/Procurement/PaymentTerms";
-import GovernmentLaws from "./pages/Procurement/GovernmentLaws";
+import TermCondition from "./pages/Procurement/clauses/TermCondition";
+import PaymentTerms from "./pages/Procurement/clauses/PaymentTerms";
+import GovernmentLaws from "./pages/Procurement/clauses/GovernmentLaws";
 import SiteList from "./pages/Procurement/SiteList";
 import UOMList from "./pages/Procurement/UOMList";
 import CategoryList from "./pages/Procurement/CategoryList";
 import ContactList from "./pages/Procurement/ContactList";
-import AnnexureMaster from "./pages/Procurement/AnnexureMaster";
+import AnnexureMaster from "./pages/Procurement/clauses/AnnexureMaster";
 import ApprovalConfig from "./components/ApprovalConfig";
 
 // Images

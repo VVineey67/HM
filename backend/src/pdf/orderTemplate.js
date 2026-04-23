@@ -1,0 +1,574 @@
+const {
+  escapeHtml,
+  formatDate,
+  formatINR,
+  amountToWords,
+  sanitizeHtml,
+  parseDescription,
+  parseMake,
+  groupItems,
+} = require("./helpers");
+
+const css = `
+  /* Add consistent gap below the repeated PDF header on pages 2+ */
+  @page { size: A4; margin: 31mm 10mm 22mm 10mm; }
+  /* Keep page 1 slightly tighter */
+  @page :first { margin-top: 27mm; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; color: #000; font-family: Arial, Helvetica, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-size: 10px; line-height: 1.35; }
+  :root { --box-line: 1px solid #444; }
+
+  .page { position: relative; padding-top: 18px; }
+  .page + .page { page-break-before: always; }
+
+  table.meta { width: 100%; border-collapse: collapse; border: var(--box-line); margin: -2mm 0 0; }
+  table.meta td { border: var(--box-line); padding: 4px 6px; vertical-align: middle; width: 50%; }
+  table.meta .label { font-size: 9px; font-weight: 900; text-transform: uppercase; display: inline-block; min-width: 86px; margin-right: 15px; }
+  table.meta .value { font-size: 10.5px; font-weight: 700; }
+
+  .details-wrap { display: flex; border: var(--box-line); border-top: 0; margin-bottom: 0; }
+  .details-col { flex: 1; padding: 8px 10px; }
+  .details-col + .details-col { border-left: var(--box-line); }
+  .details-tab {
+    clip-path: polygon(0 0, 100% 0, 85% 100%, 0 100%);
+    background: #000; color: #fff; padding: 3px 22px 3px 8px;
+    font-weight: 700; font-size: 9px; text-transform: uppercase;
+    display: inline-block; margin-bottom: 6px;
+  }
+  .party-name { font-size: 12px; font-weight: 700; margin-bottom: 6px; }
+  .card { margin-bottom: 6px; }
+  .card-title { font-size: 8.5px; font-weight: 700; text-transform: uppercase; margin-bottom: 3px; }
+  .card-text { font-size: 9.5px; font-weight: 500; }
+  .kv { display: grid; grid-template-columns: 70px 1fr; gap: 3px; font-size: 9px; margin-bottom: 2px; }
+  .kv-label { font-weight: 700; text-transform: uppercase; font-size: 8px; }
+  .kv-value { font-weight: 400; }
+  .kv-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 12px; }
+
+  .subject-bar {
+    border: var(--box-line); border-top: 0; background: #d4d4d8;
+    padding: 6px 14px; text-align: center; margin: 0 0 8px 0;
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px;
+  }
+  .subject-bar .lbl { margin-right: 8px; }
+
+  table.items { width: 100%; border-collapse: collapse; border: 0; font-size: 10px; }
+  table.items thead { background: #d4d4d8; display: table-header-group; }
+  table.items thead .page-gap th {
+    padding: 0;
+    height: 0;
+    border-left: 0;
+    border-right: 0;
+    border-top: 0;
+    border-bottom: 0;
+    background: #fff;
+  }
+  table.items th, table.items td { border: var(--box-line); padding: 5px 6px; vertical-align: top; }
+  table.items th { font-size: 9.5px; font-weight: 700; text-transform: uppercase; text-align: center; }
+  table.items .r { text-align: right; white-space: nowrap; }
+  table.items .c { text-align: center; white-space: nowrap; }
+  table.items .item-name { font-weight: 700; text-transform: uppercase; font-size: 10px; margin-bottom: 2px; }
+  table.items td.merge-first {
+    /* hide the first inner row line to simulate merge */
+    border-bottom: 0;
+  }
+  table.items td.merge-fill {
+    border-top: 0;
+    border-bottom: 0;
+    visibility: hidden;
+  }
+  table.items td.merge-last {
+    border-top: 0;
+    /* keep bottom border on the last merged row */
+    visibility: hidden;
+  }
+  table.items .item-desc { text-align: justify; }
+  table.items tfoot { display: table-footer-group; }
+  table.items tfoot td {
+    padding: 0;
+    height: 0;
+    line-height: 0;
+    border: 0;
+    border-top: var(--box-line);
+    background: #fff;
+  }
+  table.items td.merge-fill .item-name,
+  table.items td.merge-last .item-name { display: none; }
+  table.items .item-desc p, table.items .item-desc div { margin: 0 0 2px 0; }
+  table.items .item-desc ul { margin: 2px 0; padding-left: 14px; list-style: disc; }
+  table.items .item-desc ol { margin: 2px 0; padding-left: 14px; list-style: decimal; }
+  table.items .meta-row { font-size: 9px; margin-top: 2px; }
+  table.items .meta-row b { font-weight: 700; }
+  table.items .amount-col { background: #fafafa; font-weight: 700; }
+  tr.item-row { page-break-inside: avoid; break-inside: avoid-page; }
+
+  .totals-wrap { display: flex; justify-content: space-between; gap: 14px; border: var(--box-line); border-top: 0; padding: 8px 10px; margin-bottom: 8px; page-break-inside: avoid; break-inside: avoid-page; }
+  .words-box { flex: 1; background: #e4e4e7; padding: 8px 10px; }
+  .words-box .words-label { font-size: 8px; font-weight: 700; text-transform: uppercase; margin-bottom: 2px; }
+  .words-box .words-text { font-size: 10.5px; font-weight: 700; }
+  .totals-box { width: 240px; }
+  .totals-row { display: flex; justify-content: space-between; padding: 4px 10px; border-bottom: 1px solid #e2e8f0; font-size: 9.5px; }
+  .totals-row .lbl { font-weight: 700; text-transform: uppercase; }
+  .totals-row .val { font-weight: 700; }
+  .totals-row.grand { background: #e4e4e7; border-bottom: 3px solid #000; padding: 6px 10px; }
+  .totals-row.grand .lbl { font-size: 10.5px; }
+  .totals-row.grand .val { font-size: 12px; }
+  .totals-row.discount { color: #b91c1c; }
+
+  .section { margin-top: 10px; page-break-inside: avoid; break-inside: avoid-page; }
+  .section-title {
+    clip-path: polygon(0 0, 100% 0, 85% 100%, 0 100%);
+    background: #000; color: #fff; padding: 3px 22px 3px 8px;
+    font-weight: 700; font-size: 10px; text-transform: uppercase;
+    display: inline-block; margin-bottom: 6px;
+  }
+  .section .content { font-size: 11.5px; line-height: 1.45; text-align: justify; }
+  .section .content ol { margin: 0; padding-left: 18px; list-style: decimal; }
+  .section .content ul { margin: 0; padding-left: 18px; list-style: disc; }
+  .section .content li { margin-bottom: 2px; }
+  .section .content p { margin: 0 0 3px 0; }
+
+  .signatures { margin-top: 24px; padding-left: 8mm; display: flex; justify-content: space-between; gap: 70px; page-break-inside: avoid; break-inside: avoid-page; align-items: flex-start; }
+  .sig-side { flex: 1; min-width: 0; }
+  .sig-side.right { display: flex; flex-direction: column; align-items: flex-end; }
+  .sig-box { width: 100%; max-width: 400px; }
+  .sig-top { font-weight: 900; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 18px; }
+  .sig-area { position: relative; height: 110px; margin-bottom: 12px; }
+  .sig-stamp { position: absolute; left: 0; top: 50%; transform: translateY(-50%); height: 90px; width: auto; object-fit: contain; opacity: 0.75; }
+  .sig-sign { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); height: 70px; width: auto; object-fit: contain; z-index: 2; }
+  .sig-italic { font-size: 11px; font-weight: 700; color: #9ca3af; font-style: italic; margin-bottom: 8px; }
+  .sig-kv { font-size: 10.5px; line-height: 1.55; }
+  .sig-kv b { font-weight: 800; color: #111827; }
+`;
+
+const renderMetaGrid = (order, site) => {
+  const isSupply = order.order_type === "Supply";
+  const rows = [
+    [isSupply ? "PO No." : "WO No.", order.order_number],
+    [isSupply ? "PO Date" : "WO Date", formatDate(order.date_of_creation || order.created_at)],
+    ["Ref. No.", order.ref_number],
+    ["Created By", order.creator_name || order.made_by],
+    ["Project", site?.site_name || site?.siteName || order.project_name],
+    ["Requisition By", order.request_by || order.requested_by],
+  ];
+
+  let html = "<table class='meta'><tbody>";
+  for (let i = 0; i < rows.length; i += 2) {
+    html += "<tr>";
+    for (let j = 0; j < 2; j++) {
+      const row = rows[i + j];
+      if (!row) {
+        html += "<td></td>";
+        continue;
+      }
+      html += `<td><span class="label">${escapeHtml(row[0])} :</span>   <span class="value">${escapeHtml(row[1] || "--")}</span></td>`;
+    }
+    html += "</tr>";
+  }
+  html += "</tbody></table>";
+  return html;
+};
+
+const renderVendorCard = (vend) => `
+  <div class="details-col">
+    <div class="details-tab">Vendor Details</div>
+    <div class="party-name">${escapeHtml(vend.vendor_name || vend.vendorName || "N/A")}</div>
+    <div class="card">
+      <div class="card-title">Address</div>
+      <div class="card-text">${escapeHtml(vend.address || "N/A")}</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Bank Details</div>
+      <div class="kv"><span class="kv-label">Bank Name:</span><span class="kv-value">${escapeHtml(vend.bank_name || vend.bankName || "N/A")}</span></div>
+      <div class="kv"><span class="kv-label">Acc No.:</span><span class="kv-value">${escapeHtml(vend.account_number || vend.accountNo || "N/A")}</span></div>
+      <div class="kv"><span class="kv-label">IFSC:</span><span class="kv-value">${escapeHtml(vend.ifsc_code || vend.ifsc || "N/A")}</span></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Tax / GST Details</div>
+      <div class="kv-grid-2">
+        <div class="kv"><span class="kv-label">GST No:</span><span class="kv-value">${escapeHtml(vend.gstin || "N/A")}</span></div>
+        <div class="kv"><span class="kv-label">PAN:</span><span class="kv-value">${escapeHtml(vend.pan || "N/A")}</span></div>
+        <div class="kv"><span class="kv-label">MSME:</span><span class="kv-value">${escapeHtml(vend.msme || vend.msme_no || "N/A")}</span></div>
+        <div class="kv"><span class="kv-label">Aadhar:</span><span class="kv-value">${escapeHtml(vend.aadhar || vend.aadhar_no || "N/A")}</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Contact</div>
+      <div class="kv"><span class="kv-label">Person:</span><span class="kv-value">${escapeHtml(vend.contact_person || vend.contactPerson || "N/A")}</span></div>
+      <div class="kv"><span class="kv-label">Phone:</span><span class="kv-value">${escapeHtml(vend.mobile || vend.phone || "N/A")}</span></div>
+      <div class="kv"><span class="kv-label">Email:</span><span class="kv-value">${escapeHtml(vend.email || "N/A")}</span></div>
+    </div>
+  </div>
+`;
+
+const renderCompanyCard = (comp, site, contacts) => `
+  <div class="details-col">
+    <div class="details-tab">Company Details</div>
+    <div class="party-name">${escapeHtml(comp.company_name || comp.companyName || "N/A")}</div>
+    <div class="card">
+      <div class="card-title">Site Address</div>
+      <div class="card-text">${escapeHtml(site.site_address || site.siteAddress || "N/A")}</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Billing Address</div>
+      <div class="card-text">${escapeHtml(site.billing_address || site.billingAddress || "N/A")}</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Tax / GST Details</div>
+      <div class="kv"><span class="kv-label">GST No:</span><span class="kv-value">${escapeHtml(comp.gstin || comp.gst_no || "N/A")}</span></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Contact Persons</div>
+      ${
+        contacts && contacts.length
+          ? contacts
+              .filter(c => c && (c.person_name || c.personName)) // Filter out invalid contacts
+              .map(
+                (c, index) => {
+                  // Clean the name by removing tabs, newlines, and extra spaces
+                  const rawName = c.person_name || c.personName || "N/A";
+                  const cleanName = rawName.replace(/[\t\n\r]/g, ' ').replace(/\s+/g, ' ').trim();
+                  const phone = c.contact_number || c.contactNumber || "N/A";
+                  return `<div style="display: flex; margin-bottom: 2px; font-size: 9px; align-items: center;">
+                    <span style="font-weight: 400; width: 180px; display: inline-block;">${escapeHtml(cleanName)}</span>
+                    <span style="font-weight: 400; display: flex; align-items: center;">
+                      📞 ${escapeHtml(phone)}
+                    </span>
+                  </div>`;
+                }
+              )
+              .join("")
+          : '<div class="card-text" style="font-style:italic;color:#666;">-- NA --</div>'
+      }
+    </div>
+  </div>
+`;
+
+const renderItemsTable = (order, items) => {
+  const isSupply = order.order_type === "Supply";
+  const totals = order.totals || {};
+  const showDiscount = totals.discount_mode === "line";
+  const grouped = groupItems(items);
+  const allRows = grouped.flatMap((g) => g.rows);
+  const showRemarks = allRows.some((i) => i.remarks) && totals.showRemarks !== false;
+  const colCount = showRemarks
+    ? (showDiscount ? (isSupply ? 9 : 8) : (isSupply ? 8 : 7))
+    : (showDiscount ? (isSupply ? 8 : 7) : (isSupply ? 7 : 6));
+
+  let rowsHtml = "";
+  grouped.forEach((group) => {
+    const rowSpan = group.rows.length || 0;
+    group.rows.forEach((it, idx) => {
+      const descHtml = parseDescription(it.description)
+        .map((p) => `<div>${sanitizeHtml(p) || ""}</div>`)
+        .join("");
+      const brands = parseMake(it.make);
+      const brandText = brands.length === 1 ? brands[0] : "";
+
+      const mergeClass = rowSpan > 1
+        ? (idx === 0 ? " merge-first" : (idx === rowSpan - 1 ? " merge-last" : " merge-fill"))
+        : "";
+
+      const srCell = `<td class="c${mergeClass}">${idx === 0 ? String(group.srNo).padStart(2, "0") : ""}</td>`;
+
+      const itemNameCell = isSupply
+        ? `<td class="${mergeClass.trim()}" style="vertical-align: top;">${idx === 0 ? `<div class="item-name">${escapeHtml(group.itemName)}</div>` : ""}</td>`
+        : "";
+
+      const descCell = isSupply
+        ? `<td class="item-desc">${descHtml || "--"}
+            ${it.model_number ? `<div class="meta-row"><b>Model No.:</b> ${escapeHtml(it.model_number)}</div>` : ""}
+            ${brandText ? `<div class="meta-row"><b>Brand:</b> ${escapeHtml(brandText)}</div>` : ""}
+           </td>`
+        : `<td class="item-desc">
+            ${idx === 0 ? `<div class="item-name">${escapeHtml(group.itemName)}</div>` : ""}
+            ${descHtml || "--"}
+            ${it.model_number ? `<div class="meta-row"><b>Model No.:</b> ${escapeHtml(it.model_number)}</div>` : ""}
+            ${brandText ? `<div class="meta-row"><b>Brand:</b> ${escapeHtml(brandText)}</div>` : ""}
+           </td>`;
+
+      rowsHtml += `<tr class="item-row">
+        ${srCell}
+        ${itemNameCell}
+        ${descCell}
+        <td class="c">${escapeHtml(it.unit || group.unit || "NOS")}</td>
+        <td class="c">${escapeHtml(String(it.qty ?? "--"))}</td>
+        <td class="r">₹ ${formatINR(it.unit_rate)}</td>
+        ${showDiscount ? `<td class="c">${escapeHtml(String(it.discount_pct || 0))}%</td>` : ""}
+        <td class="c">${escapeHtml(String(it.tax_pct || 0))}%</td>
+        <td class="r amount-col">₹ ${formatINR(it.amount)}</td>
+        ${showRemarks ? `<td>${escapeHtml(it.remarks || "--")}</td>` : ""}
+      </tr>`;
+    });
+  });
+
+  const nameHeader = isSupply
+    ? `<th style="width:22%">Item Name</th><th>Specification</th>`
+    : `<th>Item Name & Description</th>`;
+
+  return `
+    <table class="items">
+      <thead>
+        <tr class="page-gap"><th colspan="${colCount}"></th></tr>
+        <tr>
+          <th style="width:28px">Sr.</th>
+          ${nameHeader}
+          <th style="width:44px">Unit</th>
+          <th style="width:48px">Qty</th>
+          <th style="width:66px">Rate</th>
+          ${showDiscount ? '<th style="width:44px">Disc%</th>' : ""}
+          <th style="width:44px">GST%</th>
+          <th style="width:86px">Amount</th>
+          ${showRemarks ? '<th style="width:90px">Remarks</th>' : ""}
+        </tr>
+      </thead>
+      <tbody>${rowsHtml}</tbody>
+      <tfoot>
+        <tr class="table-page-footer"><td colspan="${colCount}"></td></tr>
+      </tfoot>
+    </table>
+  `;
+};
+
+const renderTotals = (order) => {
+  const t = order.totals || {};
+  const subtotal = Number(t.subtotal) || 0;
+  const discAmt = Number(t.totalDiscountAmt) || 0;
+  const discPct = Number(t.txDiscountPct || t.discount_pct) || 0;
+  const fright = Number(t.frightCharges ?? t.fright) || 0;
+  const frightTax = Number(t.frightTax ?? 18);
+  const gst = Number(t.gst) || 0;
+  const grand = Number(t.grandTotal) || subtotal - discAmt + fright + gst;
+
+  return `
+    <div class="totals-wrap">
+      <div class="words-box">
+        <div class="words-label">Amount in Words</div>
+        <div class="words-text">${escapeHtml(amountToWords(grand))}</div>
+      </div>
+      <div class="totals-box">
+        <div class="totals-row"><span class="lbl">Subtotal</span><span class="val">₹ ${formatINR(subtotal)}</span></div>
+        ${discAmt > 0 ? `<div class="totals-row discount"><span class="lbl">Discount ${discPct ? `(${discPct}%)` : ""}</span><span class="val">- ₹ ${formatINR(discAmt)}</span></div>` : ""}
+        ${fright > 0 ? `<div class="totals-row"><span class="lbl">Freight (${frightTax}%)</span><span class="val">₹ ${formatINR(fright)}</span></div>` : ""}
+        <div class="totals-row"><span class="lbl">GST Total</span><span class="val">₹ ${formatINR(gst)}</span></div>
+        <div class="totals-row grand"><span class="lbl">Grand Total</span><span class="val">₹ ${formatINR(grand)}</span></div>
+      </div>
+    </div>
+  `;
+};
+
+const renderRichSection = (title, content) => {
+  if (!content) return "";
+  let body = "";
+  if (Array.isArray(content)) {
+    const stripListPrefix = (v) =>
+      String(v ?? "")
+        // remove leading "1.", "1)", "1-", "1:", "(1)." etc (space optional)
+        .replace(/^\s*(?:\(?\d+\)?\s*[.)\-:]+|[-*•])\s*/, "");
+    const toLines = (v) => {
+      const html = String(v ?? "");
+      // convert common HTML line/paragraph/list boundaries into newlines first
+      const withNewlines = html
+        .replace(/<br\s*\/?>/gi, "\n")
+        .replace(/<\/p\s*>/gi, "\n")
+        .replace(/<\/li\s*>/gi, "\n");
+      // strip tags but keep newlines, then normalize whitespace per-line
+      const text = withNewlines
+        .replace(/&nbsp;|&#160;|\u00A0/g, " ")
+        .replace(/<[^>]*>/g, " ");
+      return text
+        .split(/\r?\n/)
+        .map((s) => s.replace(/\s+/g, " ").trim())
+        .filter(Boolean);
+    };
+
+    const lines = content.flatMap((c) => toLines(c));
+    const raw = content.map((c) => String(c ?? "")).join(" ");
+    const hasHtmlList = /<\s*(?:ol|ul|li)\b/i.test(raw);
+    const first = lines[0] || "";
+    const looksNumbered = stripListPrefix(first) !== first;
+    const shouldRenderAsList = hasHtmlList || content.length > 1 || lines.length > 1 || looksNumbered;
+
+    body = shouldRenderAsList
+      ? `<ol>${lines.map((line) => `<li>${escapeHtml(stripListPrefix(line))}</li>`).join("")}</ol>`
+      : `<p>${escapeHtml(first || "")}</p>`;
+  } else {
+    body = sanitizeHtml(content);
+  }
+  return `
+    <div class="section">
+      <div class="section-title">${escapeHtml(title)}</div>
+      <div class="content">${body}</div>
+    </div>
+  `;
+};
+
+const hasMeaningfulContent = (content) => {
+  if (!content) return false;
+  if (Array.isArray(content)) return content.some((entry) => hasMeaningfulContent(entry));
+  const plain = String(content)
+    .replace(/&nbsp;|&#160;|\u00A0/g, " ")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return plain.length > 0;
+};
+
+const renderSupplementary = (order) => {
+  const sections = [
+    ["Order Notes", order.notes],
+    ["Terms & Conditions", order.terms_conditions],
+    ["Payment Terms", order.payment_terms],
+    ["Governing Laws", order.governing_laws],
+  ];
+  return sections
+    .filter(([, content]) => hasMeaningfulContent(content))
+    .map(([title, content]) => renderRichSection(title, content))
+    .join("");
+};
+
+const renderSignatures = (order, comp, vend) => {
+  const companyName = comp.company_name || comp.companyName || "Company";
+  const vendorName = vend.vendor_name || vend.vendorName || "Vendor";
+  const companyPerson = comp.person_name || comp.personName || order.made_by || "";
+  const companyDesig = comp.designation || "";
+  const vendorPerson =
+    vend.contact_person ||
+    vend.contactPerson ||
+    "";
+  const poDate = formatDate(order.date_of_creation || order.created_at);
+  const stampUrl = comp.stampDataUri || comp.stampUrl || comp.stamp_url || "";
+  const signUrl = comp.signDataUri || comp.signUrl || comp.sign_url || "";
+  return `
+    <div class="signatures">
+      <div class="sig-side">
+        <div class="sig-box">
+          <div class="sig-top">${escapeHtml(companyName)}</div>
+          <div class="sig-area">
+            ${stampUrl ? `<img class="sig-stamp" src="${escapeHtml(stampUrl)}" alt="Stamp" />` : ""}
+            ${signUrl ? `<img class="sig-sign" src="${escapeHtml(signUrl)}" alt="Signature" />` : ""}
+          </div>
+          <div class="sig-italic">(Authorized Signature)</div>
+          <div class="sig-kv">
+            <div><b>Name:</b> ${escapeHtml(companyPerson || "--")}${companyDesig ? ` (${escapeHtml(companyDesig)})` : ""}</div>
+            <div><b>Date:</b> ${escapeHtml(poDate)}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sig-side right">
+        <div class="sig-box">
+          <div class="sig-top">${escapeHtml(vendorName)}</div>
+          <div class="sig-area"></div>
+          <div class="sig-italic">(Agreed & Accepted by)</div>
+          <div class="sig-kv">
+            <div><b>Name:</b> ${escapeHtml(vendorPerson || "--")}</div>
+            <div><b>Date:</b> </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+};
+
+const renderHeaderTemplate = (order, comp, logoDataUri = "") => {
+  const isSupply = order.order_type === "Supply";
+  const title = isSupply ? "PURCHASE ORDER" : "WORK ORDER";
+  return `
+    <div style="font-family: Arial, Helvetica, sans-serif; width: 100%; padding: 8px 10mm 0; box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+      <div style="position: relative; height: 65px; width: 100%;">
+        ${logoDataUri ? `<img src="${logoDataUri}" style="position: absolute; left: 0; bottom: 0; max-height: 90px; max-width: 250px; object-fit: contain; object-position: left bottom; display:block;" />` : ""}
+        <span style="position: absolute; right: 0; bottom: 22px; background:#000; color:#fff; padding: 7px 28px 7px 38px; font-weight: 900; font-size: 15px; letter-spacing: .8px; clip-path: polygon(14% 0, 100% 0, 100% 100%, 0% 100%); display: inline-block; line-height: 1;">${title}</span>
+      </div>
+      <div style="height: 2.5px; background: #000; width: 100%; margin-top: 6px;"></div>
+    </div>
+  `;
+};
+
+const renderPreviewHeader = (order, comp, logoDataUri = "") => {
+  const isSupply = order.order_type === "Supply";
+  const title = isSupply ? "PURCHASE ORDER" : "WORK ORDER";
+  return `
+    <div class="preview-header">
+      <div class="preview-header-inner">
+        ${logoDataUri ? `<img src="${logoDataUri}" class="preview-logo" />` : ""}
+        <span class="preview-title">${title}</span>
+      </div>
+      <div class="preview-header-line"></div>
+    </div>
+  `;
+};
+
+const renderFooterTemplate = (comp) => {
+  const name = comp.company_name || comp.companyName || "";
+  const address = comp.address || "";
+  return `
+    <div style="font-family: Arial, Helvetica, sans-serif; width: 100%; padding: 2.5mm 10mm 0.5mm; box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; position: relative; min-height: 16mm;">
+      <div style="height: 0.8px; background: #000; width: 100%; margin-bottom: 6px;"></div>
+      <div style="text-align: center; padding: 0 52px 0 52px;">
+        <div style="font-weight: 700; font-size: 11px; line-height: 1.15;">${escapeHtml(name)}</div>
+        ${address ? `<div style="font-weight: 500; font-size: 9.25px; color:#222; margin-top: 2px; line-height: 1.1; white-space: nowrap;">${escapeHtml(address)}</div>` : ""}
+      </div>
+      <div style="position: absolute; right: 10mm; top: 5mm; font-weight: 600; font-size: 8.5px; white-space: nowrap;">
+        Page <span class="pageNumber"></span> of <span class="totalPages"></span>
+      </div>
+    </div>
+  `;
+};
+
+const previewCss = `
+  body { background: #e5e7eb; padding: 24px 0; }
+  .sheet {
+    width: 210mm; min-height: 297mm; margin: 0 auto 24px; padding: 21mm 10mm 22mm;
+    background: #fff; box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    position: relative; box-sizing: border-box;
+  }
+  .preview-header { margin-bottom: 6px; }
+  .preview-header-inner { position: relative; height: 65px; width: 100%; }
+  .preview-logo {
+    position: absolute; left: 0; bottom: 0; max-height: 90px; max-width: 250px;
+    object-fit: contain; object-position: left bottom; display: block;
+  }
+  .preview-title {
+    position: absolute; right: 0; bottom: 22px; background:#000; color:#fff;
+    padding: 7px 28px 7px 38px; font-weight: 900; font-size: 15px; letter-spacing: .8px;
+    clip-path: polygon(14% 0, 100% 0, 100% 100%, 0% 100%); display: inline-block; line-height: 1;
+  }
+  .preview-header-line { height: 2.5px; background: #000; width: 100%; margin-top: 6px; }
+  .sheet > .page { padding-top: 18px; }
+  .page + .page { page-break-before: auto; margin-top: 24px; }
+`;
+
+const renderOrderHtml = ({ order, items = [], comp = {}, vend = {}, site = {}, contacts = [], previewHeaderHtml = "" }, { preview = false } = {}) => {
+  const subject = order.subject || order.order_name || "";
+  const extraCss = preview ? previewCss : "";
+  const openWrap = preview ? `<div class="sheet">` : "";
+  const closeWrap = preview ? `</div>` : "";
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<style>${css}${extraCss}</style>
+</head>
+<body>
+${openWrap}
+${preview ? previewHeaderHtml : ""}
+<div class="page">
+  ${renderMetaGrid(order, site)}
+  <div class="details-wrap">
+    ${renderVendorCard(vend)}
+    ${renderCompanyCard(comp, site, contacts)}
+  </div>
+  ${subject ? `<div class="subject-bar"><span class="lbl">Subject :</span>${escapeHtml(subject)}</div>` : ""}
+  ${renderItemsTable(order, items)}
+  ${renderTotals(order)}
+  ${renderSupplementary(order)}
+  ${renderSignatures(order, comp, vend)}
+</div>
+${closeWrap}
+</body>
+</html>`;
+};
+
+module.exports = { renderOrderHtml, renderHeaderTemplate, renderFooterTemplate, renderPreviewHeader };
