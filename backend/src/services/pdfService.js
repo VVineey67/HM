@@ -2,10 +2,12 @@ const puppeteer = require("puppeteer");
 
 let browserPromise = null;
 
-const launchBrowser = () =>
-  puppeteer.launch({
+const launchBrowser = () => {
+  const exePath = process.env.PUPPETEER_EXECUTABLE_PATH || "/usr/bin/chromium-browser";
+  console.log("Launching browser with path:", exePath);
+  return puppeteer.launch({
     headless: "new",
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+    executablePath: exePath,
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
@@ -14,6 +16,7 @@ const launchBrowser = () =>
       "--font-render-hinting=none",
     ],
   });
+};
 
 const getBrowser = async () => {
   if (!browserPromise) browserPromise = launchBrowser();
