@@ -100,7 +100,16 @@ const css = `
   table.items .meta-row { font-size: 9px; margin-top: 2px; }
   table.items .meta-row b { font-weight: 700; }
   table.items .amount-col { background: #fafafa; font-weight: 700; }
-  tr.item-row { page-break-inside: avoid; break-inside: avoid-page; }
+  tr.item-row { page-break-inside: auto; break-inside: auto; }
+  .point-label {
+    font-size: 8px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: #000;
+    margin: 0 0 4px 0;
+  }
+  .desc-block + .desc-block { margin-top: 6px; }
 
   .totals-wrap { display: flex; justify-content: space-between; gap: 14px; border: var(--box-line); padding: 8px 10px; margin-bottom: 8px; page-break-inside: avoid; break-inside: avoid-page; }
   .words-box { flex: 1; background: #e4e4e7; padding: 8px 10px; }
@@ -259,8 +268,17 @@ const renderItemsTable = (order, items) => {
   grouped.forEach((group) => {
     const rowSpan = group.rows.length || 0;
     group.rows.forEach((it, idx) => {
-      const descHtml = parseDescription(it.description)
-        .map((p) => `<div>${sanitizeHtml(p) || ""}</div>`)
+      const rawDesc = it.description || it.specification || it.items?.description;
+      const descParts = parseDescription(rawDesc);
+      const showPointLabel = !isSupply && rowSpan > 1;
+      const descHtml = descParts
+        .map((p, partIdx) => {
+          const pointNumber = showPointLabel ? idx + 1 : partIdx + 1;
+          const labelHtml = (!isSupply && (showPointLabel || descParts.length > 1))
+            ? `<div class="point-label">Point ${pointNumber}</div>`
+            : "";
+          return `<div class="desc-block">${labelHtml}<div>${sanitizeHtml(p) || ""}</div></div>`;
+        })
         .join("");
       const brands = parseMake(it.make);
       const brandText = brands.length === 1 ? brands[0] : "";
