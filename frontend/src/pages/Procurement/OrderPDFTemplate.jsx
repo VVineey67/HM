@@ -1658,11 +1658,11 @@ table tbody td[rowspan] {
                       </tbody>
                     </table>
                     {isLastItemPage && (
-                      <div className="border-t border-[#000000] bg-white px-3 pt-1.5 pb-2">
-                        <div className="flex items-end justify-between gap-4">
-                          <div className="w-[360px] max-w-[calc(100%-232px)]">
-                            <div className="overflow-hidden bg-[#e4e4e7]">
-                              <div className="flex items-start gap-3 px-2 py-3 text-[#000000]">
+                      <div className="-mx-px -mb-px border border-[#000000] bg-white px-3 pt-1.5 pb-2 shadow-[inset_0_1px_0_#000000]">
+                        <div className="flex items-stretch justify-between gap-4">
+                          <div className="flex w-[360px] max-w-[calc(100%-232px)]">
+                            <div className="flex h-full min-h-[84px] w-full flex-col overflow-hidden bg-[#e4e4e7]">
+                              <div className="flex flex-1 items-start gap-3 px-2 py-3 text-[#000000]">
                                 <span className="flex h-7 w-7 shrink-0 items-center justify-center text-[#000000]"><FileText size={12} strokeWidth={2.2} /></span>
                                 <div className="min-w-0">
                                   <div className="mb-1 text-[7.5px] font-bold uppercase text-[#000000]">Amount In Words</div>

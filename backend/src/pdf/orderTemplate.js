@@ -15,7 +15,7 @@ const css = `
   /* Keep page 1 slightly tighter */
   @page :first { margin-top: 27mm; }
   * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; color: #000; font-family: Arial, Helvetica, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html, body { margin: 0; padding: 0; color: #000; font-family: Aptos; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   body { font-size: 10px; line-height: 1.35; }
   :root { --box-line: 1px solid #444; }
 
@@ -102,7 +102,7 @@ const css = `
   table.items .amount-col { background: #fafafa; font-weight: 700; }
   tr.item-row { page-break-inside: avoid; break-inside: avoid-page; }
 
-  .totals-wrap { display: flex; justify-content: space-between; gap: 14px; border: var(--box-line); border-top: 0; padding: 8px 10px; margin-bottom: 8px; page-break-inside: avoid; break-inside: avoid-page; }
+  .totals-wrap { display: flex; justify-content: space-between; gap: 14px; border: var(--box-line); padding: 8px 10px; margin-bottom: 8px; page-break-inside: avoid; break-inside: avoid-page; }
   .words-box { flex: 1; background: #e4e4e7; padding: 8px 10px; }
   .words-box .words-label { font-size: 8px; font-weight: 700; text-transform: uppercase; margin-bottom: 2px; }
   .words-box .words-text { font-size: 10.5px; font-weight: 700; }
@@ -474,10 +474,15 @@ const renderSignatures = (order, comp, vend) => {
 const renderHeaderTemplate = (order, comp, logoDataUri = "") => {
   const isSupply = order.order_type === "Supply";
   const title = isSupply ? "PURCHASE ORDER" : "WORK ORDER";
+  const companyName = (comp.company_name || comp.companyName || "").toLowerCase();
+  const isUnivastu = companyName.includes("univastu");
+  const logoStyle = isUnivastu
+    ? "position: absolute; left: 0; bottom: 6px; max-height: 72px; max-width: 190px; object-fit: contain; object-position: left bottom; display:block;"
+    : "position: absolute; left: 0; bottom: 0; max-height: 90px; max-width: 250px; object-fit: contain; object-position: left bottom; display:block;";
   return `
-    <div style="font-family: Arial, Helvetica, sans-serif; width: 100%; padding: 8px 10mm 0; box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+    <div style="font-family: Aptos; width: 100%; padding: 8px 10mm 0; box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
       <div style="position: relative; height: 65px; width: 100%;">
-        ${logoDataUri ? `<img src="${logoDataUri}" style="position: absolute; left: 0; bottom: 0; max-height: 90px; max-width: 250px; object-fit: contain; object-position: left bottom; display:block;" />` : ""}
+        ${logoDataUri ? `<img src="${logoDataUri}" style="${logoStyle}" />` : ""}
         <span style="position: absolute; right: 0; bottom: 22px; background:#000; color:#fff; padding: 7px 28px 7px 38px; font-weight: 900; font-size: 15px; letter-spacing: .8px; clip-path: polygon(14% 0, 100% 0, 100% 100%, 0% 100%); display: inline-block; line-height: 1;">${title}</span>
       </div>
       <div style="height: 2.5px; background: #000; width: 100%; margin-top: 6px;"></div>
@@ -488,10 +493,14 @@ const renderHeaderTemplate = (order, comp, logoDataUri = "") => {
 const renderPreviewHeader = (order, comp, logoDataUri = "") => {
   const isSupply = order.order_type === "Supply";
   const title = isSupply ? "PURCHASE ORDER" : "WORK ORDER";
+  const companyName = (comp.company_name || comp.companyName || "").toLowerCase();
+  const previewLogoClass = companyName.includes("univastu")
+    ? "preview-logo preview-logo-univastu"
+    : "preview-logo";
   return `
     <div class="preview-header">
       <div class="preview-header-inner">
-        ${logoDataUri ? `<img src="${logoDataUri}" class="preview-logo" />` : ""}
+        ${logoDataUri ? `<img src="${logoDataUri}" class="${previewLogoClass}" />` : ""}
         <span class="preview-title">${title}</span>
       </div>
       <div class="preview-header-line"></div>
@@ -503,7 +512,7 @@ const renderFooterTemplate = (comp) => {
   const name = comp.company_name || comp.companyName || "";
   const address = comp.address || "";
   return `
-    <div style="font-family: Arial, Helvetica, sans-serif; width: 100%; padding: 2.5mm 10mm 0.5mm; box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; position: relative; min-height: 16mm;">
+    <div style="font-family: Aptos; width: 100%; padding: 2.5mm 10mm 0.5mm; box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; position: relative; min-height: 16mm;">
       <div style="height: 0.8px; background: #000; width: 100%; margin-bottom: 6px;"></div>
       <div style="text-align: center; padding: 0 52px 0 52px;">
         <div style="font-weight: 700; font-size: 11px; line-height: 1.15;">${escapeHtml(name)}</div>
@@ -528,6 +537,11 @@ const previewCss = `
   .preview-logo {
     position: absolute; left: 0; bottom: 0; max-height: 90px; max-width: 250px;
     object-fit: contain; object-position: left bottom; display: block;
+  }
+  .preview-logo-univastu {
+    bottom: 6px;
+    max-height: 72px;
+    max-width: 190px;
   }
   .preview-title {
     position: absolute; right: 0; bottom: 22px; background:#000; color:#fff;
