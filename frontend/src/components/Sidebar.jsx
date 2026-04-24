@@ -270,18 +270,18 @@ const Sidebar = ({
       style={{ background: "#06111f", borderRight: "1px solid rgba(34,211,238,0.12)" }}
     >
       {/* ── HEADER ── */}
-      <div className={`relative shrink-0 border-b ${collapsed ? "px-2 py-2 flex justify-center" : "px-0 py-0"}`}
+      <div className={`relative shrink-0 border-b ${collapsed ? "px-2 py-2 flex justify-center" : "px-3 py-2"}`}
         style={{ borderColor: "rgba(34,211,238,0.12)" }}>
         {collapsed ? (
           <button onClick={() => setIsCollapsed(false)} title="Expand" className="flex items-center justify-center">
-            <img src="/Z.png" alt="Zyrex" className="h-9 w-auto object-contain" />
+            <img src="/Z.png" alt="Zyrex" className="h-8 w-auto object-contain" />
           </button>
         ) : (
           <>
             <img
               src="/Z.png"
               alt="Zyrex ERP Solutions"
-              className="block w-full h-auto object-contain px-2 py-1"
+              className="block w-[85%] h-auto object-contain mx-auto"
             />
             <button onClick={() => setIsCollapsed(true)}
               title="Collapse"
