@@ -191,10 +191,24 @@ router.post("/requests", requireAuth, async (req, res) => {
   const admin = getAdminClient();
   const { module_key, point_key, document_id, requestor_id } = req.body;
 
-  // 1. Get workflow by point_key
-  const { data: workflow } = await admin.from("approval_workflows").select().eq("point_key", point_key).single();
+  // 1. Get workflow by point_key, or fallback to module_key (first active workflow for the module)
+  let workflow = null;
+  if (point_key) {
+    const { data } = await admin.from("approval_workflows").select().eq("point_key", point_key).single();
+    workflow = data;
+  }
+  if (!workflow && module_key) {
+    const { data } = await admin
+      .from("approval_workflows")
+      .select()
+      .eq("module_key", module_key)
+      .eq("is_active", true)
+      .limit(1)
+      .maybeSingle();
+    workflow = data;
+  }
   if (!workflow || !workflow.is_active) {
-    return res.status(400).json({ error: "No active workflow for this module. Saving locally without approval." });
+    return res.status(400).json({ error: `No active approval workflow configured for module "${module_key}". Please configure one in Approval Engine → Config.` });
   }
 
   // 2. Upsert Request
@@ -270,8 +284,10 @@ router.post("/action", requireAuth, async (req, res) => {
   // Sync back to procurement order status if module_key matches
   if (request.module_key === "create_order") {
      const docUpd = {};
-     if (action === 'Reverted' || action === 'Recalled') docUpd.status = 'Draft';
+     if (action === 'Reverted') docUpd.status = 'Reverted';
+     if (action === 'Recalled') docUpd.status = 'Recalled';
      if (action === 'Rejected') docUpd.status = 'Rejected';
+     if (action === 'Cancelled') docUpd.status = 'Cancelled';
      
      if (isFinal) {
         docUpd.status = 'Issued';
@@ -285,6 +301,9 @@ router.post("/action", requireAuth, async (req, res) => {
             .select("*, sites(*), companies(*)")
             .eq("id", request.document_id)
             .single();
+
+          // Stamp issuedAt into totals JSON
+          docUpd.totals = { ...(order?.totals || {}), issuedAt: new Date().toISOString() };
           
           if (order && order.order_number.startsWith("PENDING-")) {
             // 2. Compute current financial year in 2425 format

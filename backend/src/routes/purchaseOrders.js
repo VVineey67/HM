@@ -229,6 +229,307 @@ router.get("/:id", async (req, res) => {
   }
 });
 
+/* ════════════════════════════════════
+   BULK IMPORT — rich schema, grouped by order number
+   ════════════════════════════════════ */
+router.post("/bulk-import", async (req, res) => {
+  try {
+    const { rows, orderKind, createdBy } = req.body; // orderKind: "Purchase Order" | "Work Order"
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ error: "No rows provided" });
+    }
+
+    // Preload masters
+    const [{ data: companies }, { data: sites }, { data: vendors }] = await Promise.all([
+      supabase.schema("procurement").from("companies").select("*"),
+      supabase.schema("procurement").from("sites").select("*"),
+      supabase.schema("procurement").from("vendors").select("*"),
+    ]);
+    const companyByCode = new Map((companies || []).map(c => [String(c.company_code || "").toUpperCase().trim(), c]));
+    const siteByCode    = new Map((sites || []).map(s => [String(s.site_code || "").toUpperCase().trim(), s]));
+    const vendorByName  = new Map((vendors || []).map(v => [String(v.vendor_name || "").toLowerCase().trim(), v]));
+
+    const fy = getFinancialYear();
+    const pick = (obj, keys) => { for (const k of keys) { const v = obj[k]; if (v !== undefined && v !== null && String(v).trim() !== "") return v; } return ""; };
+    const parseDate = (v) => {
+      if (!v) return null;
+      if (typeof v === 'number') {
+        const d = new Date(Math.round((v - 25569) * 86400 * 1000));
+        return isNaN(d) ? null : d.toISOString();
+      }
+      const d = new Date(v);
+      return isNaN(d) ? null : d.toISOString();
+    };
+    const num = (v) => { const n = Number(v); return isNaN(n) ? 0 : n; };
+
+    // Group rows by order key (PO/WO number, or row index fallback)
+    const groups = new Map();
+    rows.forEach((r, i) => {
+      const rowNo = i + 2;
+      const key = String(pick(r, ["Purchase Order No.", "Work Order No.", "Order No", "Order Number"]) || `__row_${i}`).trim();
+      if (!groups.has(key)) groups.set(key, { key, headRow: r, headRowNo: rowNo, items: [] });
+      groups.get(key).items.push({ r, rowNo });
+    });
+
+    const results = { inserted: 0, failed: [], orders: [] };
+
+    for (const group of groups.values()) {
+      const h = group.headRow;
+      const headRowNo = group.headRowNo;
+      try {
+        const compCode = String(pick(h, ["Company Code"])).toUpperCase().trim();
+        const siteCode = String(pick(h, ["Site Code"])).toUpperCase().trim();
+        const vendName = String(pick(h, ["Vendor Name"])).trim();
+
+        const company = companyByCode.get(compCode);
+        const site = siteByCode.get(siteCode);
+        const vendorMaster = vendorByName.get(vendName.toLowerCase());
+
+        if (!site) throw new Error(`Site code "${siteCode}" not found in master`);
+        if (!company) throw new Error(`Company code "${compCode}" not found in master`);
+        if (!vendorMaster && !vendName) throw new Error(`Vendor Name is required`);
+
+        // Determine order type
+        const excelOrderType = String(pick(h, ["Order Type"])).trim();
+        let orderType = excelOrderType;
+        if (!orderType) orderType = orderKind === "Work Order" ? "SITC" : "Supply";
+
+        // Status — default Issued, but respect Excel value
+        const validStatuses = ["Draft", "Review", "Pending Issue", "Issued", "Rejected", "Reverted", "Recalled", "Cancelled"];
+        const excelStatus = String(pick(h, ["Status"])).trim();
+        const status = validStatuses.find(s => s.toLowerCase() === excelStatus.toLowerCase()) || "Issued";
+
+        // Order number — use Excel value if provided, else assign serial (for Issued only)
+        let orderNumber = String(group.key || "").trim();
+        let incrementSerial = false;
+        let serialObj = null;
+        if (!orderNumber || orderNumber.startsWith("__row_")) {
+          if (status === "Issued") {
+            const { data: s } = await supabase.schema("procurement")
+              .from("serialization_settings").select("*")
+              .eq("site_id", site.id).eq("financial_year", fy).single();
+            serialObj = s;
+            if (!serialObj) {
+              const { data: created } = await supabase.schema("procurement")
+                .from("serialization_settings")
+                .insert({ site_id: site.id, financial_year: fy, current_number: 1 })
+                .select().single();
+              serialObj = created;
+            }
+            const typeCode = orderType === "Supply" ? "PO" : "WO";
+            orderNumber = `${company.company_code}/${site.site_code}/${typeCode}/${fy}/${String(serialObj.current_number).padStart(3, '0')}`;
+            incrementSerial = true;
+          } else {
+            orderNumber = `PENDING-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+          }
+        }
+
+        // Build vendor object — excel values override master, master fills gaps
+        const vendorSnap = {
+          vendorName: vendName || vendorMaster?.vendor_name || "",
+          gstin:          pick(h, ["Vendor GSTIN"])          || vendorMaster?.gstin          || "",
+          pan:            pick(h, ["Vendor PAN"])            || vendorMaster?.pan            || "",
+          aadhar:         pick(h, ["Vendor Aadhar"])         || vendorMaster?.aadhar         || "",
+          msme:           pick(h, ["Vendor MSME No"])        || vendorMaster?.msme           || "",
+          contactPerson:  pick(h, ["Vendor Contact Name"])   || vendorMaster?.contact_person || "",
+          mobile:         pick(h, ["Vendor Phone"])          || vendorMaster?.mobile         || "",
+          email:          pick(h, ["Vendor Email"])          || vendorMaster?.email          || "",
+          address:        pick(h, ["Vendor Address"])        || vendorMaster?.address        || "",
+          bankName:       pick(h, ["Vendor Bank Name", "Bank Name"])     || vendorMaster?.bank_name       || "",
+          ifscCode:       pick(h, ["Vendor IFSC Code", "IFSC Code"])     || vendorMaster?.ifsc_code       || "",
+          accountNumber:  pick(h, ["Vendor Account No", "Account No"])   || vendorMaster?.account_number  || "",
+          beneficiaryName: pick(h, ["Vendor Beneficiary Name", "Beneficiary Name"]) || vendorMaster?.beneficiary_name || vendorMaster?.vendor_name || "",
+        };
+
+        // Build company snapshot — excel overrides, master fills
+        const companySnap = {
+          companyCode:  company.company_code,
+          companyName:  pick(h, ["Company Name"])   || company.company_name || "",
+          gstin:        pick(h, ["Company GSTIN"])  || company.gstin        || "",
+          pan:          pick(h, ["Company PAN", "Company Pan"]) || company.pan || "",
+          phone:        pick(h, ["Company Phone"])  || company.phone        || "",
+          address:      company.address || "",
+          logo_url:     company.logo_url || "",
+          stamp_url:    company.stamp_url || "",
+          sign_url:     company.sign_url || "",
+          personName:   company.person_name || "",
+          designation:  company.designation || "",
+        };
+
+        // Build site snapshot
+        const siteSnap = {
+          siteCode: site.site_code,
+          siteName: site.site_name || "",
+          city: site.city || "",
+          state: site.state || "",
+          siteAddress: site.site_address || "",
+          billingAddress: site.billing_address || "",
+        };
+
+        // Parse description: multi-line cell (Alt+Enter) or ||| separator → array of points
+        const descToPoints = (v) => {
+          if (!v) return [];
+          let s = String(v).trim();
+          if (!s) return [];
+          if (s.startsWith('[')) {
+            try { const arr = JSON.parse(s); return Array.isArray(arr) ? arr : [s]; } catch { return [s]; }
+          }
+          return s.split(/\r?\n|\|\|\|/).map(x => x.trim()).filter(Boolean);
+        };
+        const pointsToStorage = (points) => {
+          if (!points || points.length === 0) return "";
+          if (points.length === 1) return points[0];
+          return JSON.stringify(points);
+        };
+        const parseDescription = (v) => pointsToStorage(descToPoints(v));
+
+        // Build raw items (one per Excel row)
+        const rawItems = group.items.map(({ r }) => ({
+          material_name: String(pick(r, ["Item Name"])).trim(),
+          _descPoints:   descToPoints(pick(r, ["Description", "Specification"])),
+          model_number:  String(pick(r, ["Model No", "Model Number"])).trim(),
+          make:          String(pick(r, ["Brand Name", "Brand"])).trim(),
+          unit:          String(pick(r, ["Unit"])).trim() || "nos",
+          qty:           num(pick(r, ["Quantity", "Qty"])),
+          unit_rate:     num(pick(r, ["Unit Price (₹)", "Unit Price", "Rate"])),
+          tax_pct:       num(pick(r, ["Tax (%)", "Tax%", "Tax Pct"])),
+          discount_pct:  num(pick(r, ["Discount (%)", "Discount%", "Discount Pct"])),
+          amount:        num(pick(r, ["Amount"])) || (num(pick(r, ["Quantity", "Qty"])) * num(pick(r, ["Unit Price (₹)", "Unit Price", "Rate"]))),
+          remarks:       String(pick(r, ["Remarks"])).trim(),
+          _scopePoints:  descToPoints(pick(r, ["Scope of Work"])),
+        })).filter(it => it.material_name || it.qty > 0);
+
+        // Consolidate: consecutive rows with same (Item Name + Unit) AND blank qty → merge as additional description points
+        const consolidated = [];
+        for (const raw of rawItems) {
+          const last = consolidated[consolidated.length - 1];
+          const isContinuation = last
+            && last.material_name.toLowerCase() === raw.material_name.toLowerCase()
+            && last.unit.toLowerCase() === raw.unit.toLowerCase()
+            && raw.material_name
+            && (!raw.qty || raw.qty === 0);
+
+          if (isContinuation) {
+            last._descPoints = [...last._descPoints, ...raw._descPoints];
+            last._scopePoints = [...last._scopePoints, ...raw._scopePoints];
+            if (!last.model_number && raw.model_number) last.model_number = raw.model_number;
+            if (!last.make && raw.make) last.make = raw.make;
+            if (!last.remarks && raw.remarks) last.remarks = raw.remarks;
+          } else {
+            consolidated.push(raw);
+          }
+        }
+
+        // Final items — strip temp fields, flatten points to storage format
+        const itemRows = consolidated.map(it => ({
+          material_name: it.material_name,
+          description:   pointsToStorage(it._descPoints),
+          model_number:  it.model_number,
+          make:          it.make,
+          unit:          it.unit,
+          qty:           it.qty,
+          unit_rate:     it.unit_rate,
+          tax_pct:       it.tax_pct,
+          discount_pct:  it.discount_pct,
+          amount:        it.amount,
+          remarks:       it.remarks,
+          scope_of_work: pointsToStorage(it._scopePoints),
+        }));
+
+        // Totals
+        const subtotal   = itemRows.reduce((s, it) => s + (it.qty * it.unit_rate), 0);
+        const discAmt    = itemRows.reduce((s, it) => s + (it.qty * it.unit_rate * (it.discount_pct || 0) / 100), 0);
+        const itemGst    = itemRows.reduce((s, it) => {
+          const net = (it.qty * it.unit_rate) * (1 - (it.discount_pct || 0) / 100);
+          return s + (net * (it.tax_pct || 0) / 100);
+        }, 0);
+        const fright     = num(pick(h, ["Fright", "Freight"]));
+        const totalTax   = num(pick(h, ["Total Tax", "Total Tax (₹)"])) || itemGst;
+        const grandTotal = num(pick(h, ["Total Amount", "Total Amount (₹)", "Grand Total"])) || (subtotal - discAmt + fright + totalTax);
+
+        const issuedAt = parseDate(pick(h, ["Issued At", "Issued Date"])) || (status === "Issued" ? new Date().toISOString() : null);
+
+        const totals = {
+          subtotal,
+          totalDiscountAmt: discAmt,
+          discount_mode: "line",
+          gst: totalTax,
+          frightCharges: fright,
+          grandTotal,
+          showModel: itemRows.some(it => it.model_number),
+          showBrand: itemRows.some(it => it.make),
+          showRemarks: itemRows.some(it => it.remarks),
+          issuedAt,
+          bulkImported: true,
+        };
+
+        const arrify = (v) => {
+          if (!v) return [];
+          const s = String(v).trim();
+          if (!s) return [];
+          // split on newlines or semicolons
+          return s.split(/\r?\n|;/).map(x => x.trim()).filter(Boolean);
+        };
+
+        const insertRow = {
+          order_number: orderNumber,
+          order_type: orderType,
+          status,
+          subject:       String(pick(h, ["Subject"])).trim(),
+          ref_number:    String(pick(h, ["Reference Number", "Ref No"])).trim() || null,
+          company_id:    company.id,
+          site_id:       site.id,
+          vendor_id:     vendorMaster?.id || null,
+          made_by:       String(pick(h, ["Created By"]) || createdBy || "Bulk Import").trim(),
+          request_by:    String(pick(h, ["Requisition By"])).trim() || null,
+          date_of_creation: parseDate(pick(h, ["Created On", "Created Date", "Order Date"])) || new Date().toISOString(),
+          notes:         String(pick(h, ["Order Notes"])).trim() || null,
+          terms_conditions: arrify(pick(h, ["Term Condition", "Terms & Conditions"])),
+          payment_terms:    arrify(pick(h, ["Payment Terms"])),
+          governing_laws:   arrify(pick(h, ["Governlaws", "Governing Laws"])),
+          annexures:        arrify(pick(h, ["Annexure", "Annexures"])),
+          totals,
+          // FREEZE snapshot at import time so later master edits don't affect this order
+          snapshot: {
+            company: companySnap,
+            site: siteSnap,
+            vendor: vendorSnap,
+            contacts: [],
+          },
+        };
+
+        const { data: inserted, error: insErr } = await supabase.schema("procurement")
+          .from("purchase_orders").insert(insertRow).select().single();
+        if (insErr) throw insErr;
+
+        if (itemRows.length > 0) {
+          const itemInserts = itemRows.map(it => ({ ...it, order_id: inserted.id }));
+          const { error: itmErr } = await supabase.schema("procurement")
+            .from("purchase_order_items").insert(itemInserts);
+          if (itmErr) throw itmErr;
+        }
+
+        if (incrementSerial && serialObj) {
+          await supabase.schema("procurement")
+            .from("serialization_settings")
+            .update({ current_number: serialObj.current_number + 1 })
+            .eq("id", serialObj.id);
+        }
+
+        results.inserted++;
+        results.orders.push({ id: inserted.id, order_number: orderNumber, status });
+      } catch (grpErr) {
+        results.failed.push({ row: headRowNo, orderKey: group.key, reason: grpErr.message });
+      }
+    }
+
+    res.json({ success: true, ordersInExcel: groups.size, ...results });
+  } catch (err) {
+    console.error("Bulk import error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.put("/:id", upload.fields([
   { name: "quotation", maxCount: 1 },
   { name: "comparative", maxCount: 1 }
@@ -268,12 +569,61 @@ router.put("/:id", upload.fields([
         // Find existing order number to see if it was already PENDING
         const { data: curr } = await supabase.schema("procurement")
           .from("purchase_orders").select("order_number").eq("id", req.params.id).single();
-        
+
         if (!curr?.order_number?.startsWith("PENDING-")) {
           mainData.order_number = `PENDING-${Date.now()}`;
         } else {
           mainData.order_number = curr.order_number; // Preserve existing pending ID
         }
+    }
+
+    // 2.2 Assign final order number when status → Issued and current number is PENDING-
+    if (mainData.status === 'Issued') {
+      // Stamp issuedAt into totals JSON for display
+      mainData.totals = { ...(mainData.totals || {}), issuedAt: new Date().toISOString() };
+
+      const { data: curr } = await supabase.schema("procurement")
+        .from("purchase_orders")
+        .select("order_number, order_type, site_id, sites(site_code), companies(company_code)")
+        .eq("id", req.params.id)
+        .single();
+
+      const needsNumber = curr && (!mainData.order_number || mainData.order_number.startsWith("PENDING-") || curr.order_number?.startsWith("PENDING-"));
+      if (needsNumber && curr.site_id) {
+        try {
+          const fy = getFinancialYear();
+          let { data: serialObj } = await supabase.schema("procurement")
+            .from("serialization_settings")
+            .select("*")
+            .eq("site_id", curr.site_id)
+            .eq("financial_year", fy)
+            .single();
+
+          if (!serialObj) {
+            const { data: created } = await supabase.schema("procurement")
+              .from("serialization_settings")
+              .insert({ site_id: curr.site_id, financial_year: fy, current_number: 1 })
+              .select()
+              .single();
+            serialObj = created;
+          }
+
+          if (serialObj) {
+            const serialNum = serialObj.current_number;
+            const typeCode  = (curr.order_type === 'Supply') ? 'PO' : 'WO';
+            const compCode  = curr.companies?.company_code || 'CO';
+            const siteCode  = curr.sites?.site_code || 'SITE';
+            mainData.order_number = `${compCode}/${siteCode}/${typeCode}/${fy}/${String(serialNum).padStart(3, '0')}`;
+
+            await supabase.schema("procurement")
+              .from("serialization_settings")
+              .update({ current_number: serialNum + 1 })
+              .eq("id", serialObj.id);
+          }
+        } catch (numErr) {
+          console.error("Number assignment failed:", numErr.message);
+        }
+      }
     }
 
     const { error: orderErr } = await supabase.schema("procurement")
@@ -282,12 +632,15 @@ router.put("/:id", upload.fields([
       .eq("id", req.params.id);
     if (orderErr) throw orderErr;
 
-    // Replace items
-    await supabase.schema("procurement").from("purchase_order_items").delete().eq("order_id", req.params.id);
-    if (items && items.length > 0) {
-      const itemInserts = items.map(it => ({ ...it, order_id: req.params.id }));
-      const { error: itemErr } = await supabase.schema("procurement").from("purchase_order_items").insert(itemInserts);
-      if (itemErr) throw itemErr;
+    // Replace items ONLY if items array was provided in the request
+    // (prevents accidental item wipe on status-only updates)
+    if (Array.isArray(items)) {
+      await supabase.schema("procurement").from("purchase_order_items").delete().eq("order_id", req.params.id);
+      if (items.length > 0) {
+        const itemInserts = items.map(it => ({ ...it, order_id: req.params.id }));
+        const { error: itemErr } = await supabase.schema("procurement").from("purchase_order_items").insert(itemInserts);
+        if (itemErr) throw itemErr;
+      }
     }
 
     res.json({ success: true });

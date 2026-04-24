@@ -777,7 +777,7 @@ router.get("/sites", async (_req, res) => {
 router.post("/sites", async (req, res) => {
   try {
     const { siteName, siteCode, city, state, billingAddress, siteAddress, createdById, createdByName } = req.body;
-    const { data, error } = await supabase.from("sites").insert({
+    const { data, error } = await supabase.schema("procurement").from("sites").insert({
       site_name: siteName || "", site_code: siteCode || "",
       city: city || "", state: state || "",
       billing_address: billingAddress || "", site_address: siteAddress || "",
@@ -795,7 +795,7 @@ router.post("/sites", async (req, res) => {
 router.put("/sites/:id", async (req, res) => {
   try {
     const { siteName, siteCode, city, state, billingAddress, siteAddress } = req.body;
-    const { error } = await supabase.from("sites").update({
+    const { error } = await supabase.schema("procurement").from("sites").update({
       site_name: siteName || "", site_code: siteCode || "",
       city: city || "", state: state || "",
       billing_address: billingAddress || "", site_address: siteAddress || "",
@@ -810,7 +810,7 @@ router.put("/sites/:id", async (req, res) => {
 
 router.delete("/sites/:id", async (req, res) => {
   try {
-    const { error } = await supabase.from("sites").delete().eq("id", req.params.id);
+    const { error } = await supabase.schema("procurement").from("sites").delete().eq("id", req.params.id);
     if (error) throw error;
     res.json({ success: true });
   } catch (err) {
@@ -829,7 +829,7 @@ router.post("/sites/bulk", async (req, res) => {
       created_by_id: req.body.createdById || null,
       created_by_name: req.body.createdByName || "Bulk Upload",
     }));
-    const { error } = await supabase.from("sites").insert(inserts);
+    const { error } = await supabase.schema("procurement").from("sites").insert(inserts);
     if (error) throw error;
     res.json({ success: true, count: rows.length });
   } catch (err) {
@@ -880,7 +880,7 @@ router.post("/uom", async (req, res) => {
 router.put("/uom/:id", async (req, res) => {
   try {
     const { uomName, uomCode } = req.body;
-    const { error } = await supabase.from("uom")
+    const { error } = await supabase.schema("procurement").from("uom")
       .update({ uom_name: uomName || "", uom_code: uomCode || "" })
       .eq("id", req.params.id);
     if (error) throw error;
@@ -893,7 +893,7 @@ router.put("/uom/:id", async (req, res) => {
 
 router.delete("/uom/:id", async (req, res) => {
   try {
-    const { error } = await supabase.from("uom").delete().eq("id", req.params.id);
+    const { error } = await supabase.schema("procurement").from("uom").delete().eq("id", req.params.id);
     if (error) throw error;
     res.json({ success: true });
   } catch (err) {
@@ -911,7 +911,7 @@ router.post("/uom/bulk", async (req, res) => {
       created_by_id: req.body.createdById || null,
       created_by_name: req.body.createdByName || "Bulk Upload",
     }));
-    const { error } = await supabase.from("uom").insert(inserts);
+    const { error } = await supabase.schema("procurement").from("uom").insert(inserts);
     if (error) throw error;
     res.json({ success: true, count: rows.length });
   } catch (err) {
@@ -1157,7 +1157,7 @@ router.put("/companies/:id", companyUpload, async (req, res) => {
 
 router.delete("/companies/:id", async (req, res) => {
   try {
-    const { error } = await supabase.from("companies").delete().eq("id", req.params.id);
+    const { error } = await supabase.schema("procurement").from("companies").delete().eq("id", req.params.id);
     if (error) throw error;
     res.json({ success: true });
   } catch (err) {

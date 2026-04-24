@@ -442,14 +442,14 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
 
         <div className="px-14 pb-4">
           {(() => {
-            const displayNo = order.order_number?.startsWith("PENDING-") ? "DRAFT" : order.order_number;
-            const isDraftNo = displayNo === "DRAFT";
+            const isPending = order.order_number?.startsWith("PENDING-");
+            const displayNo = isPending ? (order.status || "DRAFT").toUpperCase() : order.order_number;
             return (
               <div className="flex flex-col gap-1">
                 <h1 className="text-2xl font-black text-slate-800 flex items-center gap-2">
                   {order.order_type === 'Supply' ? 'Purchase Order' : 'Work Order'}
                   <span className="text-slate-400 font-medium">#</span>
-                  <span className={isDraftNo ? "text-amber-500 italic bg-amber-50 px-3 py-1 rounded-lg border border-amber-100 uppercase" : "text-indigo-600 font-black tracking-tight"}>
+                  <span className={isPending ? "text-amber-500 italic bg-amber-50 px-3 py-1 rounded-lg border border-amber-100 uppercase" : "text-indigo-600 font-black tracking-tight"}>
                     {displayNo}
                   </span>
                 </h1>
@@ -913,27 +913,110 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
         </div>
       )}
 
-      {activeTab === "Approvals" && (
-        <div className="px-14 py-3 max-w-[1400px]">
-          <h2 className="text-xl font-bold text-slate-800 mb-6">Approval Workflow</h2>
-          <div className="space-y-8">
-            {approvalData.timeline.length === 0 ? (
-              <div className="p-8 text-center bg-white rounded-xl border border-slate-200 text-slate-400">No approvals found</div>
-            ) : (
-              approvalData.timeline.map((step, idx) => (
-                <div key={idx} className="relative flex gap-4">
-                  <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center shrink-0 z-10">{idx + 1}</div>
-                  <div className="bg-white p-4 rounded-xl border border-slate-200 flex-1">
-                    <h3 className="font-bold text-slate-800">{step.approver_name}</h3>
-                    <p className="text-xs text-slate-500">{step.approver_designation}</p>
-                    <div className="mt-2 text-sm">{step.status}</div>
+      {activeTab === "Approvals" && (() => {
+        const user = JSON.parse(localStorage.getItem("bms_user") || "{}");
+        const isGlobalAdmin = user.role === "global_admin";
+        const currentStep = approvalData.timeline.find(s => s.status === 'In Progress');
+        const isCurrentApprover = currentStep && String(currentStep.approver_id) === String(user.id);
+        const canActOnApproval = order.status === 'Pending Issue' && (
+          (approvalData.request && (isGlobalAdmin || isCurrentApprover)) ||
+          (!approvalData.request && isGlobalAdmin)
+        );
+
+        const runApprovalAction = (actionType) => {
+          if (approvalData.request) {
+            handleApprovalAction(actionType);
+          } else {
+            // Fallback: no approval request — update order status directly (global admin only)
+            const nextStatus = actionType === 'Issued' ? 'Issued' : actionType === 'Reverted' ? 'Reverted' : 'Rejected';
+            updateStatus(nextStatus);
+          }
+        };
+
+        return (
+          <div className="px-14 py-3 max-w-[1400px]">
+            <h2 className="text-xl font-bold text-slate-800 mb-6">Approval Workflow</h2>
+
+            {canActOnApproval && (
+              <div className="bg-white border border-slate-200 rounded-xl p-5 mb-6 flex items-center justify-between shadow-sm">
+                <div>
+                  <h3 className="font-bold text-slate-800 text-sm">Take Action</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {approvalData.request ? "Issue, revert, or reject this order." : "No approval workflow found — global admin override."}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button disabled={actionLoading}
+                    onClick={() => { setActionComment(""); runApprovalAction('Issued'); }}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow-sm text-xs transition-all disabled:opacity-60">
+                    Issued
+                  </button>
+                  <button disabled={actionLoading}
+                    onClick={() => setActionModal({ open: true, type: 'Reverted' })}
+                    className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg shadow-sm text-xs transition-all disabled:opacity-60">
+                    Revert
+                  </button>
+                  <button disabled={actionLoading}
+                    onClick={() => setActionModal({ open: true, type: 'Rejected' })}
+                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg shadow-sm text-xs transition-all disabled:opacity-60">
+                    Reject
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-8">
+              {approvalData.timeline.length === 0 ? (
+                <div className="p-8 text-center bg-white rounded-xl border border-slate-200 text-slate-400">No approvals found</div>
+              ) : (
+                approvalData.timeline.map((step, idx) => (
+                  <div key={idx} className="relative flex gap-4">
+                    <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center shrink-0 z-10">{idx + 1}</div>
+                    <div className="bg-white p-4 rounded-xl border border-slate-200 flex-1">
+                      <h3 className="font-bold text-slate-800">{step.approver_name}</h3>
+                      <p className="text-xs text-slate-500">{step.approver_designation}</p>
+                      <div className="mt-2 text-sm">{step.status}</div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {actionModal.open && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+                <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+                  <h3 className="font-bold text-slate-800 text-base mb-1">
+                    {actionModal.type === 'Reverted' ? 'Revert Order' : 'Reject Order'}
+                  </h3>
+                  <p className="text-xs text-slate-500 mb-4">Please provide a comment. This is required.</p>
+                  <textarea value={actionComment} onChange={(e) => setActionComment(e.target.value)}
+                    rows={4} placeholder="Enter reason..."
+                    className="w-full border border-slate-200 rounded-lg p-3 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-50" />
+                  <div className="flex items-center justify-end gap-2 mt-4">
+                    <button onClick={() => { setActionModal({ open: false, type: '' }); setActionComment(''); }}
+                      className="px-4 py-2 text-xs font-bold text-slate-600 rounded-lg hover:bg-slate-100">
+                      Cancel
+                    </button>
+                    <button disabled={actionLoading}
+                      onClick={() => {
+                        if (!approvalData.request && (actionModal.type === 'Reverted' || actionModal.type === 'Rejected') && !actionComment.trim()) {
+                          alert("Comment is required.");
+                          return;
+                        }
+                        runApprovalAction(actionModal.type);
+                        setActionModal({ open: false, type: '' });
+                        setActionComment('');
+                      }}
+                      className={`px-4 py-2 text-xs font-bold text-white rounded-lg shadow-sm disabled:opacity-60 ${actionModal.type === 'Reverted' ? 'bg-orange-500 hover:bg-orange-600' : 'bg-red-600 hover:bg-red-700'}`}>
+                      Confirm {actionModal.type === 'Reverted' ? 'Revert' : 'Reject'}
+                    </button>
                   </div>
                 </div>
-              ))
+              </div>
             )}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {activeTab === "PDF View" && (
         <div className="bg-slate-200">

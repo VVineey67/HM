@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { Plus, X, Upload, Save, FileText, ChevronDown, ChevronRight, Check, Building2, MapPin, Truck, Landmark, ShieldCheck, FilePlus, Eye, Loader2, Pencil, Trash2, Download, FileDown, Rocket } from "lucide-react";
+import { Plus, X, Upload, Save, FileText, ChevronDown, ChevronRight, Check, Building2, MapPin, Truck, Landmark, ShieldCheck, FilePlus, Eye, Loader2, Pencil, Trash2, Download, FileDown, Rocket, Undo2, Ban, CheckCircle2, RotateCcw, XCircle, Search, FileSpreadsheet } from "lucide-react";
+import * as XLSX from "xlsx";
 import { FullSiteModal, FullCompanyModal, FullVendorModal, FullViewSiteModal, FullViewCompanyModal, FullViewVendorModal, FullContactModal, FullViewContactModal, FullClauseModal } from "./FullMasterModals";
 import ReactQuill from "react-quill-new";
 import "react-quill-new/dist/quill.snow.css";
@@ -1063,7 +1064,7 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
     const div = document.createElement("div");
     div.innerHTML = html;
 
-    // Remove Quill v2 marker spans (.ql-ui) — these are empty marker-hosts
+    // Remove Quill v2 marker spans (.ql-ui) ï¿½ these are empty marker-hosts
     // that only render content via CSS ::before in the editor context
     div.querySelectorAll(".ql-ui").forEach(el => el.remove());
 
@@ -1263,7 +1264,7 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
                   <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">Proof Type *</label>
                   <select value={files.proof.type} onChange={e => setFiles(prev => ({ ...prev, proof: { ...prev.proof, type: e.target.value } }))}
                     className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-indigo-400 bg-white">
-                    <option value="">— Select Type —</option>
+                    <option value="">ï¿½ Select Type ï¿½</option>
                     <option value="Comparative Docs">Comparative Docs</option>
                     <option value="Mail Proof Doc">Mail Proof Doc</option>
                   </select>
@@ -1438,7 +1439,7 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
                           ${isFirst && gIdx > 0 ? "border-t-2 border-slate-300" : ""}
                           ${!isFirst ? "bg-slate-50/60 hover:bg-slate-100/60" : "bg-white hover:bg-indigo-50/30"}`}>
 
-                          {/* S.No — rowspan */}
+                          {/* S.No ï¿½ rowspan */}
                           {isFirst && (
                             <td rowSpan={group.subRows.length} className="px-1 py-2 text-center align-middle border-r border-slate-100">
                               <span className="text-[11px] font-bold text-slate-400">{(gIdx+1).toString().padStart(2,"0")}</span>
@@ -1465,7 +1466,7 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
                                 )}
                                 <div className="text-justify">
                                   <InlineSelect value={sub.specification} onChange={e => handleSubRowChange(group.id, sub.id, "specification", e.target.value)}
-                                    options={itemData?.specifications || []} placeholder="— Spec —" disabled={!group.itemId} renderHtml={true}
+                                    options={itemData?.specifications || []} placeholder="ï¿½ Spec ï¿½" disabled={!group.itemId} renderHtml={true}
                                     onAdd={() => setCustomInputModal({ open: true, type: "specification", groupId: group.id, subId: sub.id, itemId: group.itemId, text: "", originalValue: "" })}
                                     onEdit={(val) => setCustomInputModal({ open: true, type: "specification", groupId: group.id, subId: sub.id, itemId: group.itemId, text: val, originalValue: val })}
                                     onView={(val) => setSpecViewModal({ open: true, html: val, onEdit: () => { setSpecViewModal({ open: false, html: '', onEdit: null }); setCustomInputModal({ open: true, type: 'specification', groupId: group.id, subId: sub.id, itemId: group.itemId, text: val, originalValue: val }); } })}
@@ -1482,7 +1483,7 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
                             </td>
                           ) : (
                             <>
-                              {/* Item — rowspan (Standard PO) */}
+                              {/* Item ï¿½ rowspan (Standard PO) */}
                               {isFirst && (
                                 <td rowSpan={group.subRows.length} className="px-2 py-2 align-middle border-r border-slate-100">
                                   <div className="border-l-2 border-indigo-300 pl-1.5">
@@ -1501,7 +1502,7 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
                               {/* Spec (Standard PO) */}
                               <td className="px-2 py-2">
                                 <InlineSelect value={sub.specification} onChange={e => handleSubRowChange(group.id, sub.id, "specification", e.target.value)}
-                                  options={itemData?.specifications || []} placeholder="— Spec —" disabled={!group.itemId} renderHtml={true}
+                                  options={itemData?.specifications || []} placeholder="ï¿½ Spec ï¿½" disabled={!group.itemId} renderHtml={true}
                                   onAdd={() => setCustomInputModal({ open: true, type: "specification", groupId: group.id, subId: sub.id, itemId: group.itemId, text: "", originalValue: "" })}
                                   onEdit={(val) => setCustomInputModal({ open: true, type: "specification", groupId: group.id, subId: sub.id, itemId: group.itemId, text: val, originalValue: val })}
                                   onView={(val) => setSpecViewModal({ open: true, html: val, onEdit: () => { setSpecViewModal({ open: false, html: '', onEdit: null }); setCustomInputModal({ open: true, type: 'specification', groupId: group.id, subId: sub.id, itemId: group.itemId, text: val, originalValue: val }); } })}
@@ -1557,7 +1558,7 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
                             </td>
                           )}
 
-                          {/* Unit — rowspan, editable from UOM list */}
+                          {/* Unit ï¿½ rowspan, editable from UOM list */}
                           {isFirst && (
                             <td rowSpan={group.subRows.length} className="py-2 px-1 text-center align-middle bg-slate-50 border-x border-slate-100 whitespace-nowrap" style={{ width: '80px' }}>
                               <InlineSelect
@@ -1967,6 +1968,11 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
 
 // ============== ORDER LIST COMPONENT ==============
 function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
+  const currentUser = JSON.parse(localStorage.getItem("bms_user") || "{}");
+  const isGlobalAdmin = currentUser.role === "global_admin";
+  const myPerms = currentUser.app_permissions?.find(p => p.module_key === "create_order") || {};
+  const canEdit   = isGlobalAdmin || !!myPerms.can_edit;
+  const canDelete = isGlobalAdmin || !!myPerms.can_delete;
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -1976,7 +1982,25 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
   const [pdfPreviewNonce, setPdfPreviewNonce] = useState(0);
   const [pdfDownloading, setPdfDownloading] = useState(false);
 
-  const TABS = ["All", "Draft", "Review", "Pending Issue", "Issued", "Rejected", "Revert", "Recall"];
+  // Bulk import / export
+  const [showBulk, setShowBulk] = useState(false);
+  const [bulkKind, setBulkKind] = useState("Purchase Order"); // Purchase Order | Work Order
+  const [bulkRows, setBulkRows] = useState([]);
+  const [bulkFileName, setBulkFileName] = useState("");
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const [bulkResult, setBulkResult] = useState(null);
+  const bulkRef = React.useRef();
+
+  // Filters
+  const [filterSite, setFilterSite] = useState("");
+  const [filterCompany, setFilterCompany] = useState("");
+  const [filterType, setFilterType] = useState("");
+  const [filterMadeBy, setFilterMadeBy] = useState("");
+  const [dateRange, setDateRange] = useState("all"); // all | this_year | last_year | custom
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+
+  const TABS = ["All", "Draft", "Review", "Pending Issue", "Issued", "Rejected", "Reverted", "Recalled", "Cancelled"];
 
   useEffect(() => { fetchOrders(); }, []);
 
@@ -1999,6 +2023,72 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
       showToast("Order deleted successfully");
       fetchOrders();
     } catch { showToast("Failed to delete", "error"); }
+  };
+
+  const handleApprovalAction = async (id, action, promptMsg) => {
+    const comments = prompt(promptMsg || `Enter comments for ${action}:`, "");
+    if (comments === null) return;
+    try {
+      const token = localStorage.getItem("bms_token") || "";
+      const reqRes = await fetch(`${API}/api/approvals/requests/${id}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const reqData = await reqRes.json();
+      const requestId = reqData?.request?.id;
+      if (!requestId) throw new Error("No approval request found");
+      const actRes = await fetch(`${API}/api/approvals/action`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ request_id: requestId, action, comments: comments || action })
+      });
+      if (!actRes.ok) {
+        const errData = await actRes.json().catch(() => ({}));
+        throw new Error(errData.error || `${action} failed`);
+      }
+      showToast(`Order ${action.toLowerCase()}`);
+      fetchOrders();
+    } catch (err) {
+      showToast(err.message || `${action} failed`, "error");
+    }
+  };
+
+  const handleRecall = async (id) => {
+    if (!confirm("Recall this order? It will move back to Draft for editing.")) return;
+    try {
+      const token = localStorage.getItem("bms_token") || "";
+      const reqRes = await fetch(`${API}/api/approvals/requests/${id}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const reqData = await reqRes.json();
+      const requestId = reqData?.request?.id;
+      if (!requestId) throw new Error("No approval request found");
+      const actRes = await fetch(`${API}/api/approvals/action`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ request_id: requestId, action: 'Recalled', comments: 'Recalled by user' })
+      });
+      if (!actRes.ok) throw new Error("Recall failed");
+      showToast("Order recalled");
+      fetchOrders();
+    } catch (err) {
+      showToast(err.message || "Recall failed", "error");
+    }
+  };
+
+  const handleCancel = async (id) => {
+    if (!confirm("Cancel this order? This cannot be undone.")) return;
+    try {
+      const res = await fetch(`${API}/api/orders/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: JSON.stringify({ mainData: { status: 'Cancelled' } }) })
+      });
+      if (!res.ok) throw new Error("Cancel failed");
+      showToast("Order cancelled");
+      fetchOrders();
+    } catch (err) {
+      showToast(err.message || "Cancel failed", "error");
+    }
   };
 
   const handleSendToApproval = async (id) => {
@@ -2222,17 +2312,304 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
     setPdfDownloading(false);
   };
 
+  const handleExport = () => {
+    const rows = filtered.map(o => {
+      const snap = o.snapshot || {};
+      const t = o.totals || {};
+      const taxable = (Number(t.subtotal) || 0) - (Number(t.totalDiscountAmt) || 0);
+      return {
+        "Company Code": snap.company?.companyCode || o.companies?.company_code || "",
+        "Site Code": snap.site?.siteCode || o.sites?.site_code || "",
+        "Order No": o.order_number?.startsWith("PENDING-") ? "DRAFT" : o.order_number,
+        "Order Type": o.order_type || "",
+        "Vendor Name": snap.vendor?.vendorName || o.vendors?.vendor_name || "",
+        "Subject": o.subject || "",
+        "Ref No": o.ref_number || "",
+        "Made By": o.made_by || "",
+        "Created Date": o.date_of_creation ? new Date(o.date_of_creation).toLocaleDateString("en-IN") : "",
+        "Issued Date": o.status === 'Issued' && (t.issuedAt || o.updated_at) ? new Date(t.issuedAt || o.updated_at).toLocaleDateString("en-IN") : "",
+        "Taxable Amount": taxable,
+        "Grand Total": Number(t.grandTotal) || 0,
+        "Status": o.status || "",
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Orders");
+    XLSX.writeFile(wb, `orders_export_${new Date().toISOString().slice(0,10)}.xlsx`);
+    showToast("Export downloaded");
+  };
+
+  const downloadBulkTemplate = () => {
+    const isPO = bulkKind === "Purchase Order";
+    const orderNoCol = isPO ? "Purchase Order No." : "Work Order No.";
+    const defaultType = isPO ? "Supply" : "SITC";
+
+    // Common columns for both PO and WO
+    const commonStart = [
+      "S.No",
+      "Site Code", orderNoCol, "Order Type", "Reference Number",
+      "Created By", "Created On", "Requisition By", "Subject",
+      "Vendor Name", "Vendor GSTIN", "Vendor PAN", "Vendor Aadhar", "Vendor MSME No",
+      "Vendor Contact Name", "Vendor Phone", "Vendor Email",
+      "Vendor Bank Name", "Vendor IFSC Code", "Vendor Account No", "Vendor Beneficiary Name",
+      "Company Code", "Company GSTIN", "Company Pan", "Company Name", "Company Phone",
+      "Status", "Issued At",
+    ];
+    const itemCols = isPO
+      ? ["Item Name", "Specification", "Model No", "Brand Name", "Unit", "Quantity", "Unit Price (â‚¹)", "Tax (%)", "Discount (%)", "Amount"]
+      : ["Item Name", "Description", "Model No", "Brand Name", "Unit", "Quantity", "Unit Price (â‚¹)", "Tax (%)", "Discount (%)", "Amount"];
+    const commonEnd = [
+      "Fright", "Total Tax (â‚¹)", "Total Amount (â‚¹)",
+      "Order Notes", "Term Condition", "Payment Terms", "Governlaws", "Annexure",
+    ];
+    const columns = [...commonStart, ...itemCols, ...commonEnd];
+
+    const poNumber = isPO ? "BITL/B47/PO/2025-26/001" : "BITL/B47/WO/2025-26/001";
+
+    // Vendor/Company/Order details only on first row of each order
+    const orderHead = {
+      "Site Code": "B47",
+      [orderNoCol]: poNumber,
+      "Order Type": defaultType,
+      "Reference Number": "REF-001",
+      "Created By": "Admin",
+      "Created On": "2025-04-01",
+      "Requisition By": "Site Engineer",
+      "Subject": isPO ? "Cement & Steel supply" : "Water Proofing Work",
+      "Vendor Name": "Yes Infratech",
+      "Vendor GSTIN": "09DXBPK0739P1ZZ",
+      "Vendor PAN": "DXBPK0739P",
+      "Vendor Aadhar": "",
+      "Vendor MSME No": "",
+      "Vendor Contact Name": "Mr. Ashlam Khan",
+      "Vendor Phone": "9810678648",
+      "Vendor Email": "yesinfratech1@gmail.com",
+      "Vendor Bank Name": "Bank Of Baroda",
+      "Vendor IFSC Code": "BARB0TRDNAH",
+      "Vendor Account No": "21180200000684",
+      "Vendor Beneficiary Name": "Yes Infratech",
+      "Company Code": "BITL",
+      "Company GSTIN": "06AAJCB6841Q1Z2",
+      "Company Pan": "AAJCB6841Q",
+      "Company Name": "Bootes Impex Tech Pvt Ltd",
+      "Company Phone": "",
+      "Status": "Issued",
+      "Issued At": "2025-04-05",
+    };
+
+    const totalsBlock = {
+      "Fright": 0,
+      "Total Tax (â‚¹)": isPO ? 7200 : 9000,
+      "Total Amount (â‚¹)": isPO ? 47200 : 59000,
+      "Order Notes": "Deliver at site gate",
+      "Term Condition": "Payment within 30 days; Quality as per IS standard",
+      "Payment Terms": "50% advance; 50% on delivery",
+      "Governlaws": "Subject to Delhi jurisdiction",
+      "Annexure": "",
+    };
+
+    // PO example: 2 different items (cement + steel)
+    // WO example: 1 item (Water Proofing) with multi-point description in single cell
+    let example;
+    if (isPO) {
+      example = [
+        {
+          "S.No": 1, ...orderHead,
+          "Item Name": "Cement Bag",
+          "Specification": "OPC 43 grade",
+          "Model No": "",
+          "Brand Name": "UltraTech",
+          "Unit": "bag",
+          "Quantity": 100,
+          "Unit Price (â‚¹)": 400,
+          "Tax (%)": 18,
+          "Discount (%)": 0,
+          "Amount": 40000,
+          ...totalsBlock,
+        },
+        {
+          "S.No": 2,
+          "Site Code": "",
+          [orderNoCol]: poNumber, // same PO â†’ same order
+          "Order Type": "", "Reference Number": "", "Created By": "", "Created On": "",
+          "Requisition By": "", "Subject": "",
+          "Vendor Name": "", "Vendor GSTIN": "", "Vendor PAN": "", "Vendor Aadhar": "", "Vendor MSME No": "",
+          "Vendor Contact Name": "", "Vendor Phone": "", "Vendor Email": "",
+          "Vendor Bank Name": "", "Vendor IFSC Code": "", "Vendor Account No": "", "Vendor Beneficiary Name": "",
+          "Company Code": "", "Company GSTIN": "", "Company Pan": "", "Company Name": "", "Company Phone": "",
+          "Status": "", "Issued At": "",
+          "Item Name": "Steel Rod",
+          "Specification": "Fe500 TMT 12mm",
+          "Model No": "",
+          "Brand Name": "TATA Tiscon",
+          "Unit": "kg",
+          "Quantity": 500,
+          "Unit Price (â‚¹)": 60,
+          "Tax (%)": 18,
+          "Discount (%)": 0,
+          "Amount": 30000,
+          "Fright": "", "Total Tax (â‚¹)": "", "Total Amount (â‚¹)": "",
+          "Order Notes": "", "Term Condition": "", "Payment Terms": "", "Governlaws": "", "Annexure": "",
+        }
+      ];
+    } else {
+      // WO example: Water Proofing with multi-point description
+      // Use Alt+Enter inside the Description cell â†’ newline-separated points.
+      // Here we embed actual newlines via "\n" so the resulting cell shows multiple lines.
+      const multiPointDesc = [
+        "Scraping of old paint and cleaning of surface",
+        "Application of primer coat",
+        "Final water-proofing coat with warranty of 5 years",
+      ].join("\n");
+
+      example = [
+        {
+          "S.No": 1, ...orderHead,
+          "Item Name": "Terrace Water Proofing",
+          "Description": multiPointDesc, // multi-line cell â†’ stored as JSON array of points
+          "Model No": "",
+          "Brand Name": "Dr. Fixit",
+          "Unit": "sqft",
+          "Quantity": 1000,
+          "Unit Price (â‚¹)": 50,
+          "Tax (%)": 18,
+          "Discount (%)": 0,
+          "Amount": 50000,
+          ...totalsBlock,
+        }
+      ];
+    }
+
+    const ws = XLSX.utils.json_to_sheet(example, { header: columns });
+
+    // Enable text-wrap on Description cell so newlines show visually in Excel
+    if (!isPO) {
+      const descColIdx = columns.indexOf("Description");
+      if (descColIdx >= 0) {
+        const cellRef = XLSX.utils.encode_cell({ r: 1, c: descColIdx }); // row 1 (0-indexed, after header)
+        if (ws[cellRef]) {
+          ws[cellRef].s = { alignment: { wrapText: true, vertical: "top" } };
+        }
+      }
+    }
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, isPO ? "Purchase Orders" : "Work Orders");
+    XLSX.writeFile(wb, `${isPO ? "purchase_order" : "work_order"}_bulk_template.xlsx`);
+  };
+
+  const handleBulkFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBulkFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = new Uint8Array(evt.target.result);
+        const wb = XLSX.read(data, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
+        setBulkRows(rows);
+        setBulkResult(null);
+      } catch (err) {
+        showToast("Failed to read Excel: " + err.message, "error");
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const handleBulkUpload = async () => {
+    if (bulkRows.length === 0) return showToast("No rows to import", "error");
+    setBulkSaving(true);
+    try {
+      const user = JSON.parse(localStorage.getItem("bms_user") || "{}");
+      const res = await fetch(`${API}/api/orders/bulk-import`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows: bulkRows, orderKind: bulkKind, createdBy: user.name || "Bulk Import" })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Import failed");
+      setBulkResult(data);
+      showToast(`Imported ${data.inserted} / ${bulkRows.length} orders`);
+      fetchOrders();
+    } catch (err) {
+      showToast(err.message || "Import failed", "error");
+    }
+    setBulkSaving(false);
+  };
+
   const getTabCount = (tabName) => {
     if (tabName === "All") return orders.length;
     return orders.filter(o => o.status === tabName).length;
   };
 
+  // Build unique option lists for filter dropdowns
+  const getCompanyCode = (o) => o.snapshot?.company?.companyCode || o.companies?.company_code || "";
+  const getSiteCode = (o) => o.snapshot?.site?.siteCode || o.sites?.site_code || "";
+  const siteOptions = Array.from(new Set(orders.map(getSiteCode).filter(Boolean))).sort();
+  const companyOptions = Array.from(new Set(orders.map(getCompanyCode).filter(Boolean))).sort();
+  const madeByOptions = Array.from(new Set(orders.map(o => o.made_by).filter(Boolean))).sort();
+
+  // Date range helpers
+  const getFYBounds = (yearOffset = 0) => {
+    const now = new Date();
+    const currMonth = now.getMonth(); // 0-indexed
+    const fyStartYear = (currMonth >= 3 ? now.getFullYear() : now.getFullYear() - 1) + yearOffset;
+    const from = new Date(fyStartYear, 3, 1);              // 1 Apr
+    const to   = new Date(fyStartYear + 1, 2, 31, 23, 59, 59); // 31 Mar
+    return { from, to };
+  };
+
   const filtered = orders.filter(o => {
     const ms = search.toLowerCase();
-    const matchSearch = o.order_number?.toLowerCase().includes(ms) || o.subject?.toLowerCase().includes(ms) || o.vendors?.vendor_name?.toLowerCase().includes(ms);
+    const snap = o.snapshot || {};
+    const searchBlob = [
+      o.order_number,
+      o.subject,
+      o.vendors?.vendor_name,
+      snap.vendor?.vendorName,
+      o.companies?.company_code,
+      o.companies?.company_name,
+      snap.company?.companyCode,
+      snap.company?.companyName,
+      o.sites?.site_code,
+      o.sites?.site_name,
+      snap.site?.siteCode,
+      snap.site?.siteName,
+      o.made_by,
+      o.order_type
+    ].filter(Boolean).join(" ").toLowerCase();
+    const matchSearch = !ms || searchBlob.includes(ms);
     const matchTab = activeTab === "All" ? true : o.status === activeTab;
-    return matchSearch && matchTab;
+    const matchSite = !filterSite || getSiteCode(o) === filterSite;
+    const matchCompany = !filterCompany || getCompanyCode(o) === filterCompany;
+    const matchType = !filterType || o.order_type === filterType;
+    const matchMadeBy = !filterMadeBy || o.made_by === filterMadeBy;
+
+    let matchDate = true;
+    if (dateRange !== "all") {
+      const created = new Date(o.date_of_creation || o.created_at);
+      let from, to;
+      if (dateRange === "this_year") ({ from, to } = getFYBounds(0));
+      else if (dateRange === "last_year") ({ from, to } = getFYBounds(-1));
+      else if (dateRange === "custom") {
+        from = customFrom ? new Date(customFrom) : null;
+        to   = customTo ? new Date(customTo + "T23:59:59") : null;
+      }
+      if (from && created < from) matchDate = false;
+      if (to && created > to) matchDate = false;
+    }
+
+    return matchSearch && matchTab && matchSite && matchCompany && matchType && matchMadeBy && matchDate;
   });
+
+  const clearFilters = () => {
+    setFilterSite(""); setFilterCompany(""); setFilterType(""); setFilterMadeBy("");
+    setDateRange("all"); setCustomFrom(""); setCustomTo("");
+  };
+  const hasActiveFilters = filterSite || filterCompany || filterType || filterMadeBy || dateRange !== "all";
 
   return (
     <div className="p-3 sm:p-4 lg:p-6 w-full pb-32">
@@ -2288,13 +2665,122 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
             <p className="text-sm text-slate-400">View logs and dispatch PO/WO orders</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <button onClick={handleExport}
+            className="px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-semibold flex items-center gap-2 hover:bg-slate-50 transition-all text-sm">
+            <Download size={15} /> Export
+          </button>
+          <button onClick={() => { setShowBulk(true); setBulkRows([]); setBulkFileName(""); setBulkResult(null); }}
+            className="px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-semibold flex items-center gap-2 hover:bg-slate-50 transition-all text-sm">
+            <Upload size={15} /> Bulk Upload
+          </button>
           <button onClick={onCreateClick}
             className="px-6 py-2.5 rounded-xl bg-slate-900 text-white font-semibold flex items-center gap-2 hover:bg-slate-700 transition-all text-sm">
             <Plus size={16} /> Create Order
           </button>
         </div>
       </div>
+
+      {/* Bulk Upload Modal */}
+      {showBulk && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <FileSpreadsheet size={20} className="text-emerald-600" />
+                <div>
+                  <h3 className="font-bold text-slate-800">Bulk Upload Orders</h3>
+                  <p className="text-xs text-slate-500">Imported orders will be marked as Issued</p>
+                </div>
+              </div>
+              <button onClick={() => setShowBulk(false)} className="p-1.5 hover:bg-slate-100 rounded-lg">
+                <X size={18} className="text-slate-500" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1">
+              {/* Order Kind selector */}
+              <div className="mb-4">
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Order Kind</label>
+                <div className="relative">
+                  <select value={bulkKind} onChange={e => { setBulkKind(e.target.value); setBulkRows([]); setBulkFileName(""); setBulkResult(null); }}
+                    className="appearance-none w-full pl-3 pr-8 py-2 border border-slate-200 rounded-lg text-sm font-semibold text-slate-700 bg-white outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-50 cursor-pointer">
+                    <option value="Purchase Order">Purchase Order</option>
+                    <option value="Work Order">Work Order</option>
+                  </select>
+                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                </div>
+              </div>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4 text-xs text-amber-800">
+                <p className="font-bold mb-1">Instructions:</p>
+                <ul className="list-disc pl-5 space-y-0.5">
+                  <li>Download the template, fill it, then upload</li>
+                  <li><b>One row = one item.</b> Same <i>{bulkKind} No.</i> in multiple rows = one order with multiple items</li>
+                  <li>Order-level fields (Vendor, Company, Status, Totals, Clauses) only needed in the <b>first row</b> of each order</li>
+                  <li><b>Company Code</b> and <b>Site Code</b> must already exist in master data</li>
+                  <li>Excel values <b>override</b> master data and are <b>frozen</b> in the order (later master edits won't affect imported orders)</li>
+                  <li>If Excel cell is blank, data is picked from master (Company / Site / Vendor tab)</li>
+                  <li><b>Vendor Bank Details</b> (Bank Name, IFSC, Account No) can be set per-order in Excel â€” blank picks from vendor master</li>
+                  {bulkKind === "Work Order" ? (
+                    <li><b>Multi-point description</b>: in the <i>Description</i> cell, press <kbd>Alt + Enter</kbd> after each point to add a new line. Multiple lines = multiple points for that item. Model No & Brand Name are optional</li>
+                  ) : (
+                    <li>Item columns: <b>Specification</b>, <b>Model No</b>, <b>Brand Name</b> (leave blank if not applicable)</li>
+                  )}
+                  <li><b>Status</b>: Draft / Review / Pending Issue / Issued / Rejected / Reverted / Recalled / Cancelled. Default = Issued</li>
+                  <li>Orders with status Issued get an auto-assigned {bulkKind === "Purchase Order" ? "PO" : "WO"} number if not provided</li>
+                  <li>Non-Issued orders will continue normal workflow from that stage</li>
+                  <li>Clauses accept multiple items separated by newline or <code>;</code></li>
+                </ul>
+              </div>
+
+              <button onClick={downloadBulkTemplate}
+                className="mb-4 text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1.5">
+                <Download size={13} /> Download {bulkKind} Template
+              </button>
+
+              <input ref={bulkRef} type="file" accept=".xlsx,.xls" onChange={handleBulkFile} className="hidden" />
+              <button onClick={() => bulkRef.current?.click()}
+                className="w-full border-2 border-dashed border-slate-300 rounded-xl p-6 hover:border-indigo-400 hover:bg-indigo-50/30 transition-all text-center">
+                <Upload size={20} className="mx-auto text-slate-400 mb-2" />
+                <p className="text-sm font-semibold text-slate-700">{bulkFileName || "Click to select Excel file"}</p>
+                <p className="text-xs text-slate-400 mt-0.5">{bulkRows.length > 0 ? `${bulkRows.length} rows ready to import` : ".xlsx or .xls"}</p>
+              </button>
+
+              {bulkResult && (
+                <div className="mt-4 bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs">
+                  <p className="font-bold text-slate-800 mb-2">Import Result</p>
+                  <p className="text-slate-600">Orders detected in Excel: <b>{bulkResult.ordersInExcel}</b></p>
+                  <p className="text-emerald-600">âœ“ Imported: {bulkResult.inserted}</p>
+                  {bulkResult.failed?.length > 0 && (
+                    <>
+                      <p className="text-red-600 mt-1">âœ— Failed: {bulkResult.failed.length}</p>
+                      <ul className="mt-2 max-h-40 overflow-y-auto space-y-1">
+                        {bulkResult.failed.map((f, i) => (
+                          <li key={i} className="text-slate-600">
+                            {f.orderKey && !f.orderKey.startsWith("__row_") ? <b>{f.orderKey}</b> : `Row ${f.row}`}: {f.reason}
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-2">
+              <button onClick={() => setShowBulk(false)}
+                className="px-4 py-2 text-sm font-bold text-slate-600 rounded-lg hover:bg-slate-100">
+                Close
+              </button>
+              <button onClick={handleBulkUpload} disabled={bulkSaving || bulkRows.length === 0}
+                className="px-5 py-2 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                {bulkSaving ? <><Loader2 size={14} className="animate-spin" /> Importing...</> : <><Upload size={14} /> Import {bulkRows.length} Orders</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
         
@@ -2317,15 +2803,64 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
           })}
         </div>
 
-        <div className="p-4 border-b border-slate-100 bg-white flex items-center justify-between gap-4">
-           <div className="relative w-full max-w-sm">
-             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">?</span>
-             <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search by PO number, subject, vendor..."
-              className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-50 bg-white" />
-           </div>
-           <div className="text-xs font-semibold text-slate-500 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg shadow-sm">
-             Total: {filtered.length}
+        <div className="p-4 border-b border-slate-100 bg-white flex flex-col gap-3">
+           <div className="flex items-center flex-wrap gap-2">
+             {/* Search */}
+             <div className="relative w-full max-w-xs">
+               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+               <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="Search PO, subject, vendor..."
+                className="w-full pl-9 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-50 bg-white" />
+             </div>
+
+             {/* Filters â€” right of search */}
+             {[
+               { val: filterCompany, set: setFilterCompany, placeholder: "All Companies", opts: companyOptions, min: 130 },
+               { val: filterSite, set: setFilterSite, placeholder: "All Sites", opts: siteOptions, min: 110 },
+               { val: filterType, set: setFilterType, placeholder: "All Types", opts: ["Supply", "SITC", "ITC"], min: 105 },
+               { val: filterMadeBy, set: setFilterMadeBy, placeholder: "All Users", opts: madeByOptions, min: 130 }
+             ].map((f, i) => (
+               <div key={i} className="relative" style={{ minWidth: f.min }}>
+                 <select value={f.val} onChange={e => f.set(e.target.value)}
+                   className="appearance-none w-full pl-3 pr-8 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 bg-white outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-50 cursor-pointer">
+                   <option value="">{f.placeholder}</option>
+                   {f.opts.map(o => <option key={o} value={o}>{o}</option>)}
+                 </select>
+                 <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+               </div>
+             ))}
+
+             <div className="relative" style={{ minWidth: 125 }}>
+               <select value={dateRange} onChange={e => setDateRange(e.target.value)}
+                 className="appearance-none w-full pl-3 pr-8 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 bg-white outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-50 cursor-pointer">
+                 <option value="all">All Time</option>
+                 <option value="this_year">This Year (FY)</option>
+                 <option value="last_year">Last Year (FY)</option>
+                 <option value="custom">Custom Range</option>
+               </select>
+               <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+             </div>
+
+             {dateRange === "custom" && (
+               <>
+                 <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
+                   className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 bg-white outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-50" />
+                 <span className="text-xs text-slate-400">to</span>
+                 <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
+                   className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 bg-white outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-50" />
+               </>
+             )}
+
+             {hasActiveFilters && (
+               <button onClick={clearFilters}
+                 className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-all">
+                 Clear
+               </button>
+             )}
+
+             <div className="ml-auto text-xs font-semibold text-slate-500 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg shadow-sm">
+               Total: {filtered.length}
+             </div>
            </div>
         </div>
         
@@ -2343,9 +2878,11 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
                   <th className="px-4 py-3 uppercase tracking-wider text-[10px] border-b border-r border-slate-200 bg-slate-50 font-bold text-slate-600">Order No</th>
                   <th className="px-4 py-3 uppercase tracking-wider text-[10px] border-b border-r border-slate-200 font-bold text-slate-500">Type</th>
                   <th className="px-4 py-3 uppercase tracking-wider text-[10px] border-b border-r border-slate-200 font-bold text-slate-500">Made By</th>
-                  <th className="px-4 py-3 uppercase tracking-wider text-[10px] border-b border-r border-slate-200 font-bold text-slate-500">Date</th>
+                  <th className="px-4 py-3 uppercase tracking-wider text-[10px] border-b border-r border-slate-200 font-bold text-slate-500">Created Date</th>
+                  <th className="px-4 py-3 uppercase tracking-wider text-[10px] border-b border-r border-slate-200 font-bold text-slate-500">Issued Date</th>
                   <th className="px-4 py-3 uppercase tracking-wider text-[10px] border-b border-r border-slate-200 font-bold text-slate-500">Subject</th>
                   <th className="px-4 py-3 uppercase tracking-wider text-[10px] border-b border-r border-slate-200 font-bold text-slate-500">Vendor</th>
+                  <th className="px-4 py-3 uppercase tracking-wider text-[10px] border-b border-r border-slate-200 font-bold text-slate-500 text-right">Taxable Amount</th>
                   <th className="px-4 py-3 uppercase tracking-wider text-[10px] border-b border-r border-slate-200 text-center font-bold text-slate-500">Status</th>
                   <th className="px-4 py-3 uppercase tracking-wider text-[10px] border-b border-l border-slate-200 text-center bg-slate-50 font-bold text-slate-500 min-w-[140px]">Action</th>
                 </tr>
@@ -2353,7 +2890,7 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
               <tbody className="divide-y divide-slate-100">
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan="10" className="py-24 text-center bg-white">
+                    <td colSpan="12" className="py-24 text-center bg-white">
                        <div className="flex flex-col items-center justify-center">
                          <div className="h-16 w-16 bg-slate-50 rounded-full flex items-center justify-center mb-4 border border-slate-100">
                            <FileText size={24} className="text-slate-300" />
@@ -2412,48 +2949,72 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
                       <td className="px-4 py-3.5 border-b border-r border-slate-100 text-slate-500 text-[10px] font-medium whitespace-nowrap">
                         {new Date(o.date_of_creation || o.created_at).toLocaleDateString("en-IN")}
                       </td>
+                      <td className="px-4 py-3.5 border-b border-r border-slate-100 text-slate-500 text-[10px] font-medium whitespace-nowrap">
+                        {o.status === 'Issued' && (o.totals?.issuedAt || o.updated_at)
+                          ? new Date(o.totals?.issuedAt || o.updated_at).toLocaleDateString("en-IN")
+                          : <span className="text-slate-300">-</span>}
+                      </td>
                       <td className="px-4 py-3.5 border-b border-r border-slate-100 text-slate-700 text-xs font-semibold">
                         <span title={o.subject}>{o.subject || "-"}</span>
                       </td>
                       <td className="px-4 py-3.5 border-b border-r border-slate-100 text-slate-700 text-xs font-bold uppercase tracking-tight">
                         <span title={vName}>{vName}</span>
                       </td>
+                      <td className="px-4 py-3.5 border-b border-r border-slate-100 text-slate-800 text-[11px] font-mono font-bold text-right whitespace-nowrap">
+                        {(() => {
+                          const t = o.totals || {};
+                          const sub = Number(t.subtotal) || 0;
+                          const disc = Number(t.totalDiscountAmt) || 0;
+                          const taxable = sub - disc;
+                          return taxable > 0
+                            ? `â‚¹ ${taxable.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                            : <span className="text-slate-300 font-normal">-</span>;
+                        })()}
+                      </td>
                       <td className="px-4 py-3.5 border-b border-r border-slate-100 text-center">
                         <span style={{whiteSpace:'nowrap', display:'inline-flex'}} className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-widest
-                           ${o.status === "Draft" ? "bg-slate-100 text-slate-600 border border-slate-200" : 
-                             o.status === "Approved" || o.status === "Issued" ? "bg-emerald-50 text-emerald-600 border border-emerald-100" : 
+                           ${o.status === "Draft" ? "bg-slate-100 text-slate-600 border border-slate-200" :
+                             o.status === "Approved" || o.status === "Issued" ? "bg-emerald-50 text-emerald-600 border border-emerald-100" :
                              o.status === "Rejected" ? "bg-red-50 text-red-600 border border-red-100" :
                              o.status === "Review" ? "bg-sky-50 text-sky-600 border border-sky-100" :
+                             o.status === "Reverted" ? "bg-orange-50 text-orange-600 border border-orange-100" :
+                             o.status === "Recalled" ? "bg-purple-50 text-purple-600 border border-purple-100" :
+                             o.status === "Cancelled" ? "bg-slate-200 text-slate-500 border border-slate-300 line-through" :
                              "bg-amber-50 text-amber-600 border border-amber-100"}`}>
                            {o.status || "Draft"}
                         </span>
                       </td>
                       <td className="px-4 py-3.5 border-b border-l border-slate-100 text-center bg-white group-hover:bg-indigo-50/30 transition-colors">
                         <div className="flex items-center justify-center gap-1.5">
-                          <button onClick={() => onViewClick(o.id)} 
+                          <button onClick={() => onViewClick(o.id)}
                             className="h-8 w-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-600 hover:text-indigo-600 hover:border-indigo-200 hover:bg-white transition-all shadow-sm"
                             title="Quick View">
                             <Eye size={14} />
                           </button>
-                          
-                          {o.status === 'Review' && (
-                            <button onClick={() => handleSendToApproval(o.id)} 
-                              className="h-8 w-8 rounded-full border border-sky-200 bg-sky-50 flex items-center justify-center text-sky-600 hover:text-sky-700 hover:bg-white transition-all shadow-sm"
-                              title="Send for Approval">
-                              <Rocket size={14} />
+                          {o.status === 'Issued' ? (
+                            canEdit && (
+                              <button onClick={() => handleRecall(o.id)}
+                                className="h-8 w-8 rounded-full border border-purple-200 bg-purple-50 flex items-center justify-center text-purple-600 hover:text-purple-700 hover:bg-white transition-all shadow-sm"
+                                title="Recall Order">
+                                <Undo2 size={14} />
+                              </button>
+                            )
+                          ) : (
+                            canEdit && (
+                              <button onClick={() => onEditClick(o.id)}
+                                className="h-8 w-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-600 hover:text-sky-600 hover:border-sky-200 hover:bg-white transition-all shadow-sm"
+                                title="Full Edit">
+                                <Pencil size={13} />
+                              </button>
+                            )
+                          )}
+                          {canDelete && (
+                            <button onClick={() => handleDelete(o.id)}
+                              className="h-8 w-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-400 hover:text-red-500 hover:border-red-200 hover:bg-white transition-all shadow-sm"
+                              title="Delete">
+                              <Trash2 size={13} />
                             </button>
                           )}
-
-                          <button onClick={() => onEditClick(o.id)} 
-                            className="h-8 w-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-600 hover:text-sky-600 hover:border-sky-200 hover:bg-white transition-all shadow-sm"
-                            title="Full Edit">
-                            <Pencil size={13} />
-                          </button>
-                          <button onClick={() => handleDelete(o.id)} 
-                            className="h-8 w-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-400 hover:text-red-500 hover:border-red-200 hover:bg-white transition-all shadow-sm"
-                            title="Delete">
-                            <Trash2 size={13} />
-                          </button>
                           <button
                             onClick={() => openPDFPreview(o.id)}
                             className="h-8 w-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-800 border-slate-300 transition-all shadow-sm hover:text-slate-900 hover:bg-white"

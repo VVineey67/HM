@@ -3,11 +3,11 @@ const puppeteer = require("puppeteer");
 let browserPromise = null;
 
 const launchBrowser = () => {
-  const exePath = process.env.PUPPETEER_EXECUTABLE_PATH || "/usr/bin/chromium-browser";
-  console.log("Launching browser with path:", exePath);
+  const exePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+  if (exePath) console.log("Launching browser with path:", exePath);
   return puppeteer.launch({
     headless: "new",
-    executablePath: exePath,
+    executablePath: exePath || undefined,
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
@@ -58,12 +58,12 @@ const renderPdf = async (html, { format = "A4", margin, headerTemplate, footerTe
     return await page.pdf({
       format,
       printBackground: true,
-      preferCSSPageSize: !displayHeaderFooter,
+      preferCSSPageSize: true,
       displayHeaderFooter,
       headerTemplate: headerTemplate || "<span></span>",
       footerTemplate: footerTemplate || "<span></span>",
       margin: margin || (displayHeaderFooter
-        ? { top: "27mm", bottom: "22mm", left: "10mm", right: "10mm" }
+        ? { top: "33mm", bottom: "24mm", left: "10mm", right: "10mm" }
         : { top: "12mm", bottom: "16mm", left: "10mm", right: "10mm" }),
     });
   } finally {

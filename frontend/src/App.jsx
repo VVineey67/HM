@@ -64,6 +64,7 @@ import VendorList from "./pages/Procurement/VendorList";
 import CompanyList from "./pages/Procurement/CompanyList";
 import CreateOrder from "./pages/Procurement/CreateOrder";
 import OrderRecord from "./pages/Procurement/OrderRecord";
+import OrderDashboard from "./pages/Procurement/OrderDashboard";
 import TermCondition from "./pages/Procurement/clauses/TermCondition";
 import PaymentTerms from "./pages/Procurement/clauses/PaymentTerms";
 import GovernmentLaws from "./pages/Procurement/clauses/GovernmentLaws";
@@ -282,13 +283,8 @@ function App() {
       case "store_consumption_record": return <ConsumptionRecord project={selectedProject} />;
       case "store_stock_available": return <StockAvailable project={selectedProject} />;
       case "store_grn_docs": return <GRNDocs project={selectedProject} />;
-      case "procurement__create_order": return <CreateOrder project={selectedProject} />;
-      case "procurement__order_record": return (
-        <OrderRecord 
-          project={selectedProject} 
-          onEdit={(id) => { setEditingOrderId(id); setActiveTab("create__order"); }} 
-        />
-      );
+      case "procurement__order_dashboard": return <OrderDashboard project={selectedProject} />;
+      case "procurement__intake_dashboard": return <IntakeList project={selectedProject} />;
       case "images_all_images": return <AllImages project={selectedProject} />;
       case "images_compare_images": return <CompareImages project={selectedProject} />;
       case "staff": return <Attendance selectedProject={selectedProject} />;

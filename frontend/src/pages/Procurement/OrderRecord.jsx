@@ -1,11 +1,16 @@
 import React, { useState, useEffect } from "react";
-import { List, Search, Trash2, Eye, Pencil, FileDown, Rocket, X } from "lucide-react";
+import { List, Search, Trash2, Eye, Pencil, FileDown, X, Undo2 } from "lucide-react";
 import ViewOrder from "./ViewOrder";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
 export default function OrderRecord(props) {
   const { project } = props;
+  const currentUser = JSON.parse(localStorage.getItem("bms_user") || "{}");
+  const isGlobalAdmin = currentUser.role === "global_admin";
+  const myPerms = currentUser.app_permissions?.find(p => p.module_key === "create_order") || {};
+  const canEdit   = isGlobalAdmin || !!myPerms.can_edit;
+  const canDelete = isGlobalAdmin || !!myPerms.can_delete;
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -16,7 +21,7 @@ export default function OrderRecord(props) {
   const [pdfPreviewNonce, setPdfPreviewNonce] = useState(0);
   const [pdfDownloading, setPdfDownloading] = useState(false);
 
-  const TABS = ["All", "Draft", "Review", "Pending Issue", "Issued", "Rejected", "Revert", "Recall"];
+  const TABS = ["All", "Draft", "Review", "Pending Issue", "Issued", "Rejected", "Reverted", "Recalled", "Cancelled"];
 
   // Persist viewOrderId so browser refresh stays on the same order
   useEffect(() => {
@@ -41,33 +46,27 @@ export default function OrderRecord(props) {
 
   const showToast = (msg, type = "success") => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
 
-  const handleSendToApproval = async (id) => {
+  const handleRecall = async (id) => {
+    if (!confirm("Recall this order? It will move to the creator's Recalled tab for editing.")) return;
     try {
-      showToast("Initializing approval flow...");
-      // 1. Update Order Status to Pending Issue
-      const updRes = await fetch(`${API}/api/orders/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: JSON.stringify({ mainData: { status: 'Pending Issue' } }) })
+      const token = localStorage.getItem("bms_token") || "";
+      const reqRes = await fetch(`${API}/api/approvals/requests/${id}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (!updRes.ok) throw new Error("Failed to update status");
+      const reqData = await reqRes.json();
+      const requestId = reqData?.request?.id;
+      if (!requestId) throw new Error("No approval request found for this order");
 
-      // 2. Initialize Approval Engine
-      const appRes = await fetch(`${API}/api/approvals/requests`, {
+      const actRes = await fetch(`${API}/api/approvals/action`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem("bms_token") || ""}` },
-        body: JSON.stringify({
-          module_key: "create_order",
-          document_id: id,
-          requestor_id: JSON.parse(localStorage.getItem("bms_user") || "{}").id
-        })
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ request_id: requestId, action: 'Recalled', comments: 'Recalled by user' })
       });
-      if (!appRes.ok) throw new Error("Approval init failed");
-
-      showToast("Order submitted for approval!");
+      if (!actRes.ok) throw new Error("Recall failed");
+      showToast("Order recalled successfully");
       fetchOrders();
     } catch (err) {
-      showToast(err.message, "error");
+      showToast(err.message || "Recall failed", "error");
     }
   };
 
@@ -194,9 +193,9 @@ export default function OrderRecord(props) {
               <tbody className="bg-white">
                 {filtered.map(o => {
                   const snap = o.snapshot || {};
-                  const vName = snap.vendor?.vendorName || snap.vendor?.vendor_name || o.vendors?.vendor_name || "—";
-                  const sCode = snap.site?.siteCode || snap.site?.site_code || o.sites?.site_code || "—";
-                  const cCode = snap.company?.companyCode || snap.company?.company_code || o.companies?.company_code || "—";
+                  const vName = snap.vendor?.vendorName || snap.vendor?.vendor_name || o.vendors?.vendor_name || "ï¿½";
+                  const sCode = snap.site?.siteCode || snap.site?.site_code || o.sites?.site_code || "ï¿½";
+                  const cCode = snap.company?.companyCode || snap.company?.company_code || o.companies?.company_code || "ï¿½";
                   
                   const typeCode = o.order_type === "Supply" ? "PO" : "WO";
                   const prefix = `${cCode}/${sCode}/${typeCode}/`;
@@ -210,9 +209,9 @@ export default function OrderRecord(props) {
                       <td className="px-3 py-3.5 border-b border-r border-slate-100 font-bold text-indigo-600 text-xs" style={{maxWidth:'65px', overflow:'hidden'}}>
                         <span style={{display:'block', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} title={sCode}>{sCode}</span>
                       </td>
-                      <td className="px-3 py-3.5 border-b border-r border-slate-200 font-mono font-bold text-xs" style={{maxWidth:'110px', overflow:'hidden'}} title={displayNo || '—'}>
+                      <td className="px-3 py-3.5 border-b border-r border-slate-200 font-mono font-bold text-xs" style={{maxWidth:'110px', overflow:'hidden'}} title={displayNo || 'ï¿½'}>
                         <span style={{display:'block', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} className={displayNo ? "text-slate-800" : "text-slate-300"}>
-                          {displayNo || "—"}
+                          {displayNo || "ï¿½"}
                         </span>
                       </td>
                       <td className="px-3 py-3.5 border-b border-r border-slate-100">
@@ -225,44 +224,56 @@ export default function OrderRecord(props) {
                       </td>
                       <td className="px-3 py-3.5 border-b border-r border-slate-100 text-slate-500 text-[11px] font-medium" style={{whiteSpace:'nowrap'}}>{new Date(o.date_of_creation || o.created_at).toLocaleDateString("en-IN")}</td>
                       <td className="px-3 py-3.5 border-b border-r border-slate-100 text-slate-700 text-xs font-semibold" style={{overflow:'hidden'}}>
-                        <span style={{display:'block', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} title={o.subject}>{o.subject || "—"}</span>
+                        <span style={{display:'block', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} title={o.subject}>{o.subject || "ï¿½"}</span>
                       </td>
                       <td className="px-3 py-3.5 border-b border-r border-slate-100 text-slate-700 text-xs font-medium" style={{overflow:'hidden'}}>
                         <span style={{display:'block', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} title={vName}>{vName}</span>
                       </td>
                       <td className="px-3 py-3.5 border-b border-r border-slate-100 text-center">
                         <span style={{whiteSpace:'nowrap', display:'inline-flex'}} className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-widest
-                          ${o.status === "Approved" ? "bg-emerald-50 text-emerald-600 border border-emerald-100" : 
+                          ${o.status === "Approved" ? "bg-emerald-50 text-emerald-600 border border-emerald-100" :
                             o.status === "Issued" ? "bg-emerald-100 text-emerald-800 border border-emerald-200" :
                             o.status === "Review" ? "bg-sky-50 text-sky-600 border border-sky-100" :
-                            o.status === "Draft" ? "bg-slate-100 text-slate-600" : "bg-amber-50 text-amber-600 border border-amber-100"}`}>
+                            o.status === "Draft" ? "bg-slate-100 text-slate-600" :
+                            o.status === "Rejected" ? "bg-red-50 text-red-600 border border-red-100" :
+                            o.status === "Reverted" ? "bg-orange-50 text-orange-600 border border-orange-100" :
+                            o.status === "Recalled" ? "bg-purple-50 text-purple-600 border border-purple-100" :
+                            o.status === "Cancelled" ? "bg-slate-200 text-slate-500 border border-slate-300 line-through" :
+                            "bg-amber-50 text-amber-600 border border-amber-100"}`}>
                           {o.status || "Pending"}
                         </span>
                       </td>
                       <td className="px-3 py-3.5 border-b border-slate-200 bg-white group-hover:bg-slate-50 transition-colors">
                         <div className="flex items-center justify-center gap-1.5">
-                          <button onClick={() => setViewOrderId(o.id)} 
+                          <button onClick={() => setViewOrderId(o.id)}
                             className="h-7 w-7 rounded-full border border-slate-200 flex items-center justify-center text-slate-600 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 transition-all shadow-sm"
                             title="View Full Order">
                             <Eye size={14} />
                           </button>
-                          {o.status === 'Review' && (
-                            <button onClick={() => handleSendToApproval(o.id)} 
-                              className="h-7 w-7 rounded-full border border-sky-200 bg-sky-50 flex items-center justify-center text-sky-600 hover:text-sky-700 hover:bg-sky-100 transition-all shadow-sm"
-                              title="Send for Approval">
-                              <Rocket size={13} />
+                          {o.status === 'Issued' ? (
+                            canEdit && (
+                              <button onClick={() => handleRecall(o.id)}
+                                className="h-7 w-7 rounded-full border border-purple-200 bg-purple-50 flex items-center justify-center text-purple-600 hover:text-purple-700 hover:bg-purple-100 transition-all shadow-sm"
+                                title="Recall Order">
+                                <Undo2 size={13} />
+                              </button>
+                            )
+                          ) : (
+                            canEdit && (
+                              <button onClick={() => props.onEdit && props.onEdit(o.id)}
+                                className="h-7 w-7 rounded-full border border-slate-200 flex items-center justify-center text-slate-600 hover:text-sky-600 hover:border-sky-200 hover:bg-sky-50 transition-all shadow-sm"
+                                title="Edit Order">
+                                <Pencil size={13} />
+                              </button>
+                            )
+                          )}
+                          {canDelete && (
+                            <button onClick={() => handleDelete(o.id)}
+                              className="h-7 w-7 rounded-full border border-slate-200 flex items-center justify-center text-slate-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 transition-all shadow-sm"
+                              title="Delete Order">
+                              <Trash2 size={13} />
                             </button>
                           )}
-                          <button onClick={() => props.onEdit && props.onEdit(o.id)} 
-                            className="h-7 w-7 rounded-full border border-slate-200 flex items-center justify-center text-slate-600 hover:text-sky-600 hover:border-sky-200 hover:bg-sky-50 transition-all shadow-sm"
-                            title="Edit Order">
-                            <Pencil size={13} />
-                          </button>
-                          <button onClick={() => handleDelete(o.id)} 
-                            className="h-7 w-7 rounded-full border border-slate-200 flex items-center justify-center text-slate-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 transition-all shadow-sm"
-                            title="Delete Order">
-                            <Trash2 size={13} />
-                          </button>
                           <button onClick={() => openPDFPreview(o.id)}
                             className="h-7 w-7 rounded-full border border-slate-200 flex items-center justify-center text-slate-800 hover:text-slate-900 border-slate-300 hover:bg-slate-100 transition-all shadow-sm"
                             title="PDF Preview">
