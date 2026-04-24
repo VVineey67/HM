@@ -12,7 +12,9 @@ RUN apk add --no-cache \
       ttf-freefont \
       font-noto \
       font-noto-cjk \
-      dumb-init
+      dumb-init \
+      vips \
+      libc6-compat
 
 ENV PUPPETEER_SKIP_DOWNLOAD=true \
     PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \

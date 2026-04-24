@@ -584,12 +584,23 @@ const renderFooterTemplate = (comp) => {
 };
 
 const previewCss = `
-  body { background: #e5e7eb; padding: 24px 0; }
+  html { scroll-behavior: auto; }
+  body {
+    background: #e5e7eb; padding: 24px 0;
+    /* Avoid per-frame repaints of background during scroll in Chrome */
+    background-attachment: local;
+  }
   .sheet {
     width: 210mm; min-height: 297mm; margin: 0 auto 24px; padding: 21mm 10mm 22mm;
-    background: #fff; box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    background: #fff;
+    /* Lighter shadow + GPU layer so Chrome doesn't repaint shadow every scroll frame */
+    box-shadow: 0 2px 8px rgba(0,0,0,0.10);
     position: relative; box-sizing: border-box;
+    transform: translateZ(0);
+    will-change: transform;
+    contain: layout paint style;
   }
+  .sheet img { image-rendering: auto; }
   .preview-header { margin-bottom: 6px; }
   .preview-header-inner { position: relative; height: 65px; width: 100%; }
   .preview-logo {

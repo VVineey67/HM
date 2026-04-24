@@ -115,6 +115,8 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
   useEffect(() => {
     if (orderId) {
       fetchOrderDetails();
+      // Prime the server-side preview HTML cache so clicking "PDF View" is instant
+      fetch(`${API}/api/orders/${orderId}/preview`, { method: "GET" }).catch(() => {});
     }
   }, [orderId]);
 

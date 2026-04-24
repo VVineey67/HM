@@ -730,7 +730,29 @@ router.get("/:id/preview", async (req, res) => {
 });
 
 const logoCache = new Map();
-const LOGO_TTL_MS = 60 * 60 * 1000;
+const LOGO_TTL_MS = 24 * 60 * 60 * 1000;
+
+let sharp = null;
+try { sharp = require("sharp"); } catch { console.warn("sharp not available — images embedded without compression"); }
+
+const compressImage = async (buf) => {
+  if (!sharp) return { buf, ct: "image/png" };
+  try {
+    const img = sharp(buf, { failOn: "none" });
+    const meta = await img.metadata();
+    const MAX = 500;
+    if ((meta.width || 0) > MAX) img.resize({ width: MAX, withoutEnlargement: true });
+    if (meta.hasAlpha) {
+      const out = await img.png({ compressionLevel: 9, palette: true }).toBuffer();
+      return { buf: out, ct: "image/png" };
+    }
+    const out = await img.jpeg({ quality: 82, mozjpeg: true }).toBuffer();
+    return { buf: out, ct: "image/jpeg" };
+  } catch (e) {
+    console.warn("Image compress failed, using original:", e.message);
+    return { buf, ct: "image/png" };
+  }
+};
 
 const fetchAsDataUri = async (url) => {
   if (!url) return "";
@@ -739,8 +761,8 @@ const fetchAsDataUri = async (url) => {
   try {
     const r = await fetch(url);
     if (!r.ok) return "";
-    const ct = r.headers.get("content-type") || "image/png";
-    const buf = Buffer.from(await r.arrayBuffer());
+    const rawBuf = Buffer.from(await r.arrayBuffer());
+    const { buf, ct } = await compressImage(rawBuf);
     const v = `data:${ct};base64,${buf.toString("base64")}`;
     logoCache.set(url, { v, t: Date.now() });
     return v;
