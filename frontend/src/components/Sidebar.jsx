@@ -5,6 +5,7 @@ import {
   LogOut, Briefcase, ChevronDown, ChevronRight,
   Info, Box, CalendarCheck, IndianRupee, ClipboardList,
   FileSpreadsheet, Settings2, ChevronsUpDown, PackagePlus,
+  Database, History,
 } from "lucide-react";
 
 const toSubId = (parentId, subLabel) =>
@@ -17,8 +18,8 @@ const globalMenu = [
     sub: ["Intake", "Order"] },
   { id: "proc_setup",  label: "Procurement Setup", icon: Settings2,
     sub: ["Company List","Site List","Vendor List","UOM","Category List","Item List","Term Condition","Payment Terms","Government Laws","Contact List","Annexure"] },
-  { id: "approvals",   label: "Approval Engine",   icon: ShieldCheck,
-    sub: ["Config"] },
+  { id: "master_data", label: "Master Data",       icon: Database        },
+  { id: "audit",       label: "Audit",             icon: History         },
 ];
 
 const projectMenu = [
@@ -102,6 +103,8 @@ const TAB_MODULE_KEY = {
   images__all_images:             "all_images",
   images__compare_images:         "compare_images",
   approvals__config:              "approval_workflows",
+  master_data:                    "master_data",
+  audit:                          "audit",
 };
 
 const Sidebar = ({

@@ -251,6 +251,29 @@ function App() {
     if (activeTab === "proc_setup__contact_list") return <ContactList />;
     if (activeTab === "proc_setup__annexure") return <AnnexureMaster />;
     if (activeTab === "approvals__config") return <ApprovalConfig showToast={(msg, type) => alert(`${type?.toUpperCase()}: ${msg}`)} />;
+
+    if (activeTab === "master_data") {
+      return (
+        <div className="flex min-h-screen items-center justify-center p-4 md:p-10 bg-[#f8fafc]">
+          <div className="bg-white p-8 md:p-20 rounded-2xl md:rounded-[3rem] shadow-sm border border-slate-100 flex items-center justify-center w-full max-w-4xl">
+            <p className="text-slate-400 font-bold uppercase tracking-wider md:tracking-[0.3em] text-center text-sm md:text-base">
+              Master Data — Coming soon
+            </p>
+          </div>
+        </div>
+      );
+    }
+    if (activeTab === "audit") {
+      return (
+        <div className="flex min-h-screen items-center justify-center p-4 md:p-10 bg-[#f8fafc]">
+          <div className="bg-white p-8 md:p-20 rounded-2xl md:rounded-[3rem] shadow-sm border border-slate-100 flex items-center justify-center w-full max-w-4xl">
+            <p className="text-slate-400 font-bold uppercase tracking-wider md:tracking-[0.3em] text-center text-sm md:text-base">
+              Audit — Coming soon
+            </p>
+          </div>
+        </div>
+      );
+    }
  
     if (!selectedProject) {
       return (

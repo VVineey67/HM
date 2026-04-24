@@ -657,18 +657,21 @@ const { renderPdf } = require("../services/pdfService");
 const { renderOrderHtml, renderHeaderTemplate, renderFooterTemplate, renderPreviewHeader } = require("../pdf/orderTemplate");
 
 const loadOrderForRender = async (orderId) => {
-  const { data: order, error: orderErr } = await supabase.schema("procurement")
-    .from("purchase_orders")
-    .select("*, sites(*), companies(*), vendors(*), contact_person:contacts(*)")
-    .eq("id", orderId)
-    .single();
-  if (orderErr) throw orderErr;
-
-  const { data: items, error: itemErr } = await supabase.schema("procurement")
-    .from("purchase_order_items")
-    .select("*, items(*)")
-    .eq("order_id", orderId);
-  if (itemErr) throw itemErr;
+  const [orderRes, itemRes] = await Promise.all([
+    supabase.schema("procurement")
+      .from("purchase_orders")
+      .select("*, sites(*), companies(*), vendors(*), contact_person:contacts(*)")
+      .eq("id", orderId)
+      .single(),
+    supabase.schema("procurement")
+      .from("purchase_order_items")
+      .select("*, items(*)")
+      .eq("order_id", orderId),
+  ]);
+  if (orderRes.error) throw orderRes.error;
+  if (itemRes.error) throw itemRes.error;
+  const order = orderRes.data;
+  const items = itemRes.data;
 
   const cleanOrder = sanitizeRichTextDeep(order);
   const cleanItems = sanitizeRichTextDeep(items || []).map((row) => ({
@@ -684,26 +687,41 @@ const loadOrderForRender = async (orderId) => {
   return { cleanOrder, cleanItems, comp, vend, site, contacts: finalContacts };
 };
 
+const previewHtmlCache = new Map();
+const PREVIEW_CACHE_MAX = 50;
+
 router.get("/:id/preview", async (req, res) => {
   try {
     const { cleanOrder, cleanItems, comp, vend, site, contacts } = await loadOrderForRender(req.params.id);
-    const logoDataUri = await fetchAsDataUri(comp.logo_url || comp.logoUrl);
-    const stampDataUri = await fetchAsDataUri(comp.stamp_url || comp.stampUrl);
-    const signDataUri = await fetchAsDataUri(comp.sign_url || comp.signUrl);
-    const compWithImages = { ...comp, stampDataUri, signDataUri };
-    const html = renderOrderHtml(
-      {
-        order: cleanOrder,
-        items: cleanItems,
-        comp: compWithImages,
-        vend,
-        site,
-        contacts,
-        previewHeaderHtml: renderPreviewHeader(cleanOrder, comp, logoDataUri),
-      },
-      { preview: true }
-    );
+
+    const cacheKey = `${cleanOrder.id}__${cleanOrder.updated_at || cleanOrder.created_at || ""}`;
+    let html = previewHtmlCache.get(cacheKey);
+
+    if (!html) {
+      const [logoDataUri, stampDataUri, signDataUri] = await Promise.all([
+        fetchAsDataUri(comp.logo_url || comp.logoUrl),
+        fetchAsDataUri(comp.stamp_url || comp.stampUrl),
+        fetchAsDataUri(comp.sign_url || comp.signUrl),
+      ]);
+      const compWithImages = { ...comp, stampDataUri, signDataUri };
+      html = renderOrderHtml(
+        {
+          order: cleanOrder,
+          items: cleanItems,
+          comp: compWithImages,
+          vend,
+          site,
+          contacts,
+          previewHeaderHtml: renderPreviewHeader(cleanOrder, comp, logoDataUri),
+        },
+        { preview: true }
+      );
+      if (previewHtmlCache.size >= PREVIEW_CACHE_MAX) previewHtmlCache.delete(previewHtmlCache.keys().next().value);
+      previewHtmlCache.set(cacheKey, html);
+    }
+
     res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "private, max-age=60");
     res.end(html);
   } catch (err) {
     console.error("PDF preview error:", err);
@@ -738,11 +756,13 @@ const PDF_CACHE_MAX = 50;
 router.get("/:id/pdf", async (req, res) => {
   try {
     const { cleanOrder, cleanItems, comp, vend, site, contacts } = await loadOrderForRender(req.params.id);
-    const stampDataUri = await fetchAsDataUri(comp.stamp_url || comp.stampUrl);
-    const signDataUri = await fetchAsDataUri(comp.sign_url || comp.signUrl);
+    const [logoDataUri, stampDataUri, signDataUri] = await Promise.all([
+      fetchAsDataUri(comp.logo_url || comp.logoUrl),
+      fetchAsDataUri(comp.stamp_url || comp.stampUrl),
+      fetchAsDataUri(comp.sign_url || comp.signUrl),
+    ]);
     const compWithImages = { ...comp, stampDataUri, signDataUri };
     const html = renderOrderHtml({ order: cleanOrder, items: cleanItems, comp: compWithImages, vend, site, contacts });
-    const logoDataUri = await fetchAsDataUri(comp.logo_url || comp.logoUrl);
     const headerTemplate = renderHeaderTemplate(cleanOrder, comp, logoDataUri);
     const footerTemplate = renderFooterTemplate(comp);
     const cacheKey = crypto
