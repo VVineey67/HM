@@ -417,7 +417,7 @@ const MultiDocUpload = ({ label, files, onAdd, onRemove, max = 6, required }) =>
 
 
 function makeSubRow() {
-  return { id: Date.now() + Math.random(), specification: "", scopeOfWork: "", modelNumber: "", make: "", hideModel: false, hideBrand: false, qty: 0, unitRate: 0, discountPct: 0, taxPct: 18, grossAmount: 0, discountAmount: 0, baseAmount: 0, gstAmount: 0, totalAmount: 0, remarks: "" };
+  return { id: Date.now() + Math.random(), specification: "", modelNumber: "", make: "", hideModel: false, hideBrand: false, qty: 0, unitRate: 0, discountPct: 0, taxPct: 18, grossAmount: 0, discountAmount: 0, baseAmount: 0, gstAmount: 0, totalAmount: 0, remarks: "" };
 }
 function makeGroup() {
   return { id: Date.now(), itemId: "", unit: "", subRows: [makeSubRow()] };
@@ -566,7 +566,6 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
         g.subRows.push({
           id: Math.random(),
           specification: it.description,
-          scopeOfWork: it.scope_of_work,
           modelNumber: it.model_number || "",
           make: it.make || "",
           hideModel: false,
@@ -726,7 +725,7 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
       return {
         ...g, itemId: val, unit: found?.unit || "",
         subRows: g.subRows.map(s => ({
-          ...s, specification: "", make: "", scopeOfWork: "", modelNumber: "", hideModel: false, hideBrand: false
+          ...s, specification: "", make: "", modelNumber: "", hideModel: false, hideBrand: false
         }))
       };
     }));
@@ -789,8 +788,7 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
 
     // 2. Map type to db field
     let field = "";
-    if (type === "scopeOfWork") field = "scope_of_work";
-    else if (type === "specification") field = "description";
+    if (type === "specification") field = "description";
     else if (type === "make") field = "make"; // brands
 
     if (!field) return;
@@ -817,7 +815,6 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
         setItemsList(prev => prev.map(i => {
            if (i.id === itemId) {
               const updated = { ...i };
-              if (type === "scopeOfWork") updated.scopeOfWork = data.updatedArray;
               if (type === "specification") updated.specifications = data.updatedArray;
               if (type === "make") updated.brands = data.updatedArray;
               return updated;
@@ -1008,7 +1005,6 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
       item_id: g.itemId || null, 
       unit: g.unit || "",
       description: s.specification || "",
-      scope_of_work: s.scopeOfWork || "",
       model_number: settings.model && !s.hideModel ? (s.modelNumber || "") : "",
       make: settings.brand && !s.hideBrand ? (s.make || "") : "",
       qty: Number(s.qty) || 0,
@@ -1026,7 +1022,6 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
       // Only append new files if they are actually File objects (not urls)
       files.quotations.forEach(f => { if(f instanceof File) fd.append("quotation", f); });
       files.proof.files.forEach(f => { if(f instanceof File) fd.append("comparative", f); });
-      files.others.forEach(f => { if(f instanceof File) fd.append("otherDocs", f); });
 
       const payload = {
         mainData: mappedMain,
@@ -1907,7 +1902,7 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
               <h3 className="text-sm font-bold text-slate-700">
-                {customInputModal.originalValue ? "Edit" : "Add Custom"} {customInputModal.type === "scopeOfWork" ? "Scope of Work" : (customInputModal.type === "specification" ? "Description" : "Make / Brand")}
+                {customInputModal.originalValue ? "Edit" : "Add Custom"} {customInputModal.type === "specification" ? "Description" : "Make / Brand"}
               </h3>
               <button onClick={() => setCustomInputModal({ open: false })} className="text-slate-400 hover:text-rose-500 transition-colors bg-white rounded-md p-1 border border-slate-200"><X size={16} /></button>
             </div>
@@ -2212,7 +2207,7 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
       /* ── TABLE ── */
       const tableHead = [["S.No", "Description", "UOM", "Qty", "Rate (Rs)", "Tax %", "Amount (Rs)"]];
       const tableBody = items.map((it, i) => [
-        i + 1, it.description + (it.scope_of_work ? `\nScope: ${it.scope_of_work}` : ""),
+        i + 1, it.description,
         it.unit?.toUpperCase() || "", it.qty || 0, Number(it.unit_rate).toLocaleString("en-IN", { minimumFractionDigits: 2 }),
         it.tax_pct || "0", Number(it.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 }),
       ]);

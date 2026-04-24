@@ -396,7 +396,6 @@ router.post("/bulk-import", async (req, res) => {
           discount_pct:  num(pick(r, ["Discount (%)", "Discount%", "Discount Pct"])),
           amount:        num(pick(r, ["Amount"])) || (num(pick(r, ["Quantity", "Qty"])) * num(pick(r, ["Unit Price (₹)", "Unit Price", "Rate"]))),
           remarks:       String(pick(r, ["Remarks"])).trim(),
-          _scopePoints:  descToPoints(pick(r, ["Scope of Work"])),
         })).filter(it => it.material_name || it.qty > 0);
 
         // Consolidate: consecutive rows with same (Item Name + Unit) AND blank qty → merge as additional description points
@@ -411,7 +410,6 @@ router.post("/bulk-import", async (req, res) => {
 
           if (isContinuation) {
             last._descPoints = [...last._descPoints, ...raw._descPoints];
-            last._scopePoints = [...last._scopePoints, ...raw._scopePoints];
             if (!last.model_number && raw.model_number) last.model_number = raw.model_number;
             if (!last.make && raw.make) last.make = raw.make;
             if (!last.remarks && raw.remarks) last.remarks = raw.remarks;
@@ -433,7 +431,6 @@ router.post("/bulk-import", async (req, res) => {
           discount_pct:  it.discount_pct,
           amount:        it.amount,
           remarks:       it.remarks,
-          scope_of_work: pointsToStorage(it._scopePoints),
         }));
 
         // Totals

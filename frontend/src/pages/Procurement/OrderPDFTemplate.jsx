@@ -1175,7 +1175,7 @@ table tbody td[rowspan] {
                         </div>
                         <div className="grid-detail-row" style={{ gridTemplateColumns: '55px 1fr' }}>
                           <span className="grid-detail-label">MSME No:</span>
-                          <span className="grid-detail-value pdf-fit-text">{vend.msme || vend.msme_no || "N/A"}</span>
+                          <span className="grid-detail-value pdf-fit-text">{vend.msme_number || vend.msme || vend.msme_no || "N/A"}</span>
                         </div>
                         <div className="grid-detail-row" style={{ gridTemplateColumns: '55px 1fr' }}>
                           <span className="grid-detail-label">Aadhar No:</span>

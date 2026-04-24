@@ -152,7 +152,7 @@ export default function ItemList() {
     setEditId(item.id);
     setForm({
       materialName:   item.materialName || "",
-      specifications: [...(item.specifications || []), ...(item.scopeOfWork || [])],
+      specifications: item.specifications || [],
       category:       item.category || "",
       brands:         item.brands || [],
       unit:           item.unit || "",
@@ -178,7 +178,6 @@ export default function ItemList() {
       fd.append("materialName", form.materialName);
       fd.append("specifications", JSON.stringify(form.specifications.filter(s => s.trim())));
       fd.append("category",     form.category);
-      fd.append("scopeOfWork",  JSON.stringify([]));
       fd.append("brands",       JSON.stringify(form.brands.filter(b => b.trim())));
       fd.append("unit", form.unit);
       fd.append("remarks",      form.remarks);
@@ -203,7 +202,6 @@ export default function ItemList() {
           materialName:   form.materialName,
           specifications: form.specifications.filter(s => s.trim()),
           category:       form.category,
-          scopeOfWork:    [],
           brands:         form.brands.filter(b => b.trim()),
           unit:           form.unit,
           remarks:        form.remarks,
@@ -227,9 +225,9 @@ export default function ItemList() {
 
   /* ── Export / Bulk helpers ── */
   const SUPPLY_COLS = ["Category","Item Name","Specification (comma separated)","Brand 1","Brand 2","Brand 3","Brand 4","Brand 5","Unit","Remarks"];
-  const SITC_COLS   = ["Category","Item Name","Specification (comma separated)","Scope of Work","Brand 1","Brand 2","Brand 3","Brand 4","Brand 5","Unit","Remarks"];
+  const SITC_COLS   = ["Category","Item Name","Specification (comma separated)","Brand 1","Brand 2","Brand 3","Brand 4","Brand 5","Unit","Remarks"];
   const EXP_SUPPLY  = ["Item Code","Category","Item Name","Specification","Brands","Unit","Remarks"];
-  const EXP_SITC    = ["Item Code","Category","Item Name","Specification","Scope of Work","Brands","Unit","Remarks"];
+  const EXP_SITC    = ["Item Code","Category","Item Name","Specification","Brands","Unit","Remarks"];
 
   const downloadTemplate = () => {
     const exampleSupply = {
@@ -245,7 +243,6 @@ export default function ItemList() {
       "Category": "ELV / IT",
       "Item Name": "IP Camera 4MP",
       "Specification (comma separated)": "4MP, IR 30m, H.265, PoE",
-      "Scope of Work": "Supply, installation, testing and commissioning",
       "Brand 1": "Hikvision", "Brand 2": "Dahua", "Brand 3": "", "Brand 4": "", "Brand 5": "",
       "Unit": "Nos",
       "Remarks": "",
@@ -263,7 +260,6 @@ export default function ItemList() {
     const rows = tabItems.map(item => {
       const brands = (item.brands || []).join("; ");
       const base   = { "Item Code": item.itemCode, "Category": item.category, "Item Name": item.materialName, "Specification": (item.specifications||[]).join(", "), "Brands": brands, "Unit": item.unit, "Remarks": item.remarks };
-      if (isSITC) base["Scope of Work"] = Array.isArray(item.scopeOfWork) ? item.scopeOfWork.join(", ") : (item.scopeOfWork || "");
       return Object.fromEntries(headers.map(h => [h, base[h] || ""]));
     });
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -295,7 +291,6 @@ export default function ItemList() {
           "Category":     item.category   || "",
           "Item Name":    item.materialName|| "",
           "Specification": specs,
-          "Scope of Work": Array.isArray(item.scopeOfWork) ? item.scopeOfWork.join(", ") : (item.scopeOfWork || ""),
           "Brands":        brands,
           "Unit":          item.unit      || "",
           "Remarks":       item.remarks   || "",
@@ -348,7 +343,6 @@ export default function ItemList() {
         category:       r["Category"]     || "",
         materialName:   r["Item Name"]    || "",
         specifications: (r["Specification (comma separated)"] || "").toString().split(",").map(s => s.trim()).filter(Boolean),
-        scopeOfWork:    (r["Scope of Work"] || "").toString().split(",").map(s => s.trim()).filter(Boolean),
         brands:         [r["Brand 1"],r["Brand 2"],r["Brand 3"],r["Brand 4"],r["Brand 5"]].filter(b => b?.toString().trim()),
         unit:        r["Unit"]         || "",
         remarks:     r["Remarks"]      || "",
@@ -396,9 +390,6 @@ export default function ItemList() {
   const removeSpec = (i) => setForm(f => ({ ...f, specifications: f.specifications.filter((_, idx) => idx !== i) }));
 
   /* scope of work helpers */
-  const addScope    = () => setForm(f => ({ ...f, scopeOfWork: [...f.scopeOfWork, ""] }));
-  const updateScope = (i, v) => setForm(f => { const s = [...f.scopeOfWork]; s[i] = v; return { ...f, scopeOfWork: s }; });
-  const removeScope = (i) => setForm(f => ({ ...f, scopeOfWork: f.scopeOfWork.filter((_, idx) => idx !== i) }));
 
   const [filterCategory, setFilterCategory] = useState("");
   const [filterItem,     setFilterItem]     = useState("");

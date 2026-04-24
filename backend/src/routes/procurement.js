@@ -66,7 +66,6 @@ router.get("/items", async (_req, res) => {
       category:     r.category      || "",
       unit:         r.unit          || "",
       imageUrl:     r.image_url     || "",
-      scopeOfWork:  parseJsonArr(r.scope_of_work),
       remarks:      r.remarks       || "",
       createdById:  r.created_by_id || "",
       createdByName: r.created_by_name || "",
@@ -83,7 +82,6 @@ router.post("/items", upload.single("image"), async (req, res) => {
     const { materialName, category, unit, itemType, remarks, createdById, createdByName } = req.body;
     const brands         = JSON.parse(req.body.brands         || "[]");
     const specifications = JSON.parse(req.body.specifications || "[]");
-    const scopeOfWork    = JSON.parse(req.body.scopeOfWork    || "[]");
     const item_code      = await getNextItemCode(itemType || "Supply");
     let image_url        = "";
     if (req.file) {
@@ -98,7 +96,7 @@ router.post("/items", upload.single("image"), async (req, res) => {
       material_name: materialName || "", make: JSON.stringify(brands),
       description: JSON.stringify(specifications), category: category || "",
       unit: unit || "", image_url,
-      scope_of_work: JSON.stringify(scopeOfWork), remarks: remarks || "",
+      remarks: remarks || "",
       created_by_id: createdById || "", created_by_name: createdByName || "",
     }).select().single();
     if (error) throw error;
@@ -115,7 +113,6 @@ router.put("/items/:id", upload.single("image"), async (req, res) => {
     const { materialName, category, unit, itemType, remarks } = req.body;
     const brands         = JSON.parse(req.body.brands         || "[]");
     const specifications = JSON.parse(req.body.specifications || "[]");
-    const scopeOfWork    = JSON.parse(req.body.scopeOfWork    || "[]");
     let image_url        = req.body.imageUrl || "";
 
     if (req.file) {
@@ -135,7 +132,7 @@ router.put("/items/:id", upload.single("image"), async (req, res) => {
       material_name: materialName || "", make: JSON.stringify(brands),
       description: JSON.stringify(specifications), category: category || "",
       unit: unit || "", image_url,
-      scope_of_work: JSON.stringify(scopeOfWork), remarks: remarks || "",
+      remarks: remarks || "",
     }).eq("id", id);
     if (error) throw error;
     res.json({ success: true, imageUrl: image_url });
@@ -255,7 +252,6 @@ router.post("/items/bulk", async (req, res) => {
         description:   JSON.stringify(Array.isArray(r.specifications) ? r.specifications.filter(Boolean) : []),
         category:      r.category      || "",
         unit:          r.unit          || "",
-        scope_of_work: JSON.stringify(Array.isArray(r.scopeOfWork) ? r.scopeOfWork.filter(Boolean) : []),
         remarks:       r.remarks       || "",
         image_url:     "",
         created_by_id: req.body.createdById || null,

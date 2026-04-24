@@ -547,7 +547,7 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
                     <div className="flex gap-3"><span className="text-slate-400 w-32 shrink-0">GST No</span><span className="font-bold font-mono uppercase text-slate-900 text-[11px]">{vend.gstin || 'NA'}</span></div>
                     <div className="flex gap-3"><span className="text-slate-400 w-32 shrink-0">Pan No</span><span className="font-bold font-mono uppercase text-slate-900 text-[11px]">{vend.pan || 'NA'}</span></div>
                     <div className="flex gap-3"><span className="text-slate-400 w-32 shrink-0">Aadhar No</span><span className="font-bold font-mono uppercase text-sky-600 text-[11px] italic">{vend.aadhar || vend.aadhar_no || 'NA'}</span></div>
-                    <div className="flex gap-3"><span className="text-slate-400 w-32 shrink-0">MSME No</span><span className="font-bold font-mono uppercase text-sky-600 text-[11px] italic">{vend.msme || vend.msme_no || 'NA'}</span></div>
+                    <div className="flex gap-3"><span className="text-slate-400 w-32 shrink-0">MSME No</span><span className="font-bold font-mono uppercase text-sky-600 text-[11px] italic">{vend.msme_number || vend.msme || vend.msme_no || 'NA'}</span></div>
                   </div>
                 </div>
                 <div className="pt-2">
@@ -695,12 +695,6 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
                             )}
                             {showBrand && (() => { const raw = it.make || ""; if (!raw || raw === "[]" || raw === "null") return null; let b = raw; try { const p = JSON.parse(raw); if (Array.isArray(p)) { if (p.length !== 1) return null; b = p[0]; } } catch {} return b ? <div className="text-[10px]"><span className="font-bold text-slate-800">Brand:</span> <span className="font-semibold text-slate-700">{b}</span></div> : null; })()}
                           </div>
-                          {it.scope_of_work && (
-                            <div className="mt-3 pt-2 border-t border-slate-100">
-                              <p className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest mb-1">Scope of Work</p>
-                              <div className="order-rich-text text-[10px] text-slate-500 italic leading-relaxed whitespace-normal" dangerouslySetInnerHTML={{ __html: it.scope_of_work }} />
-                            </div>
-                          )}
                         </td>
                       )}
 

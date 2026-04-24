@@ -214,7 +214,7 @@ const renderVendorCard = (vend) => `
       <div class="kv-grid-2">
         <div class="kv"><span class="kv-label">GST No:</span><span class="kv-value">${escapeHtml(vend.gstin || "N/A")}</span></div>
         <div class="kv"><span class="kv-label">PAN:</span><span class="kv-value">${escapeHtml(vend.pan || "N/A")}</span></div>
-        <div class="kv"><span class="kv-label">MSME:</span><span class="kv-value">${escapeHtml(vend.msme || vend.msme_no || "N/A")}</span></div>
+        <div class="kv"><span class="kv-label">MSME:</span><span class="kv-value">${escapeHtml(vend.msme_number || vend.msme || vend.msme_no || "N/A")}</span></div>
         <div class="kv"><span class="kv-label">Aadhar:</span><span class="kv-value">${escapeHtml(vend.aadhar || vend.aadhar_no || "N/A")}</span></div>
       </div>
     </div>
