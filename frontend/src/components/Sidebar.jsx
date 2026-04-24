@@ -12,7 +12,7 @@ const toSubId = (parentId, subLabel) =>
   `${parentId}__${subLabel.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "")}`;
 
 const globalMenu = [
-  { id: "about",       label: "Team Bootes",      icon: Info           },
+  { id: "about",       label: "Team Zyrex",       icon: Info           },
   { id: "boq_prepare", label: "BOQ Prepare",       icon: FileSpreadsheet },
   { id: "create",      label: "Create",            icon: PackagePlus,
     sub: ["Intake", "Order"] },
@@ -107,6 +107,16 @@ const TAB_MODULE_KEY = {
   audit:                          "audit",
 };
 
+/* ─── Z brand mark (image, no frame) ─── */
+const ZMark = ({ size = 52 }) => (
+  <img
+    src="/Z.png"
+    alt="Zyrex"
+    style={{ width: size, height: size }}
+    className="object-contain shrink-0"
+  />
+);
+
 const Sidebar = ({
   activeTab = "about",
   setActiveTab,
@@ -117,7 +127,7 @@ const Sidebar = ({
   onLogout,
   isMobile = false,
   userName = "Jitendar Goyal",
-  userEmail = "jitendar@bootes.in",
+  userEmail = "support@zyrex.app",
   currentUser: currentUserProp = null,
   projects: projectsProp = null,
   userTabPermissions = null,
@@ -182,8 +192,8 @@ const Sidebar = ({
               font-medium transition-all duration-100 mb-0.5
               ${collapsed ? "justify-center" : "justify-between"}
               ${isActive
-                ? "bg-white/[.08] text-white"
-                : "text-[#8b8b8f] hover:bg-white/[.05] hover:text-[#d1d1d6]"
+                ? "bg-cyan-400/10 text-white ring-1 ring-cyan-400/25"
+                : "text-[#8b95a3] hover:bg-cyan-400/5 hover:text-cyan-100"
               }
             `}
           >
@@ -191,7 +201,7 @@ const Sidebar = ({
               <Icon
                 size={17}
                 strokeWidth={isActive ? 2 : 1.6}
-                className={`shrink-0 transition-colors ${isActive ? "text-white" : "text-[#636366] group-hover:text-[#aeaeb2]"}`}
+                className={`shrink-0 transition-colors ${isActive ? "text-cyan-300" : "text-[#5a6878] group-hover:text-cyan-300"}`}
               />
               {!collapsed && <span className="truncate">{item.label}</span>}
             </div>
@@ -254,36 +264,31 @@ const Sidebar = ({
   return (
     <motion.div
       initial={false}
-      animate={{ width: collapsed ? "56px" : "220px" }}
+      animate={{ width: collapsed ? "60px" : "240px" }}
       transition={{ duration: 0.22, ease: "easeInOut" }}
       className="h-screen flex flex-col shrink-0 overflow-hidden print:hidden"
-      style={{ background: "#1c1c1e", borderRight: "1px solid rgba(255,255,255,0.07)" }}
+      style={{ background: "#06111f", borderRight: "1px solid rgba(34,211,238,0.12)" }}
     >
       {/* ── HEADER ── */}
-      <div className={`shrink-0 border-b ${collapsed ? "px-2 py-3 flex justify-center" : "px-3 py-3"}`}
-        style={{ borderColor: "rgba(255,255,255,0.07)" }}>
+      <div className={`relative shrink-0 border-b ${collapsed ? "px-2 py-2 flex justify-center" : "px-0 py-0"}`}
+        style={{ borderColor: "rgba(34,211,238,0.12)" }}>
         {collapsed ? (
-          <button onClick={() => setIsCollapsed(false)} title="Expand">
-            <div className="w-8 h-8 rounded-xl bg-white flex items-center justify-center shadow-md">
-              <img src="/logo.png" className="w-5 h-5" alt="logo" />
-            </div>
+          <button onClick={() => setIsCollapsed(false)} title="Expand" className="flex items-center justify-center">
+            <img src="/Z.png" alt="Zyrex" className="h-9 w-auto object-contain" />
           </button>
         ) : (
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center shrink-0 shadow-md">
-                <img src="/logo.png" className="w-6 h-6" alt="logo" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-[14px] font-bold text-white leading-tight tracking-wide">BOOTES</p>
-                <p className="text-[10px] text-[#48484a] leading-tight">A Net-Zero Engineering Co.</p>
-              </div>
-            </div>
+          <>
+            <img
+              src="/Z.png"
+              alt="Zyrex ERP Solutions"
+              className="block w-full h-auto object-contain px-2 py-1"
+            />
             <button onClick={() => setIsCollapsed(true)}
-              className="text-[#48484a] hover:text-[#8b8b8f] transition-colors shrink-0 ml-1">
-              <ChevronsUpDown size={14} />
+              title="Collapse"
+              className="absolute top-1 right-1 text-[#48484a] hover:text-cyan-400 transition-colors p-1 rounded hover:bg-white/5 z-10">
+              <ChevronsUpDown size={13} />
             </button>
-          </div>
+          </>
         )}
       </div>
 
@@ -369,10 +374,10 @@ const Sidebar = ({
       <div className="shrink-0 px-2 py-2" style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }}>
         {!collapsed ? (
           <div className="rounded-xl px-2.5 py-2 flex items-center gap-2.5"
-            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
+            style={{ background: "rgba(34,211,238,0.05)", border: "1px solid rgba(34,211,238,0.15)" }}>
             <button onClick={() => setActiveTab("profile")} className="flex items-center gap-2.5 flex-1 min-w-0 text-left">
-              <div className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0 overflow-hidden ring-2 ring-white/10"
-                style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)" }}>
+              <div className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0 overflow-hidden ring-2 ring-cyan-400/20"
+                style={{ background: "linear-gradient(135deg,#0891b2,#22d3ee)" }}>
                 {currentUser.avatar
                   ? <img src={currentUser.avatar} alt="" className="w-full h-full object-cover" />
                   : (currentUser.name || userName).split(" ").map(n => n[0]).join("").slice(0,2).toUpperCase()
@@ -391,8 +396,8 @@ const Sidebar = ({
         ) : (
           <div className="flex flex-col items-center gap-2">
             <button onClick={() => setActiveTab("profile")} title="Profile">
-              <div className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white overflow-hidden ring-2 ring-white/10"
-                style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)" }}>
+              <div className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white overflow-hidden ring-2 ring-cyan-400/20"
+                style={{ background: "linear-gradient(135deg,#0891b2,#22d3ee)" }}>
                 {currentUser.avatar
                   ? <img src={currentUser.avatar} alt="" className="w-full h-full object-cover" />
                   : (currentUser.name || userName).split(" ").map(n => n[0]).join("").slice(0,2).toUpperCase()

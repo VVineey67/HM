@@ -1019,9 +1019,8 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
 
           {/* CONTENT LAYER */}
           <div className="relative flex flex-col md:flex-row items-center gap-6 z-20 p-6 md:p-10">
-
             {/* Avatar */}
-            <div className="relative group shrink-0">
+            <div className="relative group shrink-0 mt-10 md:mt-0">
               <div className="w-20 h-20 rounded-2xl border-2 border-white/20 overflow-hidden shadow-lg flex items-center justify-center"
                 style={{ background: "linear-gradient(135deg, #6366f1, #8b5cf6)" }}>
                 {avatarLoading ? (
@@ -1939,4 +1938,3 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
     </div>
   );
 }
-

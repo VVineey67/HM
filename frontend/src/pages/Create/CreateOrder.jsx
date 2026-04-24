@@ -2815,7 +2815,7 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
                { val: filterType, set: setFilterType, placeholder: "All Types", opts: ["Supply", "SITC", "ITC"], min: 105 },
                { val: filterMadeBy, set: setFilterMadeBy, placeholder: "All Users", opts: madeByOptions, min: 130 }
              ].map((f, i) => (
-               <div key={i} className="relative" style={{ minWidth: f.min }}>
+               <div key={i} className={`relative ${i === 0 ? "ml-auto" : ""}`} style={{ minWidth: f.min }}>
                  <select value={f.val} onChange={e => f.set(e.target.value)}
                    className="appearance-none w-full pl-3 pr-8 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 bg-white outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-50 cursor-pointer">
                    <option value="">{f.placeholder}</option>
@@ -2853,9 +2853,6 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
                </button>
              )}
 
-             <div className="ml-auto text-xs font-semibold text-slate-500 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg shadow-sm">
-               Total: {filtered.length}
-             </div>
            </div>
         </div>
         
