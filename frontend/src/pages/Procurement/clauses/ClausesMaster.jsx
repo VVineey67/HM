@@ -663,8 +663,8 @@ export default function ClausesMaster({ type, initialViewId, initialAction, isAc
             <button onClick={() => { setShowBulk(false); setBulkRows([]); setBulkFile(""); }} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
           </div>
           <p className="text-xs text-slate-500 mb-4 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-            💡 Excel me <strong>Category</strong>, <strong>Title</strong>, aur <strong>Content</strong> columns hone chahiye.
-            Content column me ek ya zyada lines likhein — har line ek point banega.
+            💡 The Excel file must contain <strong>Category</strong>, <strong>Title</strong>, and <strong>Content</strong> columns.
+            Write one or more lines in the Content column — each line becomes a separate point.
           </p>
           <div className="flex flex-wrap gap-3">
             <button onClick={downloadTemplate}

@@ -118,7 +118,7 @@ router.put("/:id", requireAuth, requireAdminOrAbove, async (req, res) => {
   if (!targetUser) return res.status(404).json({ error: "User not found" });
 
   if (req.user.role === "super_admin" && ["global_admin", "super_admin"].includes(targetUser.role)) {
-    return res.status(403).json({ error: "Aap is level ke user ko edit nahi kar sakte" });
+    return res.status(403).json({ error: "You don't have permission to edit a user at this level" });
   }
 
   const updates = {};
@@ -185,7 +185,7 @@ router.put("/:id", requireAuth, requireAdminOrAbove, async (req, res) => {
 router.delete("/:id", requireAuth, requireGlobalAdmin, async (req, res) => {
   const { id } = req.params;
   if (id === req.user.id)
-    return res.status(400).json({ error: "Apne aap ko delete nahi kar sakte" });
+    return res.status(400).json({ error: "You cannot delete your own account" });
 
   const admin = getAdminClient();
 
@@ -232,7 +232,7 @@ router.put("/:id/permissions", requireAuth, requireAdminOrAbove, async (req, res
   const { permissions, profile_permissions } = req.body;
 
   if (permissions && !Array.isArray(permissions))
-    return res.status(400).json({ error: "permissions array chahiye" });
+    return res.status(400).json({ error: "permissions must be an array" });
 
   const admin = getAdminClient();
 

@@ -70,7 +70,7 @@ function Model({ project }) {
         setLoading(false);
       })
       .catch(() => {
-        setError("3D Model load nahi ho paaya. Backend connection check karo.");
+        setError("Failed to load 3D model. Please check the backend connection.");
         setLoading(false);
       });
   }, [project]);
@@ -134,7 +134,7 @@ function Model({ project }) {
       <div style={styles.center}>
         <div style={styles.emptyBox}>
           <span style={styles.emptyIcon}>🏗️</span>
-          <p style={styles.emptyText}>Koi project select nahi hai</p>
+          <p style={styles.emptyText}>No project selected</p>
         </div>
       </div>
     );

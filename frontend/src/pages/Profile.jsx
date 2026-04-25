@@ -719,7 +719,7 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
 
   /* ── Remove user (global_admin only) ── */
   const removeUser = async (member) => {
-    if (!window.confirm(`"${member.name}" ko permanently delete karna chahte ho? Yeh action undo nahi ho sakta.`)) return;
+    if (!window.confirm(`Are you sure you want to permanently delete "${member.name}"? This action cannot be undone.`)) return;
     try {
       await api.delete(`/api/users/${member.id}`);
       setMembers(prev => prev.filter(m => m.id !== member.id));

@@ -61,7 +61,7 @@ router.post("/login", async (req, res) => {
   const { data, error: authError } = await admin.auth.signInWithPassword({ email, password });
 
   if (authError) {
-    return res.status(401).json({ error: "Email ya password galat hai" });
+    return res.status(401).json({ error: "Invalid email or password" });
   }
 
   // 4. Fetch App permissions
