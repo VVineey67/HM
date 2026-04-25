@@ -110,7 +110,7 @@ export default function ContactList() {
 
   const exportExcel = () => {
     const data = filtered.map((c, i) => ({
-      "S.No": i + 1, "Person Name": c.personName, "Contact Number": c.contactNumber,
+      "S.No": i + 1, "Contact ID": c.contactCode, "Person Name": c.personName, "Contact Number": c.contactNumber,
       "Designation": c.designation, "Company / Organisation": c.company,
     }));
     const ws = XLSX.utils.json_to_sheet(data);
@@ -148,6 +148,7 @@ export default function ContactList() {
   };
 
   const filtered   = contacts.filter(c =>
+    c.contactCode?.toLowerCase().includes(search.toLowerCase()) ||
     c.personName?.toLowerCase().includes(search.toLowerCase()) ||
     c.contactNumber?.toLowerCase().includes(search.toLowerCase()) ||
     c.designation?.toLowerCase().includes(search.toLowerCase()) ||
@@ -238,6 +239,7 @@ export default function ContactList() {
             <thead>
               <tr className="bg-slate-800 text-white">
                 <th className="text-center px-3 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700 sticky-left-0 w-12">S.No</th>
+                <th className="text-left px-3 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700 w-[100px]">Contact ID</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700 sticky-left-1 w-[160px]" style={{left:'48px'}}>Person Name</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700">Contact Number</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide border-r border-slate-700">Designation</th>
@@ -249,6 +251,7 @@ export default function ContactList() {
               {paginated.map((c, idx) => (
                 <tr key={c.id} className={`transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-slate-50"} hover:bg-sky-50/40 group`}>
                   <td className="px-3 py-3 text-slate-400 text-xs text-center border border-slate-100 font-medium sticky-left-0 w-12">{(page - 1) * PER_PAGE + idx + 1}</td>
+                  <td className="px-3 py-3 font-mono text-xs text-slate-600 border border-slate-100 w-[100px]">{c.contactCode || "—"}</td>
                   <td className="px-4 py-3 font-semibold text-slate-800 text-sm border border-slate-100 sticky-left-1 w-[160px] whitespace-normal break-words leading-tight" style={{left:'48px'}}>
                     <div className="flex items-center gap-2">
                       <div className="w-7 h-7 rounded-full bg-sky-100 flex items-center justify-center shrink-0">

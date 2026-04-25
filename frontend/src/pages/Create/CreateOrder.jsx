@@ -2353,7 +2353,7 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
     // Common columns — only IDs/codes, system fetches details from masters
     const commonStart = [
       "S.No",
-      "Site Code", "Company Code", "Vendor ID",
+      "Site Code", "Company Code", "Vendor ID", "Contact IDs",
       orderNoCol, "Order Type", "Reference Number",
       "Created By", "Created On", "Requisition By", "Subject",
       "Status", "Issued At",
@@ -2375,6 +2375,7 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
       "Site Code": "B47",
       "Company Code": "BITL",
       "Vendor ID": "VEN-001",
+      "Contact IDs": "CON-001; CON-002",
       [orderNoCol]: poNumber,
       "Order Type": defaultType,
       "Reference Number": "REF-001",
@@ -2418,7 +2419,7 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
         },
         {
           "S.No": 2,
-          "Site Code": "", "Company Code": "", "Vendor ID": "",
+          "Site Code": "", "Company Code": "", "Vendor ID": "", "Contact IDs": "",
           [orderNoCol]: poNumber, // same PO → same order
           "Order Type": "", "Reference Number": "", "Created By": "", "Created On": "",
           "Requisition By": "", "Subject": "",

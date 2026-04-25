@@ -256,24 +256,47 @@ router.post("/bulk-import", async (req, res) => {
     }
 
     // Preload masters
-    const [{ data: companies }, { data: sites }, { data: vendors }, { data: clauses }, { data: clauseVersions }] = await Promise.all([
+    const [{ data: companies }, { data: sites }, { data: vendors }, { data: clauses }, { data: clauseVersions }, { data: contacts }] = await Promise.all([
       supabase.schema("procurement").from("companies").select("*"),
       supabase.schema("procurement").from("sites").select("*"),
       supabase.schema("procurement").from("vendors").select("*"),
       supabase.schema("procurement").from("clauses").select("*"),
       supabase.schema("procurement").from("clause_versions").select("*"),
+      supabase.schema("procurement").from("contacts").select("*"),
     ]);
     const companyByCode = new Map((companies || []).map(c => [String(c.company_code || "").toUpperCase().trim(), c]));
     const siteByCode    = new Map((sites || []).map(s => [String(s.site_code || "").toUpperCase().trim(), s]));
     const vendorByCode  = new Map((vendors || []).map(v => [String(v.vendor_code || "").toUpperCase().trim(), v]));
     const vendorByName  = new Map((vendors || []).map(v => [String(v.vendor_name || "").toLowerCase().trim(), v]));
     const clauseByCode  = new Map((clauses  || []).map(c => [String(c.code || "").toUpperCase().trim(), c]));
+    const contactByCode = new Map((contacts || []).map(c => [String(c.contact_code || "").toUpperCase().trim(), c]));
     // versionMap: clause_id -> { version: pointsArray }
     const versionMap = new Map();
     (clauseVersions || []).forEach(v => {
       if (!versionMap.has(v.clause_id)) versionMap.set(v.clause_id, {});
       versionMap.get(v.clause_id)[v.version] = Array.isArray(v.points) ? v.points : [];
     });
+
+    /* Resolve contact IDs cell from Excel — accepts "CON-001" or "CON-001; CON-002"
+       Returns array of { personName, contactNumber, designation, company } */
+    const resolveContactsCell = (cell) => {
+      if (!cell) return [];
+      const tokens = String(cell).split(/\r?\n|;|,/).map(s => s.trim()).filter(Boolean);
+      const out = [];
+      for (const tok of tokens) {
+        const code = tok.toUpperCase();
+        const c = contactByCode.get(code);
+        if (c) {
+          out.push({
+            personName:    c.person_name    || "",
+            contactNumber: c.contact_number || "",
+            designation:   c.designation    || "",
+            company:       c.company        || "",
+          });
+        }
+      }
+      return out;
+    };
 
     /* Resolve clause cell from Excel — accepts:
        "TC-001"          → version 1 points
@@ -548,7 +571,7 @@ router.post("/bulk-import", async (req, res) => {
             company: companySnap,
             site: siteSnap,
             vendor: vendorSnap,
-            contacts: [],
+            contacts: resolveContactsCell(pick(h, ["Contact IDs", "Contact ID", "Contacts"])),
           },
         };
 

@@ -1183,13 +1183,24 @@ router.delete("/companies/:id", async (req, res) => {
 /* ══════════════════════════════════════════
    CONTACTS
 ══════════════════════════════════════════ */
+/* helper: next contact_code (CON-001, CON-002...) */
+const getNextContactCode = async () => {
+  const { data } = await supabase.schema("procurement")
+    .from("contacts").select("contact_code");
+  const nums = (data || [])
+    .map(r => parseInt((r.contact_code || "").replace("CON-", "")) || 0);
+  const next = nums.length ? Math.max(...nums) + 1 : 1;
+  return `CON-${String(next).padStart(3, "0")}`;
+};
+
 router.get("/contacts", async (_req, res) => {
   try {
     const { data, error } = await supabase
-      .schema("procurement").from("contacts").select("*").order("person_name", { ascending: true });
+      .schema("procurement").from("contacts").select("*").order("contact_code", { ascending: true });
     if (error) throw error;
     const contacts = (data || []).map(r => ({
       id:            r.id,
+      contactCode:   r.contact_code   || "",
       personName:    r.person_name    || "",
       contactNumber: r.contact_number || "",
       designation:   r.designation    || "",
@@ -1205,7 +1216,9 @@ router.get("/contacts", async (_req, res) => {
 router.post("/contacts", async (req, res) => {
   try {
     const { personName, contactNumber, designation, company, createdById, createdByName } = req.body;
+    const contactCode = await getNextContactCode();
     const { data, error } = await supabase.schema("procurement").from("contacts").insert({
+      contact_code:   contactCode,
       person_name:    personName    || "",
       contact_number: contactNumber || "",
       designation:    designation   || "",
