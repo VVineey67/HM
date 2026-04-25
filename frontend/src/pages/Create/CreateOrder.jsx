@@ -2845,8 +2845,6 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
             <table className="w-full text-sm text-left border-collapse" style={{minWidth:'700px'}}>
               <thead>
                 <tr className="bg-white text-slate-500 font-semibold bg-slate-50">
-                  <th className="px-4 py-3 uppercase tracking-wider text-[10px] border-b border-r border-slate-200 bg-slate-50 font-bold text-slate-500">Company</th>
-                  <th className="px-4 py-3 uppercase tracking-wider text-[10px] border-b border-r border-slate-200 bg-slate-50 font-bold text-slate-500">Site</th>
                   <th className="px-4 py-3 uppercase tracking-wider text-[10px] border-b border-r border-slate-200 bg-slate-50 font-bold text-slate-600">Order No</th>
                   <th className="px-4 py-3 uppercase tracking-wider text-[10px] border-b border-r border-slate-200 font-bold text-slate-500">Type</th>
                   <th className="px-4 py-3 uppercase tracking-wider text-[10px] border-b border-r border-slate-200 font-bold text-slate-500">Made By</th>
@@ -2862,7 +2860,7 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
               <tbody className="divide-y divide-slate-100">
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan="12" className="py-24 text-center bg-white">
+                    <td colSpan="10" className="py-24 text-center bg-white">
                        <div className="flex flex-col items-center justify-center">
                          <div className="h-16 w-16 bg-slate-50 rounded-full flex items-center justify-center mb-4 border border-slate-100">
                            <FileText size={24} className="text-slate-300" />
@@ -2893,12 +2891,6 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
 
                   return (
                     <tr key={o.id} className="hover:bg-indigo-50/30 transition-colors group">
-                      <td className="px-4 py-3.5 border-b border-r border-slate-100 font-bold text-slate-700 text-[11px] uppercase tracking-wider bg-white group-hover:bg-indigo-50/30 transition-colors">
-                        <span title={cCode}>{cCode}</span>
-                      </td>
-                      <td className="px-4 py-3.5 border-b border-r border-slate-100 font-bold text-indigo-600 text-[11px] uppercase tracking-wider bg-white group-hover:bg-indigo-50/30 transition-colors">
-                        <span title={sCode}>{sCode}</span>
-                      </td>
                       <td className="px-4 py-3.5 border-b border-r border-slate-200 bg-white group-hover:bg-indigo-50/30 transition-colors font-mono">
                         <span className={`font-bold text-[11px] ${displayNo ? "text-slate-900" : "text-slate-300"}`} title={displayNo || '-'}>
                           {displayNo
