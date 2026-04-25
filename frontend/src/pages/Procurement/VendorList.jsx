@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Plus, Search, Pencil, Trash2, X, Building2, Upload, FileText, ChevronLeft, ChevronRight, Download, FileSpreadsheet, ChevronDown, Eye } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, X, Building2, Upload, FileText, ChevronLeft, ChevronRight, Download, FileSpreadsheet, ChevronDown, Eye, Copy, Check } from "lucide-react";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -58,12 +58,45 @@ const DocUpload = ({ label, fieldKey, form, setForm }) => {
 };
 
 const COLS = [
-  { label: "Vendor Firm Name",       key: "vendorName",     w: "w-[25%] min-w-[180px]" },
-  { label: "Site Codes",             key: "siteCodes",      w: "w-[20%] min-w-[130px]" },
-  { label: "Email",                  key: "email",          w: "w-[20%] min-w-[150px]" },
-  { label: "Contact Number",         key: "mobile",         w: "w-[15%] min-w-[120px]" },
-  { label: "GST No",                 key: "gstin",          w: "w-[20%] min-w-[140px]", mono: true },
+  { label: "Vendor ID",              key: "vendorCode",     w: "w-[9%] min-w-[100px]", mono: true },
+  { label: "Vendor Firm Name",       key: "vendorName",     w: "w-[22%] min-w-[180px]" },
+  { label: "Site Codes",             key: "siteCodes",      w: "w-[8%] min-w-[80px]" },
+  { label: "Email",                  key: "email",          w: "w-[18%] min-w-[160px]" },
+  { label: "Contact Number",         key: "mobile",         w: "w-[12%] min-w-[120px]" },
+  { label: "GST No",                 key: "gstin",          w: "w-[15%] min-w-[140px]", mono: true, copy: true },
+  { label: "Profile Score",          key: "profileScore",   w: "w-[10%] min-w-[110px]" },
 ];
+
+/* Profile completeness — 18 fields total, weighted equally.
+   Bank section fields kept together; documents counted as a group. */
+const PROFILE_FIELDS = [
+  "vendorName", "address", "email", "mobile", "contactPerson",
+  "gstin", "pan", "aadharNo", "msmeNumber",
+  "bankName", "accountHolder", "accountNumber", "ifscCode", "bankBranch",
+  "logoUrl", "docGstUrl", "docPanUrl", "docCancelChequeUrl",
+];
+
+const computeProfileScore = (v) => {
+  const filled = PROFILE_FIELDS.filter(f => {
+    const val = v[f];
+    if (Array.isArray(val)) return val.length > 0;
+    return val !== undefined && val !== null && String(val).trim() !== "";
+  }).length;
+  const pct = Math.round((filled / PROFILE_FIELDS.length) * 100);
+  const missing = PROFILE_FIELDS.filter(f => {
+    const val = v[f];
+    if (Array.isArray(val)) return val.length === 0;
+    return val === undefined || val === null || String(val).trim() === "";
+  });
+  return { pct, missing };
+};
+
+const PROFILE_LABELS = {
+  vendorName: "Vendor Name", address: "Address", email: "Email", mobile: "Mobile", contactPerson: "Contact Person",
+  gstin: "GST", pan: "PAN", aadharNo: "Aadhar", msmeNumber: "MSME",
+  bankName: "Bank Name", accountHolder: "Account Holder", accountNumber: "Account No.", ifscCode: "IFSC", bankBranch: "Bank Branch",
+  logoUrl: "Logo", docGstUrl: "GST Doc", docPanUrl: "PAN Doc", docCancelChequeUrl: "Cancelled Cheque",
+};
 
 const MODAL_TABS = [
   { key: "basic", label: "Basic Info"   },
@@ -99,6 +132,15 @@ export default function VendorList() {
   const [showExport, setShowExport] = useState(false);
   const [sites, setSites]         = useState([]);
   const [showSiteSearch, setShowSiteSearch] = useState(false);
+  const [copiedKey, setCopiedKey] = useState(""); // `${vendorId}:${field}`
+
+  const copyToClipboard = (text, key) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(""), 1500);
+    }).catch(() => showToast("Copy failed", "error"));
+  };
   const logoRef                   = useRef();
   const bulkRef                   = useRef();
   const siteRef                   = useRef();
@@ -200,7 +242,7 @@ export default function VendorList() {
 
   /* ── Export helpers ── */
   const EXPORT_COLS = [
-    ["Vendor Firm Name", "vendorName"], ["Site Codes", "siteCodes"], ["Email", "email"],
+    ["Vendor ID", "vendorCode"], ["Vendor Firm Name", "vendorName"], ["Site Codes", "siteCodes"], ["Email", "email"],
     ["Contact Person Name", "contactPerson"], ["Contact Person Number", "mobile"],
     ["GST No", "gstin"], ["PAN No", "pan"], ["Aadhar No", "aadharNo"],
     ["MSME Number", "msmeNumber"], ["Bank Name", "bankName"],
@@ -307,6 +349,7 @@ export default function VendorList() {
   };
 
   const filtered   = vendors.filter(v =>
+    v.vendorCode?.toLowerCase().includes(search.toLowerCase()) ||
     v.vendorName?.toLowerCase().includes(search.toLowerCase()) ||
     v.gstin?.toLowerCase().includes(search.toLowerCase()) ||
     v.email?.toLowerCase().includes(search.toLowerCase())
@@ -481,15 +524,7 @@ export default function VendorList() {
                     {COLS.map(c => (
                       <td key={c.key} className={`px-4 py-3 text-slate-700 whitespace-nowrap ${c.w}`}>
                         {c.key === "vendorName" ? (
-                            <div className="flex items-center gap-3">
-                              {v.logoUrl
-                                ? <img src={v.logoUrl} alt="" className="w-8 h-8 rounded-lg object-contain border border-slate-100 bg-slate-50 p-0.5 shrink-0 shadow-sm" />
-                                : <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100/50 flex items-center justify-center shrink-0 shadow-sm">
-                                    <Building2 size={14} className="text-indigo-500" />
-                                  </div>
-                              }
-                              <span className="font-semibold text-slate-800 break-words whitespace-normal">{v[c.key] || "—"}</span>
-                            </div>
+                          <span className="font-semibold text-slate-800 break-words whitespace-normal">{v[c.key] || "—"}</span>
                         ) : c.key === "siteCodes" ? (
                           <div className="flex flex-wrap gap-1">
                             {v.siteCodes?.length > 0 ? (
@@ -502,6 +537,40 @@ export default function VendorList() {
                               <span className="text-slate-300">—</span>
                             )}
                           </div>
+                        ) : c.key === "profileScore" ? (
+                          (() => {
+                            const { pct, missing } = computeProfileScore(v);
+                            const barColor = pct >= 80 ? "bg-emerald-500" : pct >= 50 ? "bg-amber-500" : "bg-red-500";
+                            const textColor = pct >= 80 ? "text-emerald-600" : pct >= 50 ? "text-amber-600" : "text-red-600";
+                            const tooltip = missing.length === 0
+                              ? "Profile complete"
+                              : "Missing: " + missing.map(m => PROFILE_LABELS[m] || m).join(", ");
+                            return (
+                              <div className="flex flex-col gap-1" title={tooltip}>
+                                <span className={`text-xs font-bold tabular-nums ${textColor}`}>{pct}%</span>
+                                <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                  <div className={`h-full ${barColor} transition-all`} style={{ width: `${pct}%` }} />
+                                </div>
+                              </div>
+                            );
+                          })()
+                        ) : c.copy && v[c.key] ? (
+                          (() => {
+                            const key = `${v.id}:${c.key}`;
+                            const isCopied = copiedKey === key;
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => copyToClipboard(v[c.key], key)}
+                                title={isCopied ? "Copied!" : "Click to copy"}
+                                className={`group inline-flex items-center gap-1.5 font-mono text-xs px-1.5 py-1 -mx-1.5 -my-1 rounded hover:bg-slate-100 transition-colors ${isCopied ? "text-emerald-600" : "text-slate-700"}`}>
+                                <span className="break-words whitespace-normal text-left">{v[c.key]}</span>
+                                {isCopied
+                                  ? <Check size={12} className="shrink-0" />
+                                  : <Copy size={11} className="shrink-0 text-slate-300 group-hover:text-slate-500 transition-colors" />}
+                              </button>
+                            );
+                          })()
                         ) : (
                           <span className={`${c.mono ? "font-mono text-xs" : "text-sm"} ${!v[c.key] ? "text-slate-300" : ""} break-words whitespace-normal`}>
                             {v[c.key] || "—"}

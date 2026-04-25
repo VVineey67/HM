@@ -48,27 +48,32 @@ router.get("/next-number", async (req, res) => {
       return res.status(400).json({ error: "siteId, companyCode, and orderType required" });
     }
 
-    const typeCode = orderType === "Supply" ? "PO" : "WO";
-    const fy       = getFinancialYear();
+    const orderKind = orderType === "Supply" ? "Supply" : "SITC";
+    const typeCode  = orderKind === "Supply" ? "PO" : "WO";
+    const fy        = getFinancialYear();
 
     // 1. Get Site Code
     const { data: site } = await supabase.schema("procurement").from("sites").select("site_code").eq("id", siteId).single();
     const sCode = site?.site_code || "SITE";
 
-    // 2. Get serialization settings for this site
-    let { data: settings } = await supabase.schema("procurement").from("serialization_settings").select("*").eq("site_id", siteId).single();
+    // 2. Get serialization settings for this site + FY + kind
+    let { data: settings } = await supabase.schema("procurement")
+      .from("serialization_settings").select("*")
+      .eq("site_id", siteId).eq("financial_year", fy).eq("order_kind", orderKind).maybeSingle();
 
-    if (!settings || settings.financial_year !== fy) {
-      // Reset or initialize for new FY
-      const newSettings = { site_id: siteId, current_number: 1, financial_year: fy };
-      const { data: created } = await supabase.schema("procurement").from("serialization_settings").upsert(newSettings).select().single();
+    if (!settings) {
+      const { data: created } = await supabase.schema("procurement")
+        .from("serialization_settings")
+        .insert({ site_id: siteId, current_number: 0, financial_year: fy, order_kind: orderKind })
+        .select().single();
       settings = created;
     }
 
-    const num = String(settings.current_number).padStart(3, "0");
-    const orderNumber = `${companyCode}/${sCode}/${typeCode}/${fy}/${num}`;
+    // current_number = last issued serial; next = current_number + 1
+    const nextSerial = (settings.current_number || 0) + 1;
+    const orderNumber = `${companyCode}/${sCode}/${typeCode}/${fy}/${nextSerial}`;
 
-    res.json({ orderNumber, nextSerial: settings.current_number + 1 });
+    res.json({ orderNumber, nextSerial });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -91,26 +96,35 @@ router.get("/serialization", async (req, res) => {
 
 router.post("/serialization", async (req, res) => {
   try {
-    const { site_id, current_number, financial_year } = req.body;
-    if (!site_id || !financial_year) return res.status(400).json({ error: "site_id and financial_year required" });
-
-    // UPSERT
-    const { error } = await supabase.schema("procurement")
-      .from("serialization_settings")
-      .upsert({ site_id, current_number, financial_year }, { onConflict: "site_id,financial_year" });
-      
-    if (error) {
-      // If unique constraint isn't set, try updating by looking up first
-      const { data: existing } = await supabase.schema("procurement").from("serialization_settings")
-        .select("id").eq("site_id", site_id).eq("financial_year", financial_year).single();
-      
-      if (existing) {
-        await supabase.schema("procurement").from("serialization_settings").update({ current_number }).eq("id", existing.id);
-      } else {
-        await supabase.schema("procurement").from("serialization_settings").insert({ site_id, financial_year, current_number });
-      }
+    const { site_id, current_number, financial_year, order_kind } = req.body;
+    if (!site_id || !financial_year || !order_kind) {
+      return res.status(400).json({ error: "site_id, financial_year, and order_kind required" });
     }
-    
+    const kind = order_kind === "Supply" ? "Supply" : "SITC";
+
+    const { data: existing } = await supabase.schema("procurement")
+      .from("serialization_settings").select("id")
+      .eq("site_id", site_id).eq("financial_year", financial_year).eq("order_kind", kind).maybeSingle();
+
+    if (existing) {
+      await supabase.schema("procurement").from("serialization_settings")
+        .update({ current_number }).eq("id", existing.id);
+    } else {
+      await supabase.schema("procurement").from("serialization_settings")
+        .insert({ site_id, financial_year, current_number, order_kind: kind });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete("/serialization/:id", async (req, res) => {
+  try {
+    const { error } = await supabase.schema("procurement")
+      .from("serialization_settings").delete().eq("id", req.params.id);
+    if (error) throw error;
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -196,9 +210,11 @@ router.post("/", upload.fields([
 
     // 4. Update serialization ONLY if Issued (usually not from here anymore)
     if (mainData.status === 'Issued') {
+      const kindForSerial = mainData.order_type === "Supply" ? "Supply" : "SITC";
       await supabase.schema("procurement").from("serialization_settings")
         .update({ current_number: nextSerial })
-        .eq("site_id", mainData.site_id);
+        .eq("site_id", mainData.site_id)
+        .eq("order_kind", kindForSerial);
     }
 
     res.json({ success: true, id: order.id });
@@ -240,14 +256,50 @@ router.post("/bulk-import", async (req, res) => {
     }
 
     // Preload masters
-    const [{ data: companies }, { data: sites }, { data: vendors }] = await Promise.all([
+    const [{ data: companies }, { data: sites }, { data: vendors }, { data: clauses }, { data: clauseVersions }] = await Promise.all([
       supabase.schema("procurement").from("companies").select("*"),
       supabase.schema("procurement").from("sites").select("*"),
       supabase.schema("procurement").from("vendors").select("*"),
+      supabase.schema("procurement").from("clauses").select("*"),
+      supabase.schema("procurement").from("clause_versions").select("*"),
     ]);
     const companyByCode = new Map((companies || []).map(c => [String(c.company_code || "").toUpperCase().trim(), c]));
     const siteByCode    = new Map((sites || []).map(s => [String(s.site_code || "").toUpperCase().trim(), s]));
+    const vendorByCode  = new Map((vendors || []).map(v => [String(v.vendor_code || "").toUpperCase().trim(), v]));
     const vendorByName  = new Map((vendors || []).map(v => [String(v.vendor_name || "").toLowerCase().trim(), v]));
+    const clauseByCode  = new Map((clauses  || []).map(c => [String(c.code || "").toUpperCase().trim(), c]));
+    // versionMap: clause_id -> { version: pointsArray }
+    const versionMap = new Map();
+    (clauseVersions || []).forEach(v => {
+      if (!versionMap.has(v.clause_id)) versionMap.set(v.clause_id, {});
+      versionMap.get(v.clause_id)[v.version] = Array.isArray(v.points) ? v.points : [];
+    });
+
+    /* Resolve clause cell from Excel — accepts:
+       "TC-001"          → version 1 points
+       "TC-001/V2"       → version 2 points
+       "TC-001; TC-002"  → multiple, joined
+       Falls back to literal text if code not found. */
+    const resolveClauseCell = (cell) => {
+      if (!cell) return [];
+      const tokens = String(cell).split(/\r?\n|;/).map(s => s.trim()).filter(Boolean);
+      const out = [];
+      for (const tok of tokens) {
+        const m = tok.match(/^([A-Z]+-\d+)(?:\/V(\d+))?$/i);
+        if (m) {
+          const code = m[1].toUpperCase();
+          const ver  = m[2] ? parseInt(m[2]) : 1;
+          const cl   = clauseByCode.get(code);
+          if (cl) {
+            const versions = versionMap.get(cl.id) || {};
+            const points = versions[ver] || (ver === 1 ? (Array.isArray(cl.points) ? cl.points : []) : []);
+            if (points && points.length) { out.push(...points); continue; }
+          }
+        }
+        out.push(tok); // literal fallback
+      }
+      return out;
+    };
 
     const fy = getFinancialYear();
     const pick = (obj, keys) => { for (const k of keys) { const v = obj[k]; if (v !== undefined && v !== null && String(v).trim() !== "") return v; } return ""; };
@@ -279,15 +331,17 @@ router.post("/bulk-import", async (req, res) => {
       try {
         const compCode = String(pick(h, ["Company Code"])).toUpperCase().trim();
         const siteCode = String(pick(h, ["Site Code"])).toUpperCase().trim();
+        const vendCode = String(pick(h, ["Vendor ID", "Vendor Code"])).toUpperCase().trim();
         const vendName = String(pick(h, ["Vendor Name"])).trim();
 
         const company = companyByCode.get(compCode);
         const site = siteByCode.get(siteCode);
-        const vendorMaster = vendorByName.get(vendName.toLowerCase());
+        const vendorMaster = (vendCode && vendorByCode.get(vendCode))
+                          || (vendName && vendorByName.get(vendName.toLowerCase()));
 
         if (!site) throw new Error(`Site code "${siteCode}" not found in master`);
         if (!company) throw new Error(`Company code "${compCode}" not found in master`);
-        if (!vendorMaster && !vendName) throw new Error(`Vendor Name is required`);
+        if (!vendorMaster) throw new Error(`Vendor ID "${vendCode || vendName}" not found in master`);
 
         // Determine order type
         const excelOrderType = String(pick(h, ["Order Type"])).trim();
@@ -305,55 +359,58 @@ router.post("/bulk-import", async (req, res) => {
         let serialObj = null;
         if (!orderNumber || orderNumber.startsWith("__row_")) {
           if (status === "Issued") {
+            const kindForSerial = orderType === "Supply" ? "Supply" : "SITC";
             const { data: s } = await supabase.schema("procurement")
               .from("serialization_settings").select("*")
-              .eq("site_id", site.id).eq("financial_year", fy).single();
+              .eq("site_id", site.id).eq("financial_year", fy).eq("order_kind", kindForSerial).maybeSingle();
             serialObj = s;
             if (!serialObj) {
               const { data: created } = await supabase.schema("procurement")
                 .from("serialization_settings")
-                .insert({ site_id: site.id, financial_year: fy, current_number: 1 })
+                .insert({ site_id: site.id, financial_year: fy, current_number: 0, order_kind: kindForSerial })
                 .select().single();
               serialObj = created;
             }
             const typeCode = orderType === "Supply" ? "PO" : "WO";
-            orderNumber = `${company.company_code}/${site.site_code}/${typeCode}/${fy}/${String(serialObj.current_number).padStart(3, '0')}`;
+            const nextSerial = (serialObj.current_number || 0) + 1;
+            serialObj._nextSerial = nextSerial; // remember for increment step
+            orderNumber = `${company.company_code}/${site.site_code}/${typeCode}/${fy}/${nextSerial}`;
             incrementSerial = true;
           } else {
             orderNumber = `PENDING-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
           }
         }
 
-        // Build vendor object — excel values override master, master fills gaps
+        // Build vendor snapshot — pull entirely from master (Excel only carries Vendor ID)
         const vendorSnap = {
-          vendorName: vendName || vendorMaster?.vendor_name || "",
-          gstin:          pick(h, ["Vendor GSTIN"])          || vendorMaster?.gstin          || "",
-          pan:            pick(h, ["Vendor PAN"])            || vendorMaster?.pan            || "",
-          aadhar:         pick(h, ["Vendor Aadhar"])         || vendorMaster?.aadhar         || "",
-          msme:           pick(h, ["Vendor MSME No"])        || vendorMaster?.msme           || "",
-          contactPerson:  pick(h, ["Vendor Contact Name"])   || vendorMaster?.contact_person || "",
-          mobile:         pick(h, ["Vendor Phone"])          || vendorMaster?.mobile         || "",
-          email:          pick(h, ["Vendor Email"])          || vendorMaster?.email          || "",
-          address:        pick(h, ["Vendor Address"])        || vendorMaster?.address        || "",
-          bankName:       pick(h, ["Vendor Bank Name", "Bank Name"])     || vendorMaster?.bank_name       || "",
-          ifscCode:       pick(h, ["Vendor IFSC Code", "IFSC Code"])     || vendorMaster?.ifsc_code       || "",
-          accountNumber:  pick(h, ["Vendor Account No", "Account No"])   || vendorMaster?.account_number  || "",
-          beneficiaryName: pick(h, ["Vendor Beneficiary Name", "Beneficiary Name"]) || vendorMaster?.beneficiary_name || vendorMaster?.vendor_name || "",
+          vendorName:     vendorMaster.vendor_name     || "",
+          gstin:          vendorMaster.gstin           || "",
+          pan:            vendorMaster.pan             || "",
+          aadhar:         vendorMaster.aadhar_no       || "",
+          msme:           vendorMaster.msme_number     || "",
+          contactPerson:  vendorMaster.contact_person  || "",
+          mobile:         vendorMaster.mobile          || "",
+          email:          vendorMaster.email           || "",
+          address:        vendorMaster.address         || "",
+          bankName:       vendorMaster.bank_name       || "",
+          ifscCode:       vendorMaster.ifsc_code       || "",
+          accountNumber:  vendorMaster.account_number  || "",
+          beneficiaryName: vendorMaster.account_holder || vendorMaster.vendor_name || "",
         };
 
-        // Build company snapshot — excel overrides, master fills
+        // Build company snapshot — pull entirely from master (Excel only carries Company Code)
         const companySnap = {
           companyCode:  company.company_code,
-          companyName:  pick(h, ["Company Name"])   || company.company_name || "",
-          gstin:        pick(h, ["Company GSTIN"])  || company.gstin        || "",
-          pan:          pick(h, ["Company PAN", "Company Pan"]) || company.pan || "",
-          phone:        pick(h, ["Company Phone"])  || company.phone        || "",
-          address:      company.address || "",
-          logo_url:     company.logo_url || "",
-          stamp_url:    company.stamp_url || "",
-          sign_url:     company.sign_url || "",
-          personName:   company.person_name || "",
-          designation:  company.designation || "",
+          companyName:  company.company_name || "",
+          gstin:        company.gstin        || "",
+          pan:          company.pan          || "",
+          phone:        company.phone        || "",
+          address:      company.address      || "",
+          logo_url:     company.logo_url     || "",
+          stamp_url:    company.stamp_url    || "",
+          sign_url:     company.sign_url     || "",
+          personName:   company.person_name  || "",
+          designation:  company.designation  || "",
         };
 
         // Build site snapshot
@@ -481,10 +538,10 @@ router.post("/bulk-import", async (req, res) => {
           request_by:    String(pick(h, ["Requisition By"])).trim() || null,
           date_of_creation: parseDate(pick(h, ["Created On", "Created Date", "Order Date"])) || new Date().toISOString(),
           notes:         String(pick(h, ["Order Notes"])).trim() || null,
-          terms_conditions: arrify(pick(h, ["Term Condition", "Terms & Conditions"])),
-          payment_terms:    arrify(pick(h, ["Payment Terms"])),
-          governing_laws:   arrify(pick(h, ["Governlaws", "Governing Laws"])),
-          annexures:        arrify(pick(h, ["Annexure", "Annexures"])),
+          terms_conditions: resolveClauseCell(pick(h, ["TC ID", "Terms & Conditions ID", "Term Condition", "Terms & Conditions"])),
+          payment_terms:    resolveClauseCell(pick(h, ["Payment Terms ID", "Payment Terms"])),
+          governing_laws:   resolveClauseCell(pick(h, ["Govern Laws ID", "Governing Laws ID", "Governlaws", "Governing Laws"])),
+          annexures:        resolveClauseCell(pick(h, ["Annexure ID", "Annexures ID", "Annexure", "Annexures"])),
           totals,
           // FREEZE snapshot at import time so later master edits don't affect this order
           snapshot: {
@@ -507,9 +564,10 @@ router.post("/bulk-import", async (req, res) => {
         }
 
         if (incrementSerial && serialObj) {
+          // Set current_number to the serial we just issued (last-issued semantics)
           await supabase.schema("procurement")
             .from("serialization_settings")
-            .update({ current_number: serialObj.current_number + 1 })
+            .update({ current_number: serialObj._nextSerial })
             .eq("id", serialObj.id);
         }
 
@@ -589,32 +647,34 @@ router.put("/:id", upload.fields([
       if (needsNumber && curr.site_id) {
         try {
           const fy = getFinancialYear();
+          const kindForSerial = curr.order_type === "Supply" ? "Supply" : "SITC";
           let { data: serialObj } = await supabase.schema("procurement")
             .from("serialization_settings")
             .select("*")
             .eq("site_id", curr.site_id)
             .eq("financial_year", fy)
-            .single();
+            .eq("order_kind", kindForSerial)
+            .maybeSingle();
 
           if (!serialObj) {
             const { data: created } = await supabase.schema("procurement")
               .from("serialization_settings")
-              .insert({ site_id: curr.site_id, financial_year: fy, current_number: 1 })
+              .insert({ site_id: curr.site_id, financial_year: fy, current_number: 0, order_kind: kindForSerial })
               .select()
               .single();
             serialObj = created;
           }
 
           if (serialObj) {
-            const serialNum = serialObj.current_number;
+            const nextSerial = (serialObj.current_number || 0) + 1;
             const typeCode  = (curr.order_type === 'Supply') ? 'PO' : 'WO';
             const compCode  = curr.companies?.company_code || 'CO';
             const siteCode  = curr.sites?.site_code || 'SITE';
-            mainData.order_number = `${compCode}/${siteCode}/${typeCode}/${fy}/${String(serialNum).padStart(3, '0')}`;
+            mainData.order_number = `${compCode}/${siteCode}/${typeCode}/${fy}/${nextSerial}`;
 
             await supabase.schema("procurement")
               .from("serialization_settings")
-              .update({ current_number: serialNum + 1 })
+              .update({ current_number: nextSerial })
               .eq("id", serialObj.id);
           }
         } catch (numErr) {

@@ -545,13 +545,24 @@ const uploadVendorFile = async (files, key, folder) => {
   );
 };
 
+/* helper: next vendor_code (VEN-001, VEN-002...) */
+const getNextVendorCode = async () => {
+  const { data } = await supabase.schema("procurement")
+    .from("vendors").select("vendor_code");
+  const nums = (data || [])
+    .map(r => parseInt((r.vendor_code || "").replace("VEN-", "")) || 0);
+  const next = nums.length ? Math.max(...nums) + 1 : 1;
+  return `VEN-${String(next).padStart(3, "0")}`;
+};
+
 router.get("/vendors", async (_req, res) => {
   try {
     const { data, error } = await supabase
-      .schema("procurement").from("vendors").select("*").order("vendor_name", { ascending: true });
+      .schema("procurement").from("vendors").select("*").order("vendor_code", { ascending: true });
     if (error) throw error;
     const vendors = (data || []).map(r => ({
       id:             r.id,
+      vendorCode:     r.vendor_code     || "",
       vendorName:     r.vendor_name     || "",
       address:        r.address         || "",
       bankName:       r.bank_name       || "",
@@ -606,7 +617,9 @@ router.post("/vendors", vendorUpload, async (req, res) => {
       uploadVendorFile(files, "docOther2",       folder),
     ]);
 
+    const vendorCode = await getNextVendorCode();
     const { data, error } = await supabase.schema("procurement").from("vendors").insert({
+      vendor_code:     vendorCode,
       vendor_name:     b.vendorName     || "",
       address:         b.address        || "",
       bank_name:       b.bankName       || "",
@@ -714,7 +727,12 @@ router.post("/vendors/bulk", async (req, res) => {
   try {
     const { rows } = req.body;
     if (!rows?.length) return res.status(400).json({ error: "No rows provided" });
+    // Pre-fetch existing codes to compute starting serial for this batch
+    const { data: existingV } = await supabase.schema("procurement").from("vendors").select("vendor_code");
+    const existingNums = (existingV || []).map(r => parseInt((r.vendor_code || "").replace("VEN-", "")) || 0);
+    let nextNum = (existingNums.length ? Math.max(...existingNums) : 0) + 1;
     const records = rows.map(r => ({
+      vendor_code:     `VEN-${String(nextNum++).padStart(3, "0")}`,
       vendor_name:     r["Vendor Firm Name"]       || "",
       email:           r["Email"]                  || "",
       contact_person:  r["Contact Person Name"]    || "",

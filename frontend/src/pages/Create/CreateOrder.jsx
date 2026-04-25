@@ -2340,15 +2340,12 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
     const orderNoCol = isPO ? "Purchase Order No." : "Work Order No.";
     const defaultType = isPO ? "Supply" : "SITC";
 
-    // Common columns for both PO and WO
+    // Common columns — only IDs/codes, system fetches details from masters
     const commonStart = [
       "S.No",
-      "Site Code", orderNoCol, "Order Type", "Reference Number",
+      "Site Code", "Company Code", "Vendor ID",
+      orderNoCol, "Order Type", "Reference Number",
       "Created By", "Created On", "Requisition By", "Subject",
-      "Vendor Name", "Vendor GSTIN", "Vendor PAN", "Vendor Aadhar", "Vendor MSME No",
-      "Vendor Contact Name", "Vendor Phone", "Vendor Email",
-      "Vendor Bank Name", "Vendor IFSC Code", "Vendor Account No", "Vendor Beneficiary Name",
-      "Company Code", "Company GSTIN", "Company Pan", "Company Name", "Company Phone",
       "Status", "Issued At",
     ];
     const itemCols = isPO
@@ -2356,15 +2353,18 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
       : ["Item Name", "Description", "Model No", "Brand Name", "Unit", "Quantity", "Unit Price (₹)", "Tax (%)", "Discount (%)", "Amount"];
     const commonEnd = [
       "Fright", "Total Tax (₹)", "Total Amount (₹)",
-      "Order Notes", "Term Condition", "Payment Terms", "Governlaws", "Annexure",
+      "Order Notes",
+      "TC ID", "Payment Terms ID", "Govern Laws ID", "Annexure ID",
     ];
     const columns = [...commonStart, ...itemCols, ...commonEnd];
 
     const poNumber = isPO ? "BITL/B47/PO/2025-26/001" : "BITL/B47/WO/2025-26/001";
 
-    // Vendor/Company/Order details only on first row of each order
+    // Header details only on first row of each order — only IDs, masters provide rest
     const orderHead = {
       "Site Code": "B47",
+      "Company Code": "BITL",
+      "Vendor ID": "VEN-001",
       [orderNoCol]: poNumber,
       "Order Type": defaultType,
       "Reference Number": "REF-001",
@@ -2372,23 +2372,6 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
       "Created On": "2025-04-01",
       "Requisition By": "Site Engineer",
       "Subject": isPO ? "Cement & Steel supply" : "Water Proofing Work",
-      "Vendor Name": "Yes Infratech",
-      "Vendor GSTIN": "09DXBPK0739P1ZZ",
-      "Vendor PAN": "DXBPK0739P",
-      "Vendor Aadhar": "",
-      "Vendor MSME No": "",
-      "Vendor Contact Name": "Mr. Ashlam Khan",
-      "Vendor Phone": "9810678648",
-      "Vendor Email": "yesinfratech1@gmail.com",
-      "Vendor Bank Name": "Bank Of Baroda",
-      "Vendor IFSC Code": "BARB0TRDNAH",
-      "Vendor Account No": "21180200000684",
-      "Vendor Beneficiary Name": "Yes Infratech",
-      "Company Code": "BITL",
-      "Company GSTIN": "06AAJCB6841Q1Z2",
-      "Company Pan": "AAJCB6841Q",
-      "Company Name": "Bootes Impex Tech Pvt Ltd",
-      "Company Phone": "",
       "Status": "Issued",
       "Issued At": "2025-04-05",
     };
@@ -2398,10 +2381,10 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
       "Total Tax (₹)": isPO ? 7200 : 9000,
       "Total Amount (₹)": isPO ? 47200 : 59000,
       "Order Notes": "Deliver at site gate",
-      "Term Condition": "Payment within 30 days; Quality as per IS standard",
-      "Payment Terms": "50% advance; 50% on delivery",
-      "Governlaws": "Subject to Delhi jurisdiction",
-      "Annexure": "",
+      "TC ID": "TC-001",            // V1 (latest if no version specified — uses base record)
+      "Payment Terms ID": "PAY-001/V2", // V2 of PAY-001
+      "Govern Laws ID": "GOV-001",
+      "Annexure ID": "",
     };
 
     // PO example: 2 different items (cement + steel)
@@ -2425,14 +2408,10 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
         },
         {
           "S.No": 2,
-          "Site Code": "",
+          "Site Code": "", "Company Code": "", "Vendor ID": "",
           [orderNoCol]: poNumber, // same PO → same order
           "Order Type": "", "Reference Number": "", "Created By": "", "Created On": "",
           "Requisition By": "", "Subject": "",
-          "Vendor Name": "", "Vendor GSTIN": "", "Vendor PAN": "", "Vendor Aadhar": "", "Vendor MSME No": "",
-          "Vendor Contact Name": "", "Vendor Phone": "", "Vendor Email": "",
-          "Vendor Bank Name": "", "Vendor IFSC Code": "", "Vendor Account No": "", "Vendor Beneficiary Name": "",
-          "Company Code": "", "Company GSTIN": "", "Company Pan": "", "Company Name": "", "Company Phone": "",
           "Status": "", "Issued At": "",
           "Item Name": "Steel Rod",
           "Specification": "Fe500 TMT 12mm",
@@ -2445,7 +2424,8 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
           "Discount (%)": 0,
           "Amount": 30000,
           "Fright": "", "Total Tax (₹)": "", "Total Amount (₹)": "",
-          "Order Notes": "", "Term Condition": "", "Payment Terms": "", "Governlaws": "", "Annexure": "",
+          "Order Notes": "",
+          "TC ID": "", "Payment Terms ID": "", "Govern Laws ID": "", "Annexure ID": "",
         }
       ];
     } else {

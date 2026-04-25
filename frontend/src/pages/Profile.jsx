@@ -775,6 +775,9 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
   const [serLoading,  setSerLoading]  = useState(false);
   const [serSaving,   setSerSaving]   = useState(null); // siteId being saved
   const [serTab, setSerTab] = useState("intake"); // "intake" | "order"
+  const [orderKindTab, setOrderKindTab] = useState("Supply"); // "Supply" | "SITC"
+  const [showAddSiteSer, setShowAddSiteSer] = useState(false);
+  const [addSiteForm, setAddSiteForm] = useState({ siteId: "", financialYear: "", currentNumber: 0 });
 
   useEffect(() => {
     if (section === "serialization" && isGlobalAdmin) fetchSerData();
@@ -835,37 +838,72 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
     return `${fy}-${String(fy + 1).slice(-2)}`;
   };
 
-  const getOrderSerConfig = (siteId) => {
-    const fy = currentFY();
-    return orderSerConfigs.find(c => c.site_id === siteId && c.financial_year === fy) || { financial_year: fy };
+  // Configs filtered for current order kind tab (Supply / SITC)
+  const orderTilesForKind = (kind) =>
+    orderSerConfigs.filter(c => c.order_kind === kind);
+
+  const updateOrderTile = (id, field, value) => {
+    setOrderSerConfigs(prev => prev.map(c => c.id === id ? { ...c, [field]: value } : c));
   };
 
-  const updateOrderSerConfig = (siteId, field, value) => {
-    setOrderSerConfigs(prev => {
-      const fy = currentFY();
-      const exists = prev.find(c => c.site_id === siteId && c.financial_year === fy);
-      if (exists) return prev.map(c => c.site_id === siteId && c.financial_year === fy ? { ...c, [field]: value } : c);
-      return [...prev, { site_id: siteId, financial_year: fy, [field]: value }];
-    });
-  };
-
-  const saveOrderSerConfig = async (site) => {
-    const cfg = getOrderSerConfig(site.id);
-    setSerSaving("order_" + site.id);
+  const saveOrderTile = async (cfg) => {
+    setSerSaving("order_" + cfg.id);
     try {
       const res = await fetch(`${API}/api/orders/serialization`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          site_id: site.id,
+          site_id: cfg.site_id,
           financial_year: cfg.financial_year,
-          current_number: parseInt(cfg.current_number) || 0
+          current_number: parseInt(cfg.current_number) || 0,
+          order_kind: cfg.order_kind,
         }),
       });
       if (!res.ok) throw new Error("Save failed");
-      showToast(`Order sequence saved for ${site.siteName}`);
+      showToast(`Sequence saved`);
       fetchSerData();
     } catch { showToast("Failed to save sequence", "error"); }
+    setSerSaving(null);
+  };
+
+  const deleteOrderTile = async (id) => {
+    if (!confirm("Remove this serialization entry?")) return;
+    try {
+      const res = await fetch(`${API}/api/orders/serialization/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Delete failed");
+      showToast("Removed");
+      fetchSerData();
+    } catch { showToast("Failed to remove", "error"); }
+  };
+
+  const addOrderTile = async () => {
+    if (!addSiteForm.siteId) return showToast("Site is required", "error");
+    if (!addSiteForm.financialYear) return showToast("Financial year is required", "error");
+    // Prevent duplicate (site + fy + kind)
+    const dup = orderSerConfigs.find(c =>
+      c.site_id === addSiteForm.siteId &&
+      c.financial_year === addSiteForm.financialYear &&
+      c.order_kind === orderKindTab);
+    if (dup) return showToast("This site is already configured for that FY", "error");
+
+    setSerSaving("add_new");
+    try {
+      const res = await fetch(`${API}/api/orders/serialization`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          site_id: addSiteForm.siteId,
+          financial_year: addSiteForm.financialYear,
+          current_number: parseInt(addSiteForm.currentNumber) || 0,
+          order_kind: orderKindTab,
+        }),
+      });
+      if (!res.ok) throw new Error("Save failed");
+      showToast("Site added");
+      setShowAddSiteSer(false);
+      setAddSiteForm({ siteId: "", financialYear: "", currentNumber: 0 });
+      fetchSerData();
+    } catch { showToast("Failed to add", "error"); }
     setSerSaving(null);
   };
 
@@ -1646,7 +1684,7 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
                     </button>
                     <button onClick={() => setSerTab("order")}
                       className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${serTab === "order" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"}`}>
-                      Purchase / Work Order
+                      Orders
                     </button>
                   </div>
                 </div>
@@ -1717,61 +1755,132 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
                       </>
                     ) : (
                       <>
-                        {/* Header row for Order */}
-                        <div className="grid grid-cols-12 gap-3 px-4 pb-1">
-                          <div className="col-span-3"><span className={lbl}>Site</span></div>
-                          <div className="col-span-2"><span className={lbl}>Financial Year</span></div>
-                          <div className="col-span-3"><span className={lbl}>Start From Next Serial</span></div>
-                          <div className="col-span-2"><span className={lbl}>Example Format</span></div>
-                          <div className="col-span-2"><span className={lbl}>Action</span></div>
+                        {/* Sub-tabs: Supply (PO) | SITC (WO) + Add Site button */}
+                        <div className="flex items-center justify-between gap-3 mb-2">
+                          <div className="flex bg-slate-100 p-1 rounded-xl">
+                            <button onClick={() => setOrderKindTab("Supply")}
+                              className={`px-5 py-1.5 rounded-lg text-xs font-bold transition-all ${orderKindTab === "Supply" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+                              Supply Order (Purchase Order)
+                            </button>
+                            <button onClick={() => setOrderKindTab("SITC")}
+                              className={`px-5 py-1.5 rounded-lg text-xs font-bold transition-all ${orderKindTab === "SITC" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+                              SITC Order (Work Order)
+                            </button>
+                          </div>
+                          <button onClick={() => { setAddSiteForm({ siteId: "", financialYear: currentFY(), currentNumber: 0 }); setShowAddSiteSer(true); }}
+                            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 transition-all">
+                            <Plus size={14} /> Add Site
+                          </button>
                         </div>
-                        {serSites.map(site => {
-                          const cfg = getOrderSerConfig(site.id);
-                          const fy = cfg.financial_year || currentFY();
-                          const next = parseInt(cfg.current_number) || 0;
-                          // Dynamic preview like the backend logic: "COMP/SITE/PO/FY/001"
-                          const preview = `CMP/${site.siteCode || "S"}/PO/${fy}/${String(next + 1).padStart(3, "0")}`;
-                          
-                          return (
-                            <div key={site.id} className="grid grid-cols-12 gap-3 items-center p-4 rounded-xl border border-slate-100 bg-slate-50 hover:border-indigo-200 transition-all">
-                              <div className="col-span-3">
-                                <p className="text-sm font-semibold text-slate-700">{site.siteName}</p>
-                                {site.siteCode && <p className="text-xs text-slate-400 font-mono">{site.siteCode}</p>}
-                              </div>
-                              <div className="col-span-2">
-                                <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-200 text-slate-700 border border-slate-300">
-                                   {fy}
-                                </span>
-                              </div>
-                              <div className="col-span-3">
-                                <input
-                                  type="number"
-                                  min="0"
-                                  className={inp}
-                                  value={cfg.current_number !== undefined ? cfg.current_number : 0}
-                                  onChange={e => updateOrderSerConfig(site.id, "current_number", e.target.value)}
-                                  title="0 means next PO will be 1"
-                                />
-                                <p className="text-[10px] text-slate-400 mt-1">If 0, next document is 001</p>
-                              </div>
-                              <div className="col-span-2 text-[11px] font-mono font-bold text-indigo-600 bg-indigo-50 px-2 py-1.5 rounded-lg border border-indigo-100 truncate w-full"
-                                   title={preview}>
-                                 {preview.length > 18 ? preview.slice(0, 18) + '...' : preview}
-                              </div>
-                              <div className="col-span-2 flex items-center justify-end gap-2">
-                                <button
-                                  onClick={() => saveOrderSerConfig(site)}
-                                  disabled={serSaving === "order_" + site.id}
-                                  className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-all">
-                                  {serSaving === "order_" + site.id ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
-                                  Save
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
+
+                        {/* Tiles grid */}
+                        {orderTilesForKind(orderKindTab).length === 0 ? (
+                          <div className="text-sm text-slate-400 text-center py-12 rounded-xl border-2 border-dashed border-slate-200">
+                            No sites configured for {orderKindTab === "Supply" ? "Supply Orders" : "SITC Orders"}. Click <span className="font-semibold text-indigo-600">+ Add Site</span> to start.
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                            {orderTilesForKind(orderKindTab).map(cfg => {
+                              const site = serSites.find(s => s.id === cfg.site_id) || {};
+                              const next = parseInt(cfg.current_number) || 0;
+                              const typeCode = cfg.order_kind === "Supply" ? "PO" : "WO";
+                              const preview = `CMP/${site.siteCode || "S"}/${typeCode}/${cfg.financial_year}/${next + 1}`;
+                              return (
+                                <div key={cfg.id} className="p-4 rounded-xl border border-slate-100 bg-slate-50 hover:border-indigo-200 transition-all">
+                                  <div className="flex items-start justify-between gap-2 mb-3">
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-bold text-slate-800 truncate">{site.siteName || "—"}</p>
+                                      <div className="flex items-center gap-2 mt-1">
+                                        {site.siteCode && <span className="text-[10px] font-mono font-semibold text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200">{site.siteCode}</span>}
+                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">{cfg.financial_year}</span>
+                                      </div>
+                                    </div>
+                                    <button onClick={() => deleteOrderTile(cfg.id)}
+                                      className="text-slate-400 hover:text-red-500 transition-all" title="Remove">
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </div>
+                                  <div className="mb-2">
+                                    <span className={lbl}>Last Issued Serial</span>
+                                    <input
+                                      type="number" min="0"
+                                      className={inp}
+                                      value={cfg.current_number !== undefined ? cfg.current_number : 0}
+                                      onChange={e => updateOrderTile(cfg.id, "current_number", e.target.value)} />
+                                    <p className="text-[10px] text-slate-400 mt-1">Next document = this value + 1 (so 30 → next is 31)</p>
+                                  </div>
+                                  <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200">
+                                    <span className="text-[10px] font-mono font-bold text-indigo-700 bg-indigo-50 px-2 py-1 rounded border border-indigo-100 truncate" title={preview}>
+                                      {preview}
+                                    </span>
+                                    <button
+                                      onClick={() => saveOrderTile(cfg)}
+                                      disabled={serSaving === "order_" + cfg.id}
+                                      className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-all">
+                                      {serSaving === "order_" + cfg.id ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                                      Save
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </>
                     )}
+                  </div>
+                )}
+
+                {/* ─── ADD SITE MODAL (for Order Serialization) ─── */}
+                {showAddSiteSer && (
+                  <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                    <div onClick={() => setShowAddSiteSer(false)}
+                      className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
+                    <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
+                      <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                        <div>
+                          <h3 className="text-base font-black text-slate-800">Add Site</h3>
+                          <p className="text-xs text-slate-500 mt-0.5">{orderKindTab === "Supply" ? "Supply Order (PO)" : "SITC Order (WO)"} sequence</p>
+                        </div>
+                        <button onClick={() => setShowAddSiteSer(false)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-slate-100 text-slate-400">
+                          <X size={18} />
+                        </button>
+                      </div>
+                      <div className="p-5 space-y-4">
+                        <div>
+                          <span className={lbl}>Site *</span>
+                          <select className={inp} value={addSiteForm.siteId}
+                            onChange={e => setAddSiteForm(f => ({ ...f, siteId: e.target.value }))}>
+                            <option value="">Select site…</option>
+                            {serSites.map(s => (
+                              <option key={s.id} value={s.id}>{s.siteName}{s.siteCode ? ` (${s.siteCode})` : ""}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <span className={lbl}>Financial Year *</span>
+                          <input className={inp} placeholder="e.g. 2026-27"
+                            value={addSiteForm.financialYear}
+                            onChange={e => setAddSiteForm(f => ({ ...f, financialYear: e.target.value }))} />
+                        </div>
+                        <div>
+                          <span className={lbl}>Last Issued Serial</span>
+                          <input type="number" min="0" className={inp}
+                            value={addSiteForm.currentNumber}
+                            onChange={e => setAddSiteForm(f => ({ ...f, currentNumber: e.target.value }))} />
+                          <p className="text-[10px] text-slate-400 mt-1">Next order = this + 1. Set 0 for fresh site (first order will be 1).</p>
+                        </div>
+                      </div>
+                      <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                        <button onClick={() => setShowAddSiteSer(false)}
+                          className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
+                        <button onClick={addOrderTile} disabled={serSaving === "add_new"}
+                          className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 disabled:opacity-50">
+                          {serSaving === "add_new" ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                          Save
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
