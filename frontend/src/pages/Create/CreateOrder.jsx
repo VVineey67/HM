@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { Plus, X, Upload, Save, FileText, ChevronDown, ChevronRight, Check, Building2, MapPin, Truck, Landmark, ShieldCheck, FilePlus, Eye, Loader2, Pencil, Trash2, Download, FileDown, Rocket, Undo2, Ban, CheckCircle2, RotateCcw, XCircle, Search, FileSpreadsheet } from "lucide-react";
+import { Plus, X, Upload, Save, FileText, ChevronDown, ChevronRight, Check, Building2, MapPin, Truck, Landmark, ShieldCheck, FilePlus, Eye, Loader2, Pencil, Trash2, Download, FileDown, Rocket, Undo2, Ban, CheckCircle2, RotateCcw, XCircle, Search, FileSpreadsheet, Copy } from "lucide-react";
 import * as XLSX from "xlsx";
 import { FullSiteModal, FullCompanyModal, FullVendorModal, FullViewSiteModal, FullViewCompanyModal, FullViewVendorModal, FullContactModal, FullViewContactModal, FullClauseModal } from "./FullMasterModals";
 import ReactQuill from "react-quill-new";
@@ -1986,6 +1986,16 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
   const [bulkResult, setBulkResult] = useState(null);
   const bulkRef = React.useRef();
 
+  const [copiedOrderId, setCopiedOrderId] = useState("");
+  const copyOrderNumber = (text, id, e) => {
+    e.stopPropagation();
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedOrderId(id);
+      setTimeout(() => setCopiedOrderId(""), 1500);
+    }).catch(() => showToast("Copy failed", "error"));
+  };
+
   // Filters
   const [filterSite, setFilterSite] = useState("");
   const [filterCompany, setFilterCompany] = useState("");
@@ -2845,7 +2855,7 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
             <table className="w-full text-sm text-left border-collapse" style={{minWidth:'700px'}}>
               <thead>
                 <tr className="bg-white text-slate-500 font-semibold bg-slate-50">
-                  <th className="px-4 py-3 uppercase tracking-wider text-[10px] border-b border-r border-slate-200 bg-slate-50 font-bold text-slate-600">Order No</th>
+                  <th className="px-4 py-3 uppercase tracking-wider text-[10px] border-b border-r border-slate-200 bg-slate-50 font-bold text-slate-600 whitespace-nowrap min-w-[240px]">Order No</th>
                   <th className="px-4 py-3 uppercase tracking-wider text-[10px] border-b border-r border-slate-200 font-bold text-slate-500">Type</th>
                   <th className="px-4 py-3 uppercase tracking-wider text-[10px] border-b border-r border-slate-200 font-bold text-slate-500">Made By</th>
                   <th className="px-4 py-3 uppercase tracking-wider text-[10px] border-b border-r border-slate-200 font-bold text-slate-500">Created Date</th>
@@ -2891,15 +2901,23 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
 
                   return (
                     <tr key={o.id} className="hover:bg-indigo-50/30 transition-colors group">
-                      <td className="px-4 py-3.5 border-b border-r border-slate-200 bg-white group-hover:bg-indigo-50/30 transition-colors font-mono">
-                        <span className={`font-bold text-[11px] ${displayNo ? "text-slate-900" : "text-slate-300"}`} title={displayNo || '-'}>
-                          {displayNo
-                            ? <button onClick={() => onViewClick(o.id)} className="hover:text-indigo-600 hover:underline hover:decoration-indigo-300 underline-offset-4 transition-all text-left">
-                                {displayNo}
-                              </button>
-                            : "-"
-                          }
-                        </span>
+                      <td className="px-4 py-3.5 border-b border-r border-slate-200 bg-white group-hover:bg-indigo-50/30 transition-colors font-mono whitespace-nowrap">
+                        {displayNo ? (
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => onViewClick(o.id)}
+                              className="font-bold text-[11px] text-slate-900 hover:text-indigo-600 hover:underline hover:decoration-indigo-300 underline-offset-4 transition-all text-left">
+                              {displayNo}
+                            </button>
+                            <button
+                              onClick={(e) => copyOrderNumber(displayNo, o.id, e)}
+                              title={copiedOrderId === o.id ? "Copied!" : "Copy order number"}
+                              className={`p-1 rounded hover:bg-slate-100 transition-colors shrink-0 ${copiedOrderId === o.id ? "text-emerald-600" : "text-slate-300 hover:text-slate-500"}`}>
+                              {copiedOrderId === o.id ? <Check size={12} /> : <Copy size={11} />}
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="font-bold text-[11px] text-slate-300">-</span>
+                        )}
                       </td>
                       <td className="px-4 py-3.5 border-b border-r border-slate-100">
                         <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider whitespace-nowrap
