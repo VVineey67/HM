@@ -90,7 +90,7 @@ const Login = ({ onLogin }) => {
     <div
       ref={bgRef}
       onMouseMove={handleMouseMove}
-      className="zx-cursor-bg relative h-screen w-screen bg-[#020812] flex items-center justify-center p-3 font-sans overflow-hidden"
+      className="zx-cursor-bg relative min-h-screen w-full bg-[#020812] flex items-center justify-center p-2 sm:p-3 font-sans overflow-x-hidden"
       style={{ "--mx": "50%", "--my": "50%" }}
     >
       <style>{`
@@ -144,10 +144,10 @@ const Login = ({ onLogin }) => {
         <div className="zx-orb absolute bottom-10 right-20 h-96 w-96 rounded-full bg-teal-500/10 blur-3xl" style={{ animationDelay: "3s" }} />
         <div className="zx-orb absolute top-1/2 left-1/3 h-72 w-72 rounded-full bg-sky-500/10 blur-3xl" style={{ animationDelay: "6s" }} />
       </div>
-      <div className="zx-fade-in relative z-10 w-full max-w-7xl h-full max-h-[880px] rounded-3xl border border-cyan-500/20 bg-[#06111f]/90 backdrop-blur-sm shadow-2xl overflow-hidden grid grid-cols-1 lg:grid-cols-2">
+      <div className="zx-fade-in relative z-10 w-full max-w-7xl lg:h-full lg:max-h-[880px] rounded-2xl sm:rounded-3xl border border-cyan-500/20 bg-[#06111f]/90 backdrop-blur-sm shadow-2xl overflow-hidden grid grid-cols-1 lg:grid-cols-2">
 
         {/* LEFT SECTION */}
-        <div className="relative flex flex-col items-center justify-center px-8 py-6 text-center bg-[#06111f] overflow-hidden">
+        <div className="relative flex flex-col items-center justify-center px-4 sm:px-8 py-6 text-center bg-[#06111f] overflow-hidden">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,#003b46_0%,transparent_55%)] opacity-60" />
           <div className="absolute -top-24 -left-24 h-72 w-72 rounded-full bg-cyan-500/10 blur-3xl zx-glow" />
           <div className="absolute -bottom-24 -right-24 h-72 w-72 rounded-full bg-teal-500/10 blur-3xl zx-glow" style={{ animationDelay: "1.5s" }} />
@@ -156,30 +156,30 @@ const Login = ({ onLogin }) => {
             <img
               src="/logo.png"
               alt="Zyrex Logo"
-              className="w-[36rem] max-w-[95%] mx-auto -mt-4 -mb-2 object-contain drop-shadow-[0_22px_55px_rgba(34,211,238,0.4)] zx-float"
+              className="w-64 sm:w-96 lg:w-[36rem] max-w-[95%] mx-auto -mt-2 sm:-mt-4 -mb-2 object-contain drop-shadow-[0_22px_55px_rgba(34,211,238,0.4)] zx-float"
             />
 
             <div className="zx-fade-up" style={{ animationDelay: ".15s" }}>
-              <h2 className="text-3xl lg:text-4xl font-bold text-white">
+              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white">
                 Smart ERP.{" "}
                 <span className="text-cyan-400">Powerful Results.</span>
               </h2>
-              <p className="mt-4 text-gray-300 text-base lg:text-lg leading-relaxed max-w-xl mx-auto">
+              <p className="mt-3 sm:mt-4 text-gray-300 text-sm sm:text-base lg:text-lg leading-relaxed max-w-xl mx-auto">
                 Manage your entire business with intelligence, automation and real-time insights.
               </p>
             </div>
 
-            <div className="grid grid-cols-4 gap-6 mt-10">
+            <div className="grid grid-cols-4 gap-3 sm:gap-6 mt-6 sm:mt-10">
               {features.map(({ label, icon: Icon }, i) => (
                 <div
                   key={label}
                   className="flex flex-col items-center zx-pop cursor-pointer group"
                   style={{ animationDelay: `${0.25 + i * 0.1}s` }}
                 >
-                  <div className="w-16 h-16 lg:w-20 lg:h-20 rounded-2xl border border-cyan-500/20 bg-white/5 flex items-center justify-center text-cyan-400 shadow-lg shadow-cyan-500/5 transition-all duration-300 group-hover:-translate-y-1 group-hover:border-cyan-400 group-hover:bg-cyan-400/10 group-hover:shadow-cyan-500/30">
-                    <Icon size={28} strokeWidth={2} />
+                  <div className="w-12 h-12 sm:w-16 sm:h-16 lg:w-20 lg:h-20 rounded-xl sm:rounded-2xl border border-cyan-500/20 bg-white/5 flex items-center justify-center text-cyan-400 shadow-lg shadow-cyan-500/5 transition-all duration-300 group-hover:-translate-y-1 group-hover:border-cyan-400 group-hover:bg-cyan-400/10 group-hover:shadow-cyan-500/30">
+                    <Icon size={22} strokeWidth={2} className="sm:w-7 sm:h-7" />
                   </div>
-                  <p className="mt-2 text-white text-sm">{label}</p>
+                  <p className="mt-2 text-white text-xs sm:text-sm">{label}</p>
                   <div className="w-10 h-[3px] bg-cyan-400 mt-2 rounded-full transition-all duration-300 group-hover:w-16" />
                 </div>
               ))}
@@ -188,13 +188,13 @@ const Login = ({ onLogin }) => {
         </div>
 
         {/* RIGHT SECTION */}
-        <div className="relative flex items-center justify-center p-6 lg:p-10 bg-[#020812] overflow-y-auto">
+        <div className="relative flex items-center justify-center p-4 sm:p-6 lg:p-10 bg-[#020812] lg:overflow-y-auto">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(34,211,238,0.08),transparent_60%)]" />
           {view === "login" ? (
-            <div className="zx-fade-up relative w-full h-full flex flex-col justify-center max-w-2xl mx-auto px-2 lg:px-8">
-              <p className="text-cyan-400 font-bold text-base mb-2">Welcome Back</p>
+            <div className="zx-fade-up relative w-full lg:h-full flex flex-col justify-center max-w-2xl mx-auto px-1 sm:px-2 lg:px-8 py-2 sm:py-4">
+              <p className="text-cyan-400 font-bold text-sm sm:text-base mb-2">Welcome Back</p>
 
-              <h2 className="text-3xl lg:text-4xl font-bold text-white mb-3">
+              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white mb-3">
                 Login to <span className="text-cyan-400">your account</span>
               </h2>
 
@@ -299,7 +299,7 @@ const Login = ({ onLogin }) => {
               </div>
             </div>
           ) : (
-            <div className="relative w-full h-full flex flex-col justify-center max-w-2xl mx-auto px-2 lg:px-8">
+            <div className="relative w-full lg:h-full flex flex-col justify-center max-w-2xl mx-auto px-1 sm:px-2 lg:px-8 py-2 sm:py-4">
               <button
                 onClick={() => { setView("login"); setError(""); setForgotSent(false); }}
                 className="mb-6 flex w-fit items-center gap-2 text-sm text-slate-400 hover:text-slate-200 transition"
@@ -307,7 +307,7 @@ const Login = ({ onLogin }) => {
                 <ArrowLeft size={16} /> Back to Login
               </button>
 
-              <h2 className="text-4xl font-bold text-white mb-3">Forgot Password</h2>
+              <h2 className="text-3xl sm:text-4xl font-bold text-white mb-3">Forgot Password</h2>
               <p className="text-base text-slate-400">
                 {forgotSent ? "Check your email for the reset link." : "Enter your registered email address."}
               </p>
