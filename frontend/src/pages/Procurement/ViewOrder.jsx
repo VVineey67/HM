@@ -1414,13 +1414,28 @@ const DocSection = ({
 
 const DocCard = ({ doc, readOnly = false, onDelete, isImage, formatBytes, accent = "purple" }) => {
   const img = isImage(doc.name, doc.url);
+  const isPdf = /\.pdf(\?|$)/i.test(doc.name) || /\.pdf(\?|$)/i.test(doc.url || "");
   return (
     <div className="group bg-slate-50 border border-slate-200 rounded-xl overflow-hidden hover:shadow-md hover:border-slate-300 transition-all">
-      <a href={doc.url} target="_blank" rel="noreferrer" className="block aspect-[4/3] bg-slate-100 flex items-center justify-center overflow-hidden">
+      <a href={doc.url} target="_blank" rel="noreferrer" className="relative block aspect-[4/3] bg-slate-100 overflow-hidden">
         {img ? (
-          <img src={doc.url} alt={doc.name} className="w-full h-full object-contain" />
+          <img src={doc.url} alt={doc.name} className="w-full h-full object-cover" />
+        ) : isPdf ? (
+          <>
+            <iframe
+              src={`${doc.url}#toolbar=0&navpanes=0&scrollbar=0&view=FitH&page=1`}
+              title={doc.name}
+              scrolling="no"
+              className="pointer-events-none absolute top-0 left-0"
+              style={{ width: "calc(100% + 24px)", height: "calc(100% + 24px)" }}
+              loading="lazy"
+            />
+            <div className="absolute inset-0 bg-transparent" />
+          </>
         ) : (
-          <FileText size={36} className="text-rose-400" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <FileText size={36} className="text-rose-400" />
+          </div>
         )}
       </a>
       <div className="px-2.5 py-2 flex items-center justify-between gap-1 bg-white border-t border-slate-100">
