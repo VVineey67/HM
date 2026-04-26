@@ -2626,9 +2626,13 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
     setBulkSaving(false);
   };
 
+  const getSiteCodeForOrder = (o) => o.snapshot?.site?.siteCode || o.sites?.site_code || "";
+  const projectScoped = (o) => !project || getSiteCodeForOrder(o) === project;
+
   const getTabCount = (tabName) => {
-    if (tabName === "All") return orders.filter(o => !o._history && !["Reverted", "Recalled"].includes(o.status)).length;
-    return orders.filter(o => o.status === tabName).length;
+    const scoped = orders.filter(projectScoped);
+    if (tabName === "All") return scoped.filter(o => !o._history && !["Reverted", "Recalled"].includes(o.status)).length;
+    return scoped.filter(o => o.status === tabName).length;
   };
 
 
