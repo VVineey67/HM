@@ -100,7 +100,7 @@ const ItemRow = ({ item, idx, onChange, onRemove, canRemove }) => {
   );
 };
 
-export default function IntakeList() {
+export default function IntakeList({ project }) {
   const currentUser  = JSON.parse(localStorage.getItem("bms_user") || "{}");
   const isAdmin      = ["global_admin", "admin"].includes(currentUser.role);
   const isGlobal     = currentUser.role === "global_admin";
@@ -172,7 +172,19 @@ export default function IntakeList() {
   /* ── List helpers ── */
   const fmt = (d) => d ? new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
-  const filtered = intakes.filter(i => activeTab === "all" || i.status === activeTab);
+  const normProject = String(project || "").trim().toLowerCase();
+  const isAllProject = !normProject || normProject === "all project";
+  const projectMatches = (...values) => (
+    isAllProject || values.some(v => String(v || "").trim().toLowerCase() === normProject)
+  );
+  const availableSites = isAllProject
+    ? sites
+    : sites.filter(s => projectMatches(s.siteCode, s.site_code, s.siteName, s.site_name));
+
+  const filtered = intakes.filter(i => {
+    const matchProject = projectMatches(i.site_code, i.siteCode, i.site_name, i.siteName);
+    return matchProject && (activeTab === "all" || i.status === activeTab);
+  });
   const totalPages = Math.ceil(filtered.length / PER_PAGE) || 1;
   const paginated  = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
 
@@ -357,7 +369,7 @@ export default function IntakeList() {
                 <select className={`${inp} appearance-none pr-8`} value={form.site_id}
                   onChange={e => { const s = sites.find(x => x.id === e.target.value); setForm(f => ({ ...f, site_id: e.target.value, site_name: s?.siteName || "" })); }}>
                   <option value="">Select site…</option>
-                  {sites.map(s => <option key={s.id} value={s.id}>{s.siteName}{s.siteCode ? ` (${s.siteCode})` : ""}</option>)}
+                  {availableSites.map(s => <option key={s.id} value={s.id}>{s.siteName}{s.siteCode ? ` (${s.siteCode})` : ""}</option>)}
                 </select>
                 <ChevronDown size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
               </div>

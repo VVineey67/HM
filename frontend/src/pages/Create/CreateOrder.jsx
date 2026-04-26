@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { Plus, X, Upload, Save, FileText, ChevronDown, ChevronRight, Check, Building2, MapPin, Truck, Landmark, ShieldCheck, FilePlus, Eye, Loader2, Pencil, Trash2, Download, FileDown, Rocket, Undo2, Ban, CheckCircle2, RotateCcw, XCircle, Search, FileSpreadsheet, Copy } from "lucide-react";
+import { Plus, X, Upload, Save, FileText, ChevronDown, ChevronRight, Check, Building2, MapPin, Truck, Landmark, ShieldCheck, FilePlus, Eye, Loader2, Pencil, Trash2, Download, FileDown, Rocket, Undo2, Ban, CheckCircle2, RotateCcw, XCircle, Search, FileSpreadsheet, Copy, ShoppingCart, IndianRupee, Hammer, ShoppingBag, Box, CalendarDays, User, Tag } from "lucide-react";
 import * as XLSX from "xlsx";
 import { FullSiteModal, FullCompanyModal, FullVendorModal, FullViewSiteModal, FullViewCompanyModal, FullViewVendorModal, FullContactModal, FullViewContactModal, FullClauseModal } from "./FullMasterModals";
 import ReactQuill from "react-quill-new";
@@ -257,7 +257,7 @@ const InlineSelect = ({ value, onChange, options, placeholder, className, disabl
   );
 };
 
-const Select = ({ label, value, onChange, options, valueKey = "id", labelKey = "name", subLabelKey, placeholder, required, span2, onAdd, addLabel, onView, isMulti }) => {
+const Select = ({ label, value, onChange, options, valueKey = "id", labelKey = "name", subLabelKey, placeholder, required, span2, onAdd, addLabel, onView, isMulti, disabled }) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const containerRef = useRef(null);
@@ -295,16 +295,17 @@ const Select = ({ label, value, onChange, options, valueKey = "id", labelKey = "
         {label} {required && <span className="text-red-400 normal-case">*</span>}
       </label>
       <div 
-        onClick={() => setOpen(!open)}
-        className={`w-full border rounded-xl px-3 py-2 text-sm outline-none transition-all cursor-pointer flex justify-between items-center bg-white min-h-[42px]
-          ${open ? "border-indigo-400 ring-2 ring-indigo-50" : "border-slate-200 hover:border-slate-300"}`}
+        onClick={() => !disabled && setOpen(!open)}
+        className={`w-full border rounded-xl px-3 py-2 text-sm outline-none transition-all flex justify-between items-center min-h-[42px]
+          ${disabled ? "bg-slate-50 border-slate-100 cursor-not-allowed opacity-60" : "bg-white cursor-pointer border-slate-200 hover:border-slate-300"}
+          ${open ? "border-indigo-400 ring-2 ring-indigo-50" : ""}`}
       >
         <div className="flex flex-wrap gap-1.5 py-1 flex-1 min-w-0">
           {selectedOptions.length > 0 ? (
             selectedOptions.map(o => (
               <span key={o[valueKey]} className={`${isMulti ? "bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded-lg text-[10px] font-bold flex items-center gap-1 max-w-full" : "text-slate-700 truncate"}`}>
                 <span className="truncate">{o[labelKey]}</span>
-                {isMulti && (
+                {isMulti && !disabled && (
                   <X size={10} className="hover:text-red-500 cursor-pointer shrink-0" onClick={(e) => { e.stopPropagation(); handleToggle(o[valueKey]); }} />
                 )}
               </span>
@@ -313,7 +314,7 @@ const Select = ({ label, value, onChange, options, valueKey = "id", labelKey = "
             <span className='text-slate-400 italic'>{placeholder || 'Select...'}</span>
           )}
         </div>
-        <ChevronDown size={14} className={`text-slate-400 shrink-0 transition-transform ${open ? "rotate-180" : "ml-2"}`} />
+        {!disabled && <ChevronDown size={14} className={`text-slate-400 shrink-0 transition-transform ${open ? "rotate-180" : "ml-2"}`} />}
       </div>
 
       {open && (
@@ -384,7 +385,7 @@ const DocUpload = ({ label, file, onChange, required }) => (
   </div>
 );
 
-const MultiDocUpload = ({ label, files, onAdd, onRemove, max = 6, required }) => (
+const MultiDocUpload = ({ label, files, onAdd, onRemove, onPreview, max = 6, required }) => (
   <div className="space-y-2">
     <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
       {label} {required && <span className="text-red-400 normal-case">*</span>}
@@ -393,11 +394,14 @@ const MultiDocUpload = ({ label, files, onAdd, onRemove, max = 6, required }) =>
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
       {files.map((f, i) => (
         <div key={i} className="flex items-center justify-between bg-white border border-emerald-100 rounded-xl px-3 py-2 shadow-sm animate-in fade-in slide-in-from-left-2 transition-all">
-          <div className="flex items-center gap-2 min-w-0">
+          <div 
+            className={`flex items-center gap-2 min-w-0 ${onPreview ? 'cursor-pointer hover:opacity-80' : ''}`}
+            onClick={() => onPreview && onPreview(f)}
+          >
             <div className="w-7 h-7 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">
                <FileText size={14} className="text-emerald-500" />
             </div>
-            <span className="text-xs font-medium text-slate-700 truncate">{f.name}</span>
+            <span className={`text-xs font-medium text-slate-700 truncate ${onPreview ? 'hover:text-emerald-600 hover:underline' : ''}`}>{f.name}</span>
           </div>
           <button onClick={() => onRemove(i)} className="p-1 hover:text-red-500 text-slate-400 transition-colors">
             <X size={14} />
@@ -442,6 +446,17 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
   const [itemsList, setItemsList] = useState([]);
   const [clauses, setClauses]     = useState([]);
   const [uomList, setUomList]     = useState([]);
+
+  // Auto-select site based on project prop
+  useEffect(() => {
+    if (project && sites.length > 0) {
+      const match = sites.find(s => s.siteCode === project);
+      if (match) {
+        setHeader(h => ({ ...h, siteId: match.id }));
+        setSiteDetails(match || null);
+      }
+    }
+  }, [project, sites]);
 
   // Form State - Header
   const [header, setHeader] = useState({
@@ -490,6 +505,15 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
     others: []
   });
 
+  const [docPreviewUrl, setDocPreviewUrl] = useState(null);
+  const handlePreviewDoc = (f) => {
+    if (f.url) {
+      setDocPreviewUrl(f.url);
+    } else if (f instanceof File) {
+      setDocPreviewUrl(URL.createObjectURL(f));
+    }
+  };
+
   useEffect(() => { 
     const init = async () => {
       await fetchMasterData();
@@ -529,6 +553,34 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
       setPayPoints(normalizeRichTextArray(order.payment_terms));
       setGovPoints(normalizeRichTextArray(order.governing_laws));
       setAnxPoints(normalizeRichTextArray(order.annexures));
+
+      // Map Existing Files
+      const existingQuotations = [];
+      if (order.quotation_url) {
+        existingQuotations.push({
+          name: order.quotation_url.split('/').pop().split('?')[0].replace(/^quotation_\d+_/, '') || "Existing Quotation",
+          url: order.quotation_url,
+          isExisting: true
+        });
+      }
+
+      const existingProof = [];
+      if (order.comparative_sheet_url) {
+        existingProof.push({
+          name: order.comparative_sheet_url.split('/').pop().split('?')[0].replace(/^comparative_\d+_/, '') || "Existing Comparative",
+          url: order.comparative_sheet_url,
+          isExisting: true
+        });
+      }
+
+      setFiles({
+        quotations: existingQuotations,
+        proof: {
+          type: order.comparative_sheet_url ? "Comparative Docs" : "",
+          files: existingProof
+        },
+        others: []
+      });
 
       // 2. Map Settings & Totals
       const t = order.totals || {};
@@ -1158,15 +1210,43 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-4 bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="h-12 w-12 bg-indigo-50 rounded-xl flex items-center justify-center border border-indigo-100">
-            <FilePlus size={24} className="text-indigo-600" />
+      {docPreviewUrl && (
+        <div className="fixed inset-0 z-[60] flex">
+          <div className="flex-1 bg-black/50" onClick={() => setDocPreviewUrl(null)} />
+          <div className="w-full max-w-[860px] bg-slate-200 flex flex-col h-full shadow-2xl animate-in slide-in-from-right">
+            <div className="bg-white border-b border-slate-200 px-5 py-3 flex items-center justify-between shrink-0">
+              <span className="font-bold text-slate-700 text-sm">Document Preview</span>
+              <button
+                onClick={() => setDocPreviewUrl(null)}
+                className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-all"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="flex-1 bg-slate-300 relative">
+              <iframe
+                src={docPreviewUrl}
+                className="w-full h-full border-0 bg-white"
+                title="Document Preview"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+          <div className="flex items-center justify-between mb-6 bg-white p-5 rounded-[1.5rem] border border-slate-100 shadow-sm">
+        <div className="flex items-center gap-4">
+          <div className="h-12 w-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-100">
+            <FileSpreadsheet size={22} className="text-white" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-slate-800">Create Order</h1>
-            <p className="text-sm text-slate-400">Generate Purchase (PO) or Work (WO) Order</p>
+            <h1 className="text-xl font-black text-slate-800 tracking-tight">
+              {project ? `${project} Order Data` : "Order Master Data"}
+            </h1>
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+              <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-pulse"></span>
+              {project ? "Project Specific Order Logs" : "Global Order Management System"}
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -1197,6 +1277,7 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
                 className={!header.orderNumber ? "text-amber-600 font-bold italic text-[11px]" : ""}
               />
               <Select label="Select Site" value={header.siteId} onChange={handleSiteChange} options={sites} valueKey="id" labelKey="siteName" subLabelKey="siteCode" required 
+                disabled={!!project}
                 onAdd={() => setActionModal({ type: "addSite" })} addLabel="Add New Site" onView={(s) => setActionModal({ type: "viewSite", data: s })} />
               <Select label="Select Company" value={header.companyId} onChange={handleCompanyChange} options={companies} valueKey="id" labelKey="companyName" subLabelKey="companyCode" required 
                 onAdd={() => setActionModal({ type: "addCompany" })} addLabel="Add New Company" onView={(c) => setActionModal({ type: "viewCompany", data: c })} />
@@ -1218,7 +1299,7 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
                   className="text-lg font-bold" />
               </div>
               <div className="lg:col-span-2">
-                 <Input label="Reference No" value={header.refNumber} onChange={e => setHeader(h => ({ ...h, refNumber: e.target.value }))} placeholder="e.g. BOOTES/PRO/2026/001" 
+                 <Input label="Reference No" value={header.refNumber} onChange={e => setHeader(h => ({ ...h, refNumber: e.target.value }))} placeholder="e.g. BMS/PRO/2026/001" 
                    className="font-bold text-slate-800" />
               </div>
               <Input label="Date of Delivery" type="date" value={header.deliveryDate} onChange={e => setHeader(h => ({ ...h, deliveryDate: e.target.value }))} />
@@ -1250,7 +1331,8 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
                     const f = e.target.files[0];
                     if(f) setFiles(prev => ({ ...prev, quotations: [...prev.quotations, f] }));
                   }}
-                  onRemove={i => setFiles(prev => ({ ...prev, quotations: prev.quotations.filter((_, idx) => idx !== i) }))} />
+                  onRemove={i => setFiles(prev => ({ ...prev, quotations: prev.quotations.filter((_, idx) => idx !== i) }))}
+                  onPreview={handlePreviewDoc} />
               </div>
 
               {/* COMPARATIVE / PROOF */}
@@ -1270,7 +1352,8 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
                       const f = e.target.files[0];
                       if(f) setFiles(prev => ({ ...prev, proof: { ...prev.proof, files: [...prev.proof.files, f] } }));
                     }}
-                    onRemove={i => setFiles(prev => ({ ...prev, proof: { ...prev.proof, files: prev.proof.files.filter((_, idx) => idx !== i) } }))} />
+                    onRemove={i => setFiles(prev => ({ ...prev, proof: { ...prev.proof, files: prev.proof.files.filter((_, idx) => idx !== i) } }))}
+                    onPreview={handlePreviewDoc} />
                 )}
               </div>
 
@@ -1281,7 +1364,8 @@ function OrderForm({ project, onCancel, editOrderId, onEditComplete }) {
                     const f = e.target.files[0];
                     if(f) setFiles(prev => ({ ...prev, others: [...prev.others, f] }));
                   }}
-                  onRemove={i => setFiles(prev => ({ ...prev, others: prev.others.filter((_, idx) => idx !== i) }))} />
+                  onRemove={i => setFiles(prev => ({ ...prev, others: prev.others.filter((_, idx) => idx !== i) }))}
+                  onPreview={handlePreviewDoc} />
               </div>
             </div>
           </div>
@@ -1968,6 +2052,20 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
   const myPerms = currentUser.app_permissions?.find(p => p.module_key === "create_order") || {};
   const canEdit   = isGlobalAdmin || !!myPerms.can_edit;
   const canDelete = isGlobalAdmin || !!myPerms.can_delete;
+
+  // Per-order edit check: global_admin can always edit; otherwise only creator can edit editable orders
+  const canEditOrder = (o) => {
+    if (o._history || ["Rejected", "Cancelled", "Reverted", "Recalled", "Issued"].includes(o.status)) return false;
+    const isEditableStatus = ['Draft', 'Review'].includes(o.status);
+    const isCreator = o.created_by_id === currentUser.id;
+    if (isGlobalAdmin) return isEditableStatus;
+    return canEdit && isEditableStatus && isCreator;
+  };
+
+  const canDeleteOrder = (o) => {
+    if (o._history || ["Issued", "Rejected", "Cancelled", "Reverted", "Recalled"].includes(o.status)) return false;
+    return canDelete;
+  };
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -2001,6 +2099,7 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
   const [filterCompany, setFilterCompany] = useState("");
   const [filterType, setFilterType] = useState("");
   const [filterMadeBy, setFilterMadeBy] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
   const [dateRange, setDateRange] = useState("all"); // all | this_year | last_year | custom
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
@@ -2058,7 +2157,7 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
   };
 
   const handleRecall = async (id) => {
-    if (!confirm("Recall this order? It will move back to Draft for editing.")) return;
+    if (!confirm("Recall this order? A frozen recall record will be kept and the live order will move back to Draft for editing.")) return;
     try {
       const token = localStorage.getItem("bms_token") || "";
       const reqRes = await fetch(`${API}/api/approvals/requests/${id}`, {
@@ -2112,7 +2211,8 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem("bms_token") || ""}` },
         body: JSON.stringify({
-          module_key: "create_order",
+          module_key: "procurement",
+          point_key: "po_submission",
           document_id: id,
           requestor_id: JSON.parse(localStorage.getItem("bms_user") || "{}").id
         })
@@ -2527,9 +2627,10 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
   };
 
   const getTabCount = (tabName) => {
-    if (tabName === "All") return orders.length;
+    if (tabName === "All") return orders.filter(o => !o._history && !["Reverted", "Recalled"].includes(o.status)).length;
     return orders.filter(o => o.status === tabName).length;
   };
+
 
   // Build unique option lists for filter dropdowns
   const getCompanyCode = (o) => o.snapshot?.company?.companyCode || o.companies?.company_code || "";
@@ -2568,11 +2669,12 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
       o.order_type
     ].filter(Boolean).join(" ").toLowerCase();
     const matchSearch = !ms || searchBlob.includes(ms);
-    const matchTab = activeTab === "All" ? true : o.status === activeTab;
+    const matchTab = activeTab === "All" ? (!o._history && !["Reverted", "Recalled"].includes(o.status)) : o.status === activeTab;
     const matchSite = !filterSite || getSiteCode(o) === filterSite;
     const matchCompany = !filterCompany || getCompanyCode(o) === filterCompany;
     const matchType = !filterType || o.order_type === filterType;
     const matchMadeBy = !filterMadeBy || o.made_by === filterMadeBy;
+    const matchStatus = activeTab !== "All" || !filterStatus || o.status === filterStatus;
 
     let matchDate = true;
     if (dateRange !== "all") {
@@ -2588,17 +2690,36 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
       if (to && created > to) matchDate = false;
     }
 
-    return matchSearch && matchTab && matchSite && matchCompany && matchType && matchMadeBy && matchDate;
+    const matchProject = !project || getSiteCode(o) === project;
+    return matchProject && matchSearch && matchTab && matchSite && matchCompany && matchType && matchMadeBy && matchStatus && matchDate;
   });
 
   const clearFilters = () => {
-    setFilterSite(""); setFilterCompany(""); setFilterType(""); setFilterMadeBy("");
+    setFilterSite(""); setFilterCompany(""); setFilterType(""); setFilterMadeBy(""); setFilterStatus("");
     setDateRange("all"); setCustomFrom(""); setCustomTo("");
   };
-  const hasActiveFilters = filterSite || filterCompany || filterType || filterMadeBy || dateRange !== "all";
+  const hasActiveFilters = filterSite || filterCompany || filterType || filterMadeBy || filterStatus || dateRange !== "all";
+
+  const stats = useMemo(() => {
+    const po = filtered.filter(o => o.order_type === "Supply");
+    const wo = filtered.filter(o => ["SITC", "ITC"].includes(o.order_type));
+    const taxableOf = (o) => {
+      const t = o.totals || {};
+      const sub = Number(t.subtotal) || 0;
+      const disc = Number(t.totalDiscountAmt) || 0;
+      const computed = sub - disc;
+      return computed > 0 ? computed : (Number(t.taxableAmount) || 0);
+    };
+    const sumTaxable = (arr) => arr.reduce((acc, o) => acc + taxableOf(o), 0);
+    return {
+      total: filtered.length,
+      poCount: po.length, poValue: sumTaxable(po),
+      woCount: wo.length, woValue: sumTaxable(wo),
+    };
+  }, [filtered]);
 
   return (
-    <div className="p-3 sm:p-4 lg:p-6 w-full pb-32">
+    <div className="p-0 sm:p-2 lg:p-3 w-full pb-10">
       {toast && (
         <div className={`fixed top-5 right-5 z-50 px-4 py-3 rounded-xl text-sm font-medium shadow-lg
           ${toast.type === "error" ? "bg-red-50 text-red-700 border border-red-200" : "bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>
@@ -2641,27 +2762,31 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
       )}
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 bg-white p-4 sm:p-5 rounded-2xl border border-slate-100 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="h-12 w-12 bg-sky-50 rounded-xl flex items-center justify-center border border-sky-100">
-            <span className="text-sky-600 font-bold text-xl">#</span>
+      <div className="flex items-center justify-between mb-4 bg-white p-4 px-6 rounded-2xl border border-slate-100 shadow-sm">
+        <div className="flex items-center gap-4">
+          <div className="h-12 w-12 bg-[#6366f1] rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-100">
+            <FileSpreadsheet size={24} className="text-white" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-slate-800">Order Master</h1>
-            <p className="text-sm text-slate-400">View logs and dispatch PO/WO orders</p>
+            <h1 className="text-xl font-bold text-slate-800 tracking-tight leading-none mb-1.5">
+              {project ? `${project} Order Data` : "Order Master Data"}
+            </h1>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+              {project ? "• Project Specific Order Logs" : "• Global Order Management System"}
+            </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <button onClick={handleExport}
-            className="px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-semibold flex items-center gap-2 hover:bg-slate-50 transition-all text-sm">
-            <Download size={15} /> Export
+            className="h-10 px-5 rounded-xl bg-white border border-slate-200 text-slate-700 font-bold flex items-center gap-2 hover:bg-slate-50 transition-all text-xs shadow-sm">
+            <Download size={14} className="text-slate-400" /> Export
           </button>
           <button onClick={() => { setShowBulk(true); setBulkRows([]); setBulkFileName(""); setBulkResult(null); }}
-            className="px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-semibold flex items-center gap-2 hover:bg-slate-50 transition-all text-sm">
-            <Upload size={15} /> Bulk Upload
+            className="h-10 px-5 rounded-xl bg-white border border-slate-200 text-slate-700 font-bold flex items-center gap-2 hover:bg-slate-50 transition-all text-xs shadow-sm">
+            <Upload size={14} className="text-slate-400" /> Bulk Upload
           </button>
           <button onClick={onCreateClick}
-            className="px-6 py-2.5 rounded-xl bg-slate-900 text-white font-semibold flex items-center gap-2 hover:bg-slate-700 transition-all text-sm">
+            className="h-10 px-6 rounded-xl bg-[#4f46e5] text-white font-bold flex items-center gap-2 hover:bg-[#4338ca] transition-all text-xs shadow-lg shadow-indigo-100">
             <Plus size={16} /> Create Order
           </button>
         </div>
@@ -2768,19 +2893,40 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
         </div>
       )}
 
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        {[
+          { label: "Total Orders", val: stats.total, icon: ShoppingBag, color: "text-[#4f46e5] bg-[#eef2ff]" },
+          { label: "Total PO", val: stats.poCount, sub: `₹ ${stats.poValue.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, icon: FileText, color: "text-[#2563eb] bg-[#eff6ff]" },
+          { label: "Total WO", val: stats.woCount, sub: `₹ ${stats.woValue.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, icon: Box, color: "text-[#0891b2] bg-[#ecfeff]" },
+          { label: "Taxable Value", val: `₹ ${(stats.poValue + stats.woValue).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, icon: IndianRupee, color: "text-[#9333ea] bg-[#faf5ff]" },
+        ].map((s, i) => (
+          <div key={i} className="bg-white p-3.5 rounded-2xl border border-slate-100 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)] flex items-center gap-3.5">
+             <div className={`w-11 h-11 rounded-[14px] ${s.color} flex items-center justify-center shrink-0`}>
+               <s.icon size={20} strokeWidth={2} />
+             </div>
+             <div className="min-w-0">
+               <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.08em] mb-0.5">{s.label}</p>
+               <div className="flex items-baseline gap-1.5 flex-wrap">
+                 <span className="text-base font-black text-slate-800 leading-none">{s.val}</span>
+                 {s.sub && <span className="text-[10px] font-bold text-indigo-600 leading-none">{s.sub}</span>}
+               </div>
+             </div>
+          </div>
+        ))}
+      </div>
+
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
         
-        {/* TABS */}
-        <div className="flex px-4 pt-4 pb-0 border-b border-slate-100 bg-slate-50 gap-6 overflow-x-auto no-scrollbar">
+        <div className="flex px-5 pt-4 pb-0 border-b border-slate-100 bg-white gap-8 overflow-x-auto no-scrollbar">
           {TABS.map(t => {
             const count = getTabCount(t);
             return (
               <button key={t} onClick={() => setActiveTab(t)}
-                className={`pb-3 text-sm font-semibold transition-all whitespace-nowrap border-b-2 flex items-center gap-2
-                  ${activeTab === t ? "text-slate-800 border-slate-800" : "text-slate-400 border-transparent hover:text-slate-600"}`}>
+                className={`pb-3.5 text-[13px] font-bold transition-all whitespace-nowrap border-b-[3px] flex items-center gap-2.5
+                  ${activeTab === t ? "text-[#4f46e5] border-[#4f46e5]" : "text-slate-400 border-transparent hover:text-slate-600"}`}>
                 {t}
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                  activeTab === t ? "bg-slate-800 text-white" : "bg-slate-200 text-slate-500"
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                  activeTab === t ? "bg-[#4f46e5] text-white" : "bg-slate-100 text-slate-500"
                 }`}>
                   {count}
                 </span>
@@ -2789,42 +2935,47 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
           })}
         </div>
 
-        <div className="p-4 border-b border-slate-100 bg-white flex flex-col gap-3">
+        <div className="p-3 border-b border-slate-100 bg-[#f8fafc]/50 flex flex-col gap-3">
            <div className="flex items-center flex-wrap gap-2">
              {/* Search */}
-             <div className="relative w-full max-w-xs">
-               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+             <div className="relative flex-1 min-w-[180px] max-w-[260px]">
+               <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                <input type="text" value={search} onChange={e => setSearch(e.target.value)}
                 placeholder="Search PO, subject, vendor..."
-                className="w-full pl-9 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-50 bg-white" />
+                className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-full text-[12px] outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 bg-white shadow-sm" />
              </div>
 
-             {/* Filters — right of search */}
-             {[
-               { val: filterCompany, set: setFilterCompany, placeholder: "All Companies", opts: companyOptions, min: 130 },
-               { val: filterSite, set: setFilterSite, placeholder: "All Sites", opts: siteOptions, min: 110 },
-               { val: filterType, set: setFilterType, placeholder: "All Types", opts: ["Supply", "SITC", "ITC"], min: 105 },
-               { val: filterMadeBy, set: setFilterMadeBy, placeholder: "All Users", opts: madeByOptions, min: 130 }
-             ].map((f, i) => (
-               <div key={i} className={`relative ${i === 0 ? "ml-auto" : ""}`} style={{ minWidth: f.min }}>
-                 <select value={f.val} onChange={e => f.set(e.target.value)}
-                   className="appearance-none w-full pl-3 pr-8 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 bg-white outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-50 cursor-pointer">
-                   <option value="">{f.placeholder}</option>
-                   {f.opts.map(o => <option key={o} value={o}>{o}</option>)}
-                 </select>
-                 <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-               </div>
-             ))}
+             {/* Filters */}
+             <div className="flex items-center gap-2 ml-auto flex-wrap">
+               {[
+                 { val: filterCompany, set: setFilterCompany, placeholder: "Entity", opts: companyOptions, min: 110, icon: Building2 },
+                 !project && { val: filterSite, set: setFilterSite, placeholder: "Sites", opts: siteOptions, min: 100, icon: MapPin },
+                 { val: filterType, set: setFilterType, placeholder: "Type", opts: ["Supply", "SITC", "ITC"], min: 100, icon: Tag },
+                 activeTab === "All" && { val: filterStatus, set: setFilterStatus, placeholder: "Status", opts: ["Draft", "Review", "Pending Issue", "Issued", "Rejected", "Cancelled"], min: 110, icon: CheckCircle2 },
+                 { val: filterMadeBy, set: setFilterMadeBy, placeholder: "Users", opts: madeByOptions, min: 105, icon: User }
+               ].filter(Boolean).map((f, i) => (
+                 <div key={i} className="relative" style={{ minWidth: f.min }}>
+                   <f.icon size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                   <select value={f.val} onChange={e => f.set(e.target.value)}
+                     className="appearance-none w-full pl-7 pr-7 py-2 border border-slate-200 rounded-[12px] text-[11px] font-bold text-slate-600 bg-white outline-none focus:border-indigo-400 cursor-pointer shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)] hover:border-slate-300 transition-all">
+                     <option value="">{f.placeholder}</option>
+                     {f.opts.map(o => <option key={o} value={o}>{o}</option>)}
+                   </select>
+                   <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                 </div>
+               ))}
 
-             <div className="relative" style={{ minWidth: 125 }}>
-               <select value={dateRange} onChange={e => setDateRange(e.target.value)}
-                 className="appearance-none w-full pl-3 pr-8 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 bg-white outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-50 cursor-pointer">
-                 <option value="all">All Time</option>
-                 <option value="this_year">This Year (FY)</option>
-                 <option value="last_year">Last Year (FY)</option>
-                 <option value="custom">Custom Range</option>
-               </select>
-               <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+               <div className="relative" style={{ minWidth: 105 }}>
+                 <CalendarDays size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                 <select value={dateRange} onChange={e => setDateRange(e.target.value)}
+                   className="appearance-none w-full pl-7 pr-7 py-2 border border-slate-200 rounded-[12px] text-[11px] font-bold text-slate-600 bg-white outline-none focus:border-indigo-400 cursor-pointer shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)] hover:border-slate-300 transition-all">
+                   <option value="all">All Time</option>
+                   <option value="this_year">This Year</option>
+                   <option value="last_year">Last Year</option>
+                   <option value="custom">Custom</option>
+                 </select>
+                 <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+               </div>
              </div>
 
              {dateRange === "custom" && (
@@ -2856,7 +3007,7 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
             <table className="w-full text-sm text-left border-collapse" style={{minWidth:'700px'}}>
               <thead>
                 <tr className="bg-white text-slate-500 font-semibold bg-slate-50">
-                  <th className="px-4 py-3 uppercase tracking-wider text-[10px] border-b border-r border-slate-200 bg-slate-50 font-bold text-slate-600 whitespace-nowrap min-w-[240px]">Order No</th>
+                  <th className="px-4 py-3 uppercase tracking-wider text-[10px] border-b border-r border-slate-200 bg-slate-50 font-bold text-slate-600 whitespace-nowrap w-[1%]">Order No</th>
                   <th className="px-4 py-3 uppercase tracking-wider text-[10px] border-b border-r border-slate-200 font-bold text-slate-500">Type</th>
                   <th className="px-4 py-3 uppercase tracking-wider text-[10px] border-b border-r border-slate-200 font-bold text-slate-500">Made By</th>
                   <th className="px-4 py-3 uppercase tracking-wider text-[10px] border-b border-r border-slate-200 font-bold text-slate-500">Created Date</th>
@@ -2974,24 +3125,14 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
                             title="Quick View">
                             <Eye size={14} />
                           </button>
-                          {o.status === 'Issued' ? (
-                            canEdit && (
-                              <button onClick={() => handleRecall(o.id)}
-                                className="h-8 w-8 rounded-full border border-purple-200 bg-purple-50 flex items-center justify-center text-purple-600 hover:text-purple-700 hover:bg-white transition-all shadow-sm"
-                                title="Recall Order">
-                                <Undo2 size={14} />
-                              </button>
-                            )
-                          ) : (
-                            canEdit && (
-                              <button onClick={() => onEditClick(o.id)}
-                                className="h-8 w-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-600 hover:text-sky-600 hover:border-sky-200 hover:bg-white transition-all shadow-sm"
-                                title="Full Edit">
-                                <Pencil size={13} />
-                              </button>
-                            )
+                          {canEditOrder(o) && (
+                            <button onClick={() => onEditClick(o.id)}
+                              className="h-8 w-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-600 hover:text-sky-600 hover:border-sky-200 hover:bg-white transition-all shadow-sm"
+                              title="Full Edit">
+                              <Pencil size={13} />
+                            </button>
                           )}
-                          {canDelete && (
+                          {canDeleteOrder(o) && (
                             <button onClick={() => handleDelete(o.id)}
                               className="h-8 w-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-400 hover:text-red-500 hover:border-red-200 hover:bg-white transition-all shadow-sm"
                               title="Delete">

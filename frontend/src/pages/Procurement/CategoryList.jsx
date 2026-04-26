@@ -156,7 +156,7 @@ export default function CategoryList() {
         const pageCount = doc.internal.getNumberOfPages();
         doc.setFontSize(7); doc.setTextColor(148, 163, 184);
         doc.text(`Page ${data.pageNumber} of ${pageCount}`, pageW - 14, doc.internal.pageSize.getHeight() - 8, { align: "right" });
-        doc.text("Bootes BMS — Category Master", 14, doc.internal.pageSize.getHeight() - 8);
+        doc.text("BMS — Category Master", 14, doc.internal.pageSize.getHeight() - 8);
       },
     });
     doc.save("category_list.pdf");

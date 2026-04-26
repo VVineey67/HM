@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { List, Search, Trash2, Eye, Pencil, FileDown, X, Undo2 } from "lucide-react";
+import { List, Search, Trash2, Eye, Pencil, FileDown, X, Undo2, CheckCircle2, ChevronDown } from "lucide-react";
 import ViewOrder from "./ViewOrder";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
@@ -11,9 +11,20 @@ export default function OrderRecord(props) {
   const myPerms = currentUser.app_permissions?.find(p => p.module_key === "create_order") || {};
   const canEdit   = isGlobalAdmin || !!myPerms.can_edit;
   const canDelete = isGlobalAdmin || !!myPerms.can_delete;
+  const canEditOrder = (o) => {
+    if (o._history || ["Rejected", "Cancelled", "Reverted", "Recalled", "Issued"].includes(o.status)) return false;
+    if (!["Draft", "Review"].includes(o.status)) return false;
+    if (isGlobalAdmin) return true;
+    return canEdit && o.created_by_id === currentUser.id;
+  };
+  const canDeleteOrder = (o) => {
+    if (o._history || ["Issued", "Rejected", "Cancelled", "Reverted", "Recalled"].includes(o.status)) return false;
+    return canDelete;
+  };
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
   const [toast, setToast] = useState(null);
   const [viewOrderId, setViewOrderId] = useState(() => sessionStorage.getItem("bms_view_order_id") || null);
   const [activeTab, setActiveTab] = useState("All");
@@ -47,7 +58,7 @@ export default function OrderRecord(props) {
   const showToast = (msg, type = "success") => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
 
   const handleRecall = async (id) => {
-    if (!confirm("Recall this order? It will move to the creator's Recalled tab for editing.")) return;
+    if (!confirm("Recall this order? A frozen recall record will be kept and the live order will move back to Draft for editing.")) return;
     try {
       const token = localStorage.getItem("bms_token") || "";
       const reqRes = await fetch(`${API}/api/approvals/requests/${id}`, {
@@ -111,7 +122,8 @@ export default function OrderRecord(props) {
       o.vendors?.vendor_name?.toLowerCase().includes(search.toLowerCase());
     
     const matchesTab = activeTab === "All" || o.status === activeTab;
-    return matchesSearch && matchesTab;
+    const matchesStatus = activeTab !== "All" || !filterStatus || o.status === filterStatus;
+    return matchesSearch && matchesTab && matchesStatus;
   });
 
   return (
@@ -156,12 +168,27 @@ export default function OrderRecord(props) {
              ))}
            </div>
 
-           <div className="pb-4 flex items-center justify-between gap-4">
-              <div className="relative w-full max-w-sm">
-                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-                 placeholder="Search by PO number, subject, vendor..."
-                 className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-50 bg-white" />
+           <div className="pb-4 flex items-center justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-3 flex-1 flex-wrap">
+                <div className="relative w-full max-w-sm">
+                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+                   placeholder="Search by PO number, subject, vendor..."
+                   className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-50 bg-white" />
+                </div>
+                {activeTab === "All" && (
+                  <div className="relative" style={{ minWidth: 160 }}>
+                    <CheckCircle2 size={13} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                    <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+                      className="appearance-none w-full pl-9 pr-9 py-2 border border-slate-200 rounded-xl text-[12px] font-bold text-slate-600 bg-white outline-none focus:border-sky-400 cursor-pointer hover:border-slate-300 transition-all">
+                      <option value="">All Status</option>
+                      {["Draft", "Review", "Pending Issue", "Issued", "Rejected", "Cancelled"].map(s => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  </div>
+                )}
               </div>
               <div className="text-xs font-semibold text-slate-500 bg-white border border-slate-200 px-3 py-1.5 rounded-lg shadow-sm">
                 Total Orders: {filtered.length}
@@ -251,7 +278,7 @@ export default function OrderRecord(props) {
                             <Eye size={14} />
                           </button>
                           {o.status === 'Issued' ? (
-                            canEdit && (
+                            canEdit && !o._history && (
                               <button onClick={() => handleRecall(o.id)}
                                 className="h-7 w-7 rounded-full border border-purple-200 bg-purple-50 flex items-center justify-center text-purple-600 hover:text-purple-700 hover:bg-purple-100 transition-all shadow-sm"
                                 title="Recall Order">
@@ -259,7 +286,7 @@ export default function OrderRecord(props) {
                               </button>
                             )
                           ) : (
-                            canEdit && (
+                            canEditOrder(o) && (
                               <button onClick={() => props.onEdit && props.onEdit(o.id)}
                                 className="h-7 w-7 rounded-full border border-slate-200 flex items-center justify-center text-slate-600 hover:text-sky-600 hover:border-sky-200 hover:bg-sky-50 transition-all shadow-sm"
                                 title="Edit Order">
@@ -267,7 +294,7 @@ export default function OrderRecord(props) {
                               </button>
                             )
                           )}
-                          {canDelete && (
+                          {canDeleteOrder(o) && (
                             <button onClick={() => handleDelete(o.id)}
                               className="h-7 w-7 rounded-full border border-slate-200 flex items-center justify-center text-slate-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 transition-all shadow-sm"
                               title="Delete Order">

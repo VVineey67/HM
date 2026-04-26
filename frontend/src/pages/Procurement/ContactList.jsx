@@ -140,7 +140,7 @@ export default function ContactList() {
       didDrawPage: (data) => {
         doc.setFontSize(7); doc.setTextColor(148, 163, 184);
         doc.text(`Page ${data.pageNumber}`, pageW - 14, doc.internal.pageSize.getHeight() - 8, { align: "right" });
-        doc.text("Bootes BMS — Contact List", 14, doc.internal.pageSize.getHeight() - 8);
+        doc.text("BMS — Contact List", 14, doc.internal.pageSize.getHeight() - 8);
       },
     });
     doc.save("contact_list.pdf");

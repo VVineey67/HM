@@ -269,7 +269,10 @@ export default function ManageProjects({ isGlobalAdmin, permissions = {}, onProj
       });
       const data = await res.json();
       if (!res.ok || data.error) { showToast(data.error || "Upload failed", "error"); setBulkSaving(false); return; }
-      showToast(`${data.count} projects uploaded!`);
+      const msg = data.skipped > 0
+        ? `${data.count} uploaded, ${data.skipped} skipped (duplicates)`
+        : `${data.count} projects uploaded!`;
+      showToast(msg, data.skipped > 0 && data.count === 0 ? "error" : "success");
       setShowBulk(false); setBulkRows([]); setBulkFile("");
       await notify();
     } catch { showToast("Upload failed", "error"); }

@@ -40,20 +40,27 @@ export default function OrderDashboard({ project }) {
   }, []);
 
   const stats = useMemo(() => {
-    const totalAmt = orders.reduce((s, o) => s + (Number(o.totals?.grandTotal) || 0), 0);
-    const issuedAmt = orders.filter(o => o.status === "Issued").reduce((s, o) => s + (Number(o.totals?.grandTotal) || 0), 0);
-    const pending = orders.filter(o => ["Review","Pending Issue"].includes(o.status)).length;
-    const issued = orders.filter(o => o.status === "Issued").length;
-    const byStatus = STATUSES.map(s => ({ status: s, count: orders.filter(o => o.status === s).length }));
+    const normProject = String(project || "").trim().toLowerCase();
+    const isAllProject = !normProject || normProject === "all project";
+    const getSiteCode = (o) => o.snapshot?.site?.siteCode || o.sites?.site_code || "";
+    const getSiteName = (o) => o.snapshot?.site?.siteName || o.sites?.site_name || "";
+    const scopedOrders = orders.filter(o => (
+      isAllProject || [getSiteCode(o), getSiteName(o)].some(v => String(v || "").trim().toLowerCase() === normProject)
+    ));
+    const totalAmt = scopedOrders.reduce((s, o) => s + (Number(o.totals?.grandTotal) || 0), 0);
+    const issuedAmt = scopedOrders.filter(o => o.status === "Issued").reduce((s, o) => s + (Number(o.totals?.grandTotal) || 0), 0);
+    const pending = scopedOrders.filter(o => ["Review","Pending Issue"].includes(o.status)).length;
+    const issued = scopedOrders.filter(o => o.status === "Issued").length;
+    const byStatus = STATUSES.map(s => ({ status: s, count: scopedOrders.filter(o => o.status === s).length }));
     const maxCount = Math.max(...byStatus.map(b => b.count), 1);
 
     const byType = [
-      { type: "Supply (PO)", count: orders.filter(o => o.order_type === "Supply").length },
-      { type: "Service (WO)", count: orders.filter(o => o.order_type !== "Supply").length },
+      { type: "Supply (PO)", count: scopedOrders.filter(o => o.order_type === "Supply").length },
+      { type: "Service (WO)", count: scopedOrders.filter(o => o.order_type !== "Supply").length },
     ];
 
     const vendorMap = {};
-    orders.forEach(o => {
+    scopedOrders.forEach(o => {
       const v = o.vendors?.vendor_name || o.snapshot?.vendor?.vendorName || "Unknown";
       vendorMap[v] = (vendorMap[v] || 0) + 1;
     });
@@ -69,7 +76,7 @@ export default function OrderDashboard({ project }) {
       const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
       monthlyMap[key] = { label: d.toLocaleString("en", { month: "short" }), count: 0, amount: 0 };
     }
-    orders.forEach(o => {
+    scopedOrders.forEach(o => {
       const d = new Date(o.date_of_creation || o.created_at);
       if (isNaN(d)) return;
       const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
@@ -81,12 +88,12 @@ export default function OrderDashboard({ project }) {
     const monthly = Object.values(monthlyMap);
     const maxMonthly = Math.max(...monthly.map(m => m.count), 1);
 
-    const recent = [...orders]
+    const recent = [...scopedOrders]
       .sort((a,b) => new Date(b.date_of_creation || b.created_at) - new Date(a.date_of_creation || a.created_at))
       .slice(0, 8);
 
-    return { totalAmt, issuedAmt, pending, issued, byStatus, maxCount, byType, topVendors, monthly, maxMonthly, recent, total: orders.length };
-  }, [orders]);
+    return { totalAmt, issuedAmt, pending, issued, byStatus, maxCount, byType, topVendors, monthly, maxMonthly, recent, total: scopedOrders.length };
+  }, [orders, project]);
 
   if (loading) {
     return (

@@ -627,8 +627,7 @@ router.post("/vendors", vendorUpload, async (req, res) => {
       uploadVendorFile(files, "docOther2",       folder),
     ]);
 
-    const vendorCode = await getNextVendorCode();
-    const { data, error } = await supabase.schema("procurement").from("vendors").insert({
+    const buildPayload = (vendorCode) => ({
       vendor_code:     vendorCode,
       vendor_name:     b.vendorName     || "",
       address:         b.address        || "",
@@ -659,8 +658,18 @@ router.post("/vendors", vendorUpload, async (req, res) => {
       site_codes:            req.body.siteCodes  || "[]",
       created_by_id:         b.createdById       || "",
       created_by_name:       b.createdByName     || "",
-    }).select().single();
-    if (error) throw error;
+    });
+
+    let data, lastErr;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const vendorCode = await getNextVendorCode();
+      const result = await supabase.schema("procurement").from("vendors").insert(buildPayload(vendorCode)).select().single();
+      if (!result.error) { data = result.data; lastErr = null; break; }
+      lastErr = result.error;
+      // retry only on unique violation (race condition on vendor_code)
+      if (result.error.code !== "23505") break;
+    }
+    if (!data) throw lastErr || new Error("Failed to insert vendor");
     res.json({ success: true, id: data.id });
   } catch (err) {
     console.error("Vendor add error:", err.message);
@@ -789,6 +798,25 @@ router.post("/vendors/:id/restore", async (req, res) => {
 
 router.delete("/vendors/:id/permanent", async (req, res) => {
   try {
+    const { data: vendor } = await supabase.schema("procurement").from("vendors").select("*").eq("id", req.params.id).single();
+    if (vendor) {
+      const urls = [
+        vendor.logo_url, vendor.doc_gst_url, vendor.doc_pan_url, vendor.doc_aadhaar_url,
+        vendor.doc_coi_url, vendor.doc_msme_url, vendor.doc_cancel_cheque_url,
+        vendor.doc_other_url, vendor.doc_other2_url
+      ];
+      const paths = urls.map(url => {
+        if (!url) return null;
+        const bucketPath = "/storage/v1/object/public/vendor-docs/";
+        const idx = url.indexOf(bucketPath);
+        return idx !== -1 ? decodeURIComponent(url.substring(idx + bucketPath.length)) : null;
+      }).filter(Boolean);
+      
+      if (paths.length > 0) {
+        await supabase.storage.from("vendor-docs").remove(paths).catch(err => console.warn("Storage cleanup failed:", err.message));
+      }
+    }
+
     const { error } = await supabase.schema("procurement").from("vendors").delete().eq("id", req.params.id);
     if (error) throw error;
     res.json({ success: true });
@@ -802,41 +830,64 @@ router.post("/vendors/bulk", async (req, res) => {
   try {
     const { rows } = req.body;
     if (!rows?.length) return res.status(400).json({ error: "No rows provided" });
-    // Pre-fetch existing codes to compute starting serial for this batch
-    const { data: existingV } = await supabase.schema("procurement").from("vendors").select("vendor_code");
+    // Pre-fetch existing for code-numbering AND dedupe
+    const { data: existingV } = await supabase.schema("procurement").from("vendors")
+      .select("vendor_code, vendor_name, gstin, pan");
     const existingNums = (existingV || []).map(r => parseInt((r.vendor_code || "").replace("VEN-", "")) || 0);
     let nextNum = (existingNums.length ? Math.max(...existingNums) : 0) + 1;
-    const records = rows.map(r => {
+
+    const nameSet  = new Set((existingV || []).map(r => (r.vendor_name || "").trim().toLowerCase()).filter(Boolean));
+    const gstinSet = new Set((existingV || []).map(r => (r.gstin || "").trim().toUpperCase()).filter(Boolean));
+    const panSet   = new Set((existingV || []).map(r => (r.pan   || "").trim().toUpperCase()).filter(Boolean));
+
+    const seenInBatch = new Set();
+    let skipped = 0;
+    const records = [];
+
+    for (const r of rows) {
+      const name  = (r["Vendor Firm Name"] || "").trim();
+      const gstin = (r["GST No"] || "").trim().toUpperCase();
+      const pan   = (r["PAN No"] || "").trim().toUpperCase();
+      if (!name) { skipped++; continue; }
+
+      const nameKey = name.toLowerCase();
+      if (nameSet.has(nameKey))               { skipped++; continue; }
+      if (gstin && gstinSet.has(gstin))       { skipped++; continue; }
+      if (pan   && panSet.has(pan))           { skipped++; continue; }
+      if (seenInBatch.has(nameKey))           { skipped++; continue; }
+      seenInBatch.add(nameKey);
+
       const siteCodes = r["Site Codes"] || r["Site Code"] || r["siteCodes"] || r["siteCode"] || "";
       const companyCodes = r["Company Codes"] || r["Company Code"] || r["companyCodes"] || r["companyCode"] || "";
-      return {
-      vendor_code:     `VEN-${String(nextNum++).padStart(3, "0")}`,
-      vendor_name:     r["Vendor Firm Name"]       || "",
-      email:           r["Email"]                  || "",
-      contact_person:  r["Contact Person Name"]    || "",
-      mobile:          r["Contact Person Number"]  || "",
-      gstin:           r["GST No"]                 || "",
-      pan:             r["PAN No"]                 || "",
-      aadhar_no:       r["Aadhar No"]              || "",
-      msme_number:     r["MSME Number"]            || "",
-      bank_name:       r["Bank Name"]              || "",
-      account_holder:  r["Account Holder"]         || "",
-      account_number:  r["Account Number"]         || "",
-      ifsc_code:       r["Bank IFSC"]              || "",
-      bank_branch:     r["Bank Branch"]            || "",
-      bank_city:       r["Bank City"]              || "",
-      bank_state:      r["Bank State"]             || "",
-      address:         r["Address"]                || "",
-      company_codes:   JSON.stringify(companyCodes.toString().split(",").map(cc => cc.trim()).filter(Boolean)),
-      site_codes:      JSON.stringify(siteCodes.toString().split(",").map(sc => sc.trim()).filter(Boolean)),
-      created_by_id:   req.body.createdById        || null,
-      created_by_name: req.body.createdByName      || "Bulk Upload",
-      };
-    }).filter(r => r.vendor_name);
-    if (!records.length) return res.status(400).json({ error: "No valid rows (Vendor Firm Name required)" });
+      records.push({
+        vendor_code:     `VEN-${String(nextNum++).padStart(3, "0")}`,
+        vendor_name:     name,
+        email:           r["Email"]                  || "",
+        contact_person:  r["Contact Person Name"]    || "",
+        mobile:          r["Contact Person Number"]  || "",
+        gstin:           r["GST No"]                 || "",
+        pan:             r["PAN No"]                 || "",
+        aadhar_no:       r["Aadhar No"]              || "",
+        msme_number:     r["MSME Number"]            || "",
+        bank_name:       r["Bank Name"]              || "",
+        account_holder:  r["Account Holder"]         || "",
+        account_number:  r["Account Number"]         || "",
+        ifsc_code:       r["Bank IFSC"]              || "",
+        bank_branch:     r["Bank Branch"]            || "",
+        bank_city:       r["Bank City"]              || "",
+        bank_state:      r["Bank State"]             || "",
+        address:         r["Address"]                || "",
+        company_codes:   JSON.stringify(companyCodes.toString().split(",").map(cc => cc.trim()).filter(Boolean)),
+        site_codes:      JSON.stringify(siteCodes.toString().split(",").map(sc => sc.trim()).filter(Boolean)),
+        created_by_id:   req.body.createdById        || null,
+        created_by_name: req.body.createdByName      || "Bulk Upload",
+      });
+    }
+
+    if (!records.length) return res.json({ success: true, inserted: 0, skipped });
     const { error } = await supabase.schema("procurement").from("vendors").insert(records);
     if (error) throw error;
-    res.json({ success: true, inserted: records.length });
+    res.json({ success: true, inserted: records.length, skipped });
   } catch (err) {
     console.error("Vendor bulk error:", err.message);
     res.status(500).json({ error: err.message });
@@ -916,16 +967,45 @@ router.delete("/sites/:id", async (req, res) => {
 router.post("/sites/bulk", async (req, res) => {
   try {
     const { rows } = req.body;
-    const inserts = rows.map(r => ({
-      site_name: r.siteName || "", site_code: r.siteCode || "",
-      city: r.city || "", state: r.state || "",
-      billing_address: r.billingAddress || "", site_address: r.siteAddress || "",
-      created_by_id: req.body.createdById || null,
-      created_by_name: req.body.createdByName || "Bulk Upload",
-    }));
+    if (!rows?.length) return res.status(400).json({ error: "No rows provided" });
+
+    const { data: existing } = await supabase.schema("procurement").from("sites").select("site_code, site_name, city");
+    const codeSet = new Set((existing || []).map(r => (r.site_code || "").trim().toLowerCase()).filter(Boolean));
+    const nameCitySet = new Set((existing || []).map(r =>
+      `${(r.site_name || "").trim().toLowerCase()}|${(r.city || "").trim().toLowerCase()}`
+    ));
+
+    const seenInBatch = new Set();
+    let skipped = 0;
+    const inserts = [];
+
+    for (const r of rows) {
+      const code = (r.siteCode || "").trim();
+      const name = (r.siteName || "").trim();
+      const city = (r.city || "").trim();
+      if (!name) { skipped++; continue; }
+      const codeKey = code.toLowerCase();
+      const nameCityKey = `${name.toLowerCase()}|${city.toLowerCase()}`;
+
+      if (codeKey && codeSet.has(codeKey)) { skipped++; continue; }
+      if (!codeKey && nameCitySet.has(nameCityKey)) { skipped++; continue; }
+      const batchKey = codeKey || nameCityKey;
+      if (seenInBatch.has(batchKey)) { skipped++; continue; }
+      seenInBatch.add(batchKey);
+
+      inserts.push({
+        site_name: name, site_code: code,
+        city, state: r.state || "",
+        billing_address: r.billingAddress || "", site_address: r.siteAddress || "",
+        created_by_id: req.body.createdById || null,
+        created_by_name: req.body.createdByName || "Bulk Upload",
+      });
+    }
+
+    if (!inserts.length) return res.json({ success: true, count: 0, skipped });
     const { error } = await supabase.schema("procurement").from("sites").insert(inserts);
     if (error) throw error;
-    res.json({ success: true, count: rows.length });
+    res.json({ success: true, count: inserts.length, skipped });
   } catch (err) {
     console.error("Bulk sites error:", err.message);
     res.status(500).json({ error: err.message });
@@ -999,15 +1079,41 @@ router.delete("/uom/:id", async (req, res) => {
 router.post("/uom/bulk", async (req, res) => {
   try {
     const { rows } = req.body;
-    const inserts = rows.map(r => ({ 
-      uom_name: r.uomName || "", 
-      uom_code: r.uomCode || "",
-      created_by_id: req.body.createdById || null,
-      created_by_name: req.body.createdByName || "Bulk Upload",
-    }));
+    if (!rows?.length) return res.status(400).json({ error: "No rows provided" });
+
+    const { data: existing } = await supabase.schema("procurement").from("uom").select("uom_code, uom_name");
+    const codeSet = new Set((existing || []).map(r => (r.uom_code || "").trim().toLowerCase()).filter(Boolean));
+    const nameSet = new Set((existing || []).map(r => (r.uom_name || "").trim().toLowerCase()).filter(Boolean));
+
+    const seenInBatch = new Set();
+    let skipped = 0;
+    const inserts = [];
+
+    for (const r of rows) {
+      const name = (r.uomName || "").trim();
+      const code = (r.uomCode || "").trim();
+      if (!name) { skipped++; continue; }
+      const nameKey = name.toLowerCase();
+      const codeKey = code.toLowerCase();
+
+      if (codeKey && codeSet.has(codeKey)) { skipped++; continue; }
+      if (nameSet.has(nameKey)) { skipped++; continue; }
+      const batchKey = codeKey || nameKey;
+      if (seenInBatch.has(batchKey)) { skipped++; continue; }
+      seenInBatch.add(batchKey);
+
+      inserts.push({
+        uom_name: name,
+        uom_code: code,
+        created_by_id: req.body.createdById || null,
+        created_by_name: req.body.createdByName || "Bulk Upload",
+      });
+    }
+
+    if (!inserts.length) return res.json({ success: true, count: 0, skipped });
     const { error } = await supabase.schema("procurement").from("uom").insert(inserts);
     if (error) throw error;
-    res.json({ success: true, count: rows.length });
+    res.json({ success: true, count: inserts.length, skipped });
   } catch (err) {
     console.error("Bulk UOM error:", err.message);
     res.status(500).json({ error: err.message });

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { ArrowLeft, Search, Building2, User, Landmark, MapPin, Receipt, ShieldQuestion, FileText, CheckCircle2, Phone, FileDown, Download, Eye, X } from "lucide-react";
+import { ArrowLeft, Search, Building2, User, Landmark, MapPin, Receipt, ShieldQuestion, FileText, CheckCircle2, Phone, FileDown, Download, Eye, X, Upload, Trash2, FileCheck, Lock, ShoppingCart, Package } from "lucide-react";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
@@ -34,6 +34,8 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
   const [approvalData, setApprovalData] = useState({ request: null, timeline: [] });
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("Order Details");
+  const thisUser = JSON.parse(localStorage.getItem("bms_user") || "{}");
+  const isGlobalAdmin = thisUser.role === "global_admin";
 
   // Approval Action state
   const [actionModal, setActionModal] = useState({ open: false, type: "" });
@@ -176,32 +178,39 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
     setActionLoading(true);
     try {
       showToast(`Moving to ${newStatus}...`);
-      const res = await fetch(`${API}/api/orders/${orderId}`, {
-        method: "PUT",
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: JSON.stringify({ mainData: { status: newStatus } }) })
-      });
-      if (!res.ok) throw new Error("Update failed");
 
       if (initApproval) {
         const appRes = await fetch(`${API}/api/approvals/requests`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem("bms_token") || ""}` },
           body: JSON.stringify({
-            module_key: "create_order",
+            module_key: "procurement",
+            point_key: "po_submission",
             document_id: orderId,
             requestor_id: JSON.parse(localStorage.getItem("bms_user") || "{}").id
           })
         });
-        if (!appRes.ok) throw new Error("Approval init failed");
+        if (!appRes.ok) {
+          const errBody = await appRes.json().catch(() => ({}));
+          throw new Error(errBody.error || "Approval init failed");
+        }
       }
 
-      showToast(`Order status updated to ${newStatus}`);
-      fetchOrderDetails();
+      const res = await fetch(`${API}/api/orders/${orderId}`, {
+        method: "PUT",
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: JSON.stringify({ mainData: { status: newStatus } }) })
+      });
+      if (!res.ok) throw new Error("Status update failed");
+
+      showToast(`Success! Order submitted for ${newStatus === 'Review' ? 'Review' : 'Approval'}.`);
+      setTimeout(() => {
+        if (onBack) onBack();
+      }, 1500);
     } catch (err) {
       showToast(err.message, "error");
+      setActionLoading(false);
     }
-    setActionLoading(false);
   };
 
   const handleSafeDownload = async (download = true) => {
@@ -313,7 +322,14 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
   const TABS = ["Order Details", "Approvals", "Order Documents", "PDF View", "Goods receipts", "Vendor Invoices", "Payments"];
 
   return (
-    <div className="bg-slate-50 min-h-screen text-sm w-full mx-auto pb-20">
+    <div className="bg-slate-50 min-h-screen text-sm w-full mx-auto pb-20 relative">
+      {toast && (
+        <div className={`fixed top-5 right-5 z-[999] px-4 py-3 rounded-xl text-sm font-medium shadow-lg transition-all animate-in slide-in-from-top-2
+          ${toast.type === "error" ? "bg-red-50 text-red-700 border border-red-200" : "bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>
+          {toast.msg}
+        </div>
+      )}
+
       <style>{`
         .pdf-fit-nowrap {
           min-width: 0;
@@ -416,10 +432,12 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
                     className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-lg shadow-sm text-xs transition-all">
                     Submit to Review
                   </button>
-                  <button onClick={() => onEdit && onEdit(orderId)}
-                    className="px-4 py-2 bg-white border border-slate-200 text-slate-700 font-bold rounded-lg shadow-sm text-xs hover:bg-slate-50 transition-all">
-                    Edit Order
-                  </button>
+                  {(isGlobalAdmin || order.created_by_id === thisUser.id) && (
+                    <button onClick={() => onEdit && onEdit(orderId)}
+                      className="px-4 py-2 bg-white border border-slate-200 text-slate-700 font-bold rounded-lg shadow-sm text-xs hover:bg-slate-50 transition-all">
+                      Edit Order
+                    </button>
+                  )}
                 </>
               )}
 
@@ -429,15 +447,42 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
                     className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-sm text-xs transition-all">
                     Submit for Approval
                   </button>
-                  <button onClick={() => onEdit && onEdit(orderId)}
-                    className="px-4 py-2 bg-white border border-slate-200 text-slate-700 font-bold rounded-lg shadow-sm text-xs hover:bg-slate-50 transition-all">
-                    Edit Order
-                  </button>
+                  {(isGlobalAdmin || order.created_by_id === thisUser.id) && (
+                    <button onClick={() => onEdit && onEdit(orderId)}
+                      className="px-4 py-2 bg-white border border-slate-200 text-slate-700 font-bold rounded-lg shadow-sm text-xs hover:bg-slate-50 transition-all">
+                      Edit Order
+                    </button>
+                  )}
                 </>
               )}
-              <button className="p-2 border border-slate-200 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-50 ml-2">
-                <Search size={16} />
-              </button>
+
+              {order.status === 'Issued' && (() => {
+                const tl = approvalData.timeline || [];
+                const canRecall = isGlobalAdmin || tl.some(s =>
+                  String(s.approver_id) === String(thisUser.id) && s.permissions?.recall_after_issue
+                );
+                const canCancel = isGlobalAdmin || tl.some(s =>
+                  String(s.approver_id) === String(thisUser.id) && s.permissions?.cancel_after_issue
+                );
+                return (
+                  <>
+                    {canRecall && (
+                      <button disabled={actionLoading}
+                        onClick={() => { setActionComment(""); setActionModal({ open: true, type: 'Recalled' }); setActiveTab('Approvals'); }}
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg shadow-sm text-xs transition-all disabled:opacity-60">
+                        Recall
+                      </button>
+                    )}
+                    {canCancel && (
+                      <button disabled={actionLoading}
+                        onClick={() => { setActionComment(""); setActionModal({ open: true, type: 'Cancelled' }); setActiveTab('Approvals'); }}
+                        className="px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white font-bold rounded-lg shadow-sm text-xs transition-all disabled:opacity-60">
+                        Cancel Order
+                      </button>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -912,51 +957,85 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
       {activeTab === "Approvals" && (() => {
         const user = JSON.parse(localStorage.getItem("bms_user") || "{}");
         const isGlobalAdmin = user.role === "global_admin";
-        const currentStep = approvalData.timeline.find(s => s.status === 'In Progress');
+        const timeline = approvalData.timeline || [];
+        const currentStep = timeline.find(s => s.status === 'In Progress');
         const isCurrentApprover = currentStep && String(currentStep.approver_id) === String(user.id);
-        const canActOnApproval = order.status === 'Pending Issue' && (
-          (approvalData.request && (isGlobalAdmin || isCurrentApprover)) ||
-          (!approvalData.request && isGlobalAdmin)
-        );
+        const isPendingIssue = order.status === 'Pending Issue';
+        const isIssued = order.status === 'Issued';
 
-        const runApprovalAction = (actionType) => {
+        // Pre-issue: actions allowed by current step's permissions
+        const stepPerms = currentStep?.permissions || {};
+        const preIssueActions = [
+          { key: "Approved", label: "Approve", color: "indigo",  permKey: "approve", needsComment: false },
+          { key: "Issued",   label: "Issue",   color: "emerald", permKey: "issue",   needsComment: false },
+          { key: "Reverted", label: "Revert",  color: "amber",   permKey: "revert",  needsComment: true  },
+          { key: "Rejected", label: "Reject",  color: "rose",    permKey: "reject",  needsComment: true  },
+        ].filter(a => isGlobalAdmin || stepPerms[a.permKey]);
+
+        // Post-issue: any step where user has recall_after_issue / cancel_after_issue
+        const userCanRecall = isGlobalAdmin || timeline.some(s =>
+          String(s.approver_id) === String(user.id) && s.permissions?.recall_after_issue
+        );
+        const userCanCancel = isGlobalAdmin || timeline.some(s =>
+          String(s.approver_id) === String(user.id) && s.permissions?.cancel_after_issue
+        );
+        const postIssueActions = [];
+        if (isIssued && userCanRecall) postIssueActions.push({ key: "Recalled",  label: "Recall",  color: "purple", needsComment: true });
+        if (isIssued && userCanCancel) postIssueActions.push({ key: "Cancelled", label: "Cancel",  color: "slate",  needsComment: true });
+
+        const canActPreIssue  = isPendingIssue && approvalData.request && (isGlobalAdmin || isCurrentApprover) && preIssueActions.length > 0;
+        const canActPostIssue = isIssued && postIssueActions.length > 0;
+        const fallbackAdmin   = isPendingIssue && !approvalData.request && isGlobalAdmin;
+
+        const colorClass = (color) => ({
+          indigo:  "bg-indigo-600 hover:bg-indigo-700",
+          emerald: "bg-emerald-600 hover:bg-emerald-700",
+          amber:   "bg-amber-500 hover:bg-amber-600",
+          rose:    "bg-rose-600 hover:bg-rose-700",
+          purple:  "bg-purple-600 hover:bg-purple-700",
+          slate:   "bg-slate-600 hover:bg-slate-700",
+        }[color] || "bg-slate-600 hover:bg-slate-700");
+
+        const runApprovalAction = (actionType, needsComment) => {
+          if (needsComment) { setActionModal({ open: true, type: actionType }); return; }
           if (approvalData.request) {
+            setActionComment("");
             handleApprovalAction(actionType);
-          } else {
-            // Fallback: no approval request — update order status directly (global admin only)
+          } else if (isGlobalAdmin) {
             const nextStatus = actionType === 'Issued' ? 'Issued' : actionType === 'Reverted' ? 'Reverted' : 'Rejected';
             updateStatus(nextStatus);
           }
         };
 
+        const allActions = canActPreIssue ? preIssueActions : canActPostIssue ? postIssueActions : [];
+        const showActionBar = canActPreIssue || canActPostIssue || fallbackAdmin;
+
         return (
           <div className="px-14 py-3 max-w-[1400px]">
             <h2 className="text-xl font-bold text-slate-800 mb-6">Approval Workflow</h2>
 
-            {canActOnApproval && (
+            {showActionBar && (
               <div className="bg-white border border-slate-200 rounded-xl p-5 mb-6 flex items-center justify-between shadow-sm">
                 <div>
                   <h3 className="font-bold text-slate-800 text-sm">Take Action</h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    {approvalData.request ? "Issue, revert, or reject this order." : "No approval workflow found — global admin override."}
+                    {canActPreIssue && `Stage ${currentStep?.step_number} — ${currentStep?.approver_name}. Allowed: ${preIssueActions.map(a => a.label).join(', ')}.`}
+                    {canActPostIssue && `Issued order — post-issue actions available.`}
+                    {fallbackAdmin && "No approval workflow found — global admin override."}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button disabled={actionLoading}
-                    onClick={() => { setActionComment(""); runApprovalAction('Issued'); }}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow-sm text-xs transition-all disabled:opacity-60">
-                    Issued
-                  </button>
-                  <button disabled={actionLoading}
-                    onClick={() => setActionModal({ open: true, type: 'Reverted' })}
-                    className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg shadow-sm text-xs transition-all disabled:opacity-60">
-                    Revert
-                  </button>
-                  <button disabled={actionLoading}
-                    onClick={() => setActionModal({ open: true, type: 'Rejected' })}
-                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg shadow-sm text-xs transition-all disabled:opacity-60">
-                    Reject
-                  </button>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {(allActions.length > 0 ? allActions : (fallbackAdmin ? [
+                    { key: "Issued",   label: "Issue",  color: "emerald", needsComment: false },
+                    { key: "Reverted", label: "Revert", color: "amber",   needsComment: true  },
+                    { key: "Rejected", label: "Reject", color: "rose",    needsComment: true  },
+                  ] : [])).map(a => (
+                    <button key={a.key} disabled={actionLoading}
+                      onClick={() => runApprovalAction(a.key, a.needsComment)}
+                      className={`px-4 py-2 ${colorClass(a.color)} text-white font-bold rounded-lg shadow-sm text-xs transition-all disabled:opacity-60`}>
+                      {a.label}
+                    </button>
+                  ))}
                 </div>
               </div>
             )}
@@ -978,41 +1057,61 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
               )}
             </div>
 
-            {actionModal.open && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-                <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
-                  <h3 className="font-bold text-slate-800 text-base mb-1">
-                    {actionModal.type === 'Reverted' ? 'Revert Order' : 'Reject Order'}
-                  </h3>
-                  <p className="text-xs text-slate-500 mb-4">Please provide a comment. This is required.</p>
-                  <textarea value={actionComment} onChange={(e) => setActionComment(e.target.value)}
-                    rows={4} placeholder="Enter reason..."
-                    className="w-full border border-slate-200 rounded-lg p-3 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-50" />
-                  <div className="flex items-center justify-end gap-2 mt-4">
-                    <button onClick={() => { setActionModal({ open: false, type: '' }); setActionComment(''); }}
-                      className="px-4 py-2 text-xs font-bold text-slate-600 rounded-lg hover:bg-slate-100">
-                      Cancel
-                    </button>
-                    <button disabled={actionLoading}
-                      onClick={() => {
-                        if (!approvalData.request && (actionModal.type === 'Reverted' || actionModal.type === 'Rejected') && !actionComment.trim()) {
-                          alert("Comment is required.");
-                          return;
-                        }
-                        runApprovalAction(actionModal.type);
-                        setActionModal({ open: false, type: '' });
-                        setActionComment('');
-                      }}
-                      className={`px-4 py-2 text-xs font-bold text-white rounded-lg shadow-sm disabled:opacity-60 ${actionModal.type === 'Reverted' ? 'bg-orange-500 hover:bg-orange-600' : 'bg-red-600 hover:bg-red-700'}`}>
-                      Confirm {actionModal.type === 'Reverted' ? 'Revert' : 'Reject'}
-                    </button>
+            {actionModal.open && (() => {
+              const labelMap = {
+                Reverted:  { title: "Revert Order",  btn: "Revert",  cls: "bg-amber-500 hover:bg-amber-600" },
+                Rejected:  { title: "Reject Order",  btn: "Reject",  cls: "bg-rose-600 hover:bg-rose-700" },
+                Recalled:  { title: "Recall Order",  btn: "Recall",  cls: "bg-purple-600 hover:bg-purple-700" },
+                Cancelled: { title: "Cancel Order",  btn: "Cancel Order", cls: "bg-slate-700 hover:bg-slate-800" },
+              };
+              const meta = labelMap[actionModal.type] || labelMap.Rejected;
+              return (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+                  <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+                    <h3 className="font-bold text-slate-800 text-base mb-1">{meta.title}</h3>
+                    <p className="text-xs text-slate-500 mb-4">Please provide a reason. This is required.</p>
+                    <textarea value={actionComment} onChange={(e) => setActionComment(e.target.value)}
+                      rows={4} placeholder="Enter reason..."
+                      className="w-full border border-slate-200 rounded-lg p-3 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-50" />
+                    <div className="flex items-center justify-end gap-2 mt-4">
+                      <button onClick={() => { setActionModal({ open: false, type: '' }); setActionComment(''); }}
+                        className="px-4 py-2 text-xs font-bold text-slate-600 rounded-lg hover:bg-slate-100">
+                        Close
+                      </button>
+                      <button disabled={actionLoading}
+                        onClick={() => {
+                          if (!actionComment.trim()) { alert("Comment is required."); return; }
+                          if (approvalData.request) {
+                            handleApprovalAction(actionModal.type);
+                          } else if (isGlobalAdmin) {
+                            const nextStatus = actionModal.type === 'Reverted' ? 'Reverted' : actionModal.type === 'Rejected' ? 'Rejected' : actionModal.type === 'Cancelled' ? 'Cancelled' : 'Draft';
+                            updateStatus(nextStatus);
+                          }
+                          setActionModal({ open: false, type: '' });
+                          setActionComment('');
+                        }}
+                        className={`px-4 py-2 text-xs font-bold text-white rounded-lg shadow-sm disabled:opacity-60 ${meta.cls}`}>
+                        Confirm {meta.btn}
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
         );
       })()}
+
+      {activeTab === "Order Documents" && (
+        <OrderDocumentsTab
+          order={order}
+          orderId={orderId}
+          isGlobalAdmin={isGlobalAdmin}
+          thisUser={thisUser}
+          onRefresh={fetchOrderDetails}
+          showToast={showToast}
+        />
+      )}
 
       {activeTab === "PDF View" && (
         <div className="bg-slate-200">
@@ -1038,3 +1137,308 @@ const ViewOrder = ({ orderId, onBack, onEdit, currentUser = {} }) => {
 };
 
 export default ViewOrder;
+
+/* ════════════════════════════════════
+   Order Documents Tab
+   - Pre-PO (frozen) on top, read-only
+   - Post-PO (live) below, upload/delete per category
+   ════════════════════════════════════ */
+
+const POST_CATEGORIES = [
+  { key: "quotations",        label: "Quotations" },
+  { key: "comparative",       label: "Comparative Sheet" },
+  { key: "vendor-docs",       label: "Vendor Documents" },
+  { key: "other",             label: "Other" },
+  { key: "vendor-acceptance", label: "Vendor Acceptance" },
+];
+
+const PRE_CATEGORIES = [
+  { key: "quotations",   label: "Quotations" },
+  { key: "comparative",  label: "Comparative Sheet" },
+  { key: "vendor-docs",  label: "Vendor Documents" },
+  { key: "other",        label: "Other" },
+];
+
+const OrderDocumentsTab = ({ order, orderId, isGlobalAdmin, thisUser, onRefresh, showToast }) => {
+  const [preTab,  setPreTab]  = useState("quotations");
+  const [postTab, setPostTab] = useState("quotations");
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef();
+
+  // ── Build Pre-PO docs map (read-only, derived from order data) ──
+  const preDocsByCategory = React.useMemo(() => {
+    const map = { quotations: [], comparative: [], "vendor-docs": [], other: [] };
+
+    // Legacy single-quotation field
+    if (order.quotation_url) {
+      map.quotations.push({
+        id: "legacy-quotation",
+        url: order.quotation_url,
+        name: "Quotation.pdf",
+        frozen: true,
+      });
+    }
+    // Legacy comparative sheet
+    if (order.comparative_sheet_url) {
+      map.comparative.push({
+        id: "legacy-comparative",
+        url: order.comparative_sheet_url,
+        name: "Comparative_Sheet.pdf",
+        frozen: true,
+      });
+    }
+    // pre_documents JSONB
+    const preArr = Array.isArray(order.pre_documents) ? order.pre_documents : [];
+    preArr.forEach(d => {
+      const cat = d.category || "other";
+      if (!map[cat]) map[cat] = [];
+      map[cat].push(d);
+    });
+
+    // Vendor docs — pulled from snapshot (frozen) or live vendor record
+    const vendor = order.snapshot?.vendor || order.vendors || {};
+    const vendorDocs = [
+      { url: vendor.docGstUrl   || vendor.doc_gst_url,           name: "GST Certificate" },
+      { url: vendor.docPanUrl   || vendor.doc_pan_url,           name: "PAN Card" },
+      { url: vendor.docAadhaarUrl || vendor.doc_aadhaar_url,     name: "Aadhaar" },
+      { url: vendor.docCoiUrl   || vendor.doc_coi_url,           name: "Certificate of Incorporation" },
+      { url: vendor.docMsmeUrl  || vendor.doc_msme_url,          name: "MSME Certificate" },
+      { url: vendor.docCancelChequeUrl || vendor.doc_cancel_cheque_url, name: "Cancelled Cheque" },
+    ].filter(d => d.url);
+    vendorDocs.forEach((d, idx) => {
+      map["vendor-docs"].push({
+        id: `vendor-doc-${idx}`,
+        url: d.url,
+        name: d.name,
+        frozen: true,
+      });
+    });
+
+    return map;
+  }, [order]);
+
+  // ── Post-PO docs grouped by category ──
+  const postDocsByCategory = React.useMemo(() => {
+    const arr = Array.isArray(order.post_documents) ? order.post_documents : [];
+    const map = {};
+    POST_CATEGORIES.forEach(c => { map[c.key] = []; });
+    arr.forEach(d => {
+      if (map[d.category]) map[d.category].push(d);
+      else map[d.category] = [d];
+    });
+    return map;
+  }, [order]);
+
+  const handleUploadClick = () => fileInputRef.current?.click();
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("category", postTab);
+      fd.append("uploadedById", thisUser.id || "");
+      fd.append("uploadedByName", thisUser.name || "Unknown");
+      const res = await fetch(`${API}/api/orders/${orderId}/post-documents`, {
+        method: "POST",
+        body: fd,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      showToast("Document uploaded");
+      onRefresh();
+    } catch (err) {
+      showToast(err.message || "Upload failed", "error");
+    }
+    setUploading(false);
+  };
+
+  const handleDelete = async (docId) => {
+    if (!confirm("Delete this document?")) return;
+    try {
+      const res = await fetch(`${API}/api/orders/${orderId}/post-documents/${docId}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Delete failed");
+      showToast("Document deleted");
+      onRefresh();
+    } catch (err) {
+      showToast(err.message || "Delete failed", "error");
+    }
+  };
+
+  const isImage = (name = "", url = "") => /\.(png|jpe?g|gif|webp|svg)$/i.test(name) || /\.(png|jpe?g|gif|webp|svg)/i.test(url);
+  const formatBytes = (b) => {
+    if (!b) return "";
+    if (b < 1024) return `${b} B`;
+    if (b < 1024*1024) return `${(b/1024).toFixed(1)} KB`;
+    return `${(b/1024/1024).toFixed(1)} MB`;
+  };
+
+  const isIssued = order.status === "Issued";
+  const canUpload = isGlobalAdmin || isIssued || ["Pending Issue", "Reverted", "Recalled"].includes(order.status);
+
+  const totalPreDocs = Object.values(preDocsByCategory).reduce((n, a) => n + a.length, 0);
+  const totalPostDocs = Object.values(postDocsByCategory).reduce((n, a) => n + a.length, 0);
+
+  return (
+    <div className="px-14 py-5 max-w-[1400px] space-y-5">
+      {/* ── PRE-PO SECTION (top) ── */}
+      <DocSection
+        icon={<FileText size={18} />}
+        iconBg="bg-purple-50 text-purple-600"
+        title="Pre-Order Documents"
+        subtitle={`Total - ${totalPreDocs}`}
+        categories={PRE_CATEGORIES}
+        docsByCategory={preDocsByCategory}
+        activeTab={preTab}
+        setActiveTab={setPreTab}
+        accent="purple"
+        readOnly
+        isImage={isImage}
+        formatBytes={formatBytes}
+      />
+
+      {/* ── POST-PO SECTION (below) ── */}
+      <DocSection
+        icon={<FileCheck size={18} />}
+        iconBg="bg-emerald-50 text-emerald-600"
+        title="Post-Order Documents"
+        subtitle={`Total - ${totalPostDocs}`}
+        categories={POST_CATEGORIES}
+        docsByCategory={postDocsByCategory}
+        activeTab={postTab}
+        setActiveTab={setPostTab}
+        accent="emerald"
+        canUpload={canUpload}
+        onUploadClick={handleUploadClick}
+        onDelete={handleDelete}
+        uploading={uploading}
+        isImage={isImage}
+        formatBytes={formatBytes}
+      />
+      <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileChange} />
+    </div>
+  );
+};
+
+const DocSection = ({
+  icon, iconBg, title, subtitle, categories, docsByCategory,
+  activeTab, setActiveTab, accent, readOnly = false,
+  canUpload = false, onUploadClick, onDelete, uploading = false,
+  isImage, formatBytes,
+}) => {
+  const accentMap = {
+    emerald: { activeBg: "bg-white shadow-sm", activeText: "text-slate-800", border: "border-slate-200" },
+    purple:  { activeBg: "bg-white shadow-sm", activeText: "text-slate-800", border: "border-slate-200" },
+  };
+  const a = accentMap[accent] || accentMap.purple;
+  const docs = docsByCategory[activeTab] || [];
+
+  return (
+    <section className="bg-white rounded-2xl border border-slate-200 shadow-sm">
+      {/* Header */}
+      <div className="px-5 py-4 flex items-center gap-3">
+        <div className={`w-9 h-9 rounded-lg ${iconBg} flex items-center justify-center shrink-0`}>
+          {icon}
+        </div>
+        <div className="flex-1 min-w-0">
+          <h2 className="text-[15px] font-bold text-slate-800">{title}</h2>
+          <p className="text-[11px] font-semibold text-slate-500 mt-0.5">{subtitle}</p>
+        </div>
+        {!readOnly && canUpload && (
+          <button onClick={onUploadClick} disabled={uploading}
+            className={`px-3.5 py-1.5 bg-${accent}-600 hover:bg-${accent}-700 text-white text-[11px] font-bold rounded-lg shadow-sm transition-all flex items-center gap-1.5 disabled:opacity-60`}
+            style={{ background: uploading ? "#94a3b8" : (accent === "emerald" ? "#059669" : "#7c3aed") }}>
+            <Upload size={12} /> {uploading ? "Uploading…" : "Upload"}
+          </button>
+        )}
+      </div>
+
+      {/* Tab Pills */}
+      <div className="px-4 pb-3">
+        <div className="bg-slate-50 rounded-xl p-1 flex items-center gap-1 overflow-x-auto">
+          {categories.map(cat => {
+            const count = docsByCategory[cat.key]?.length || 0;
+            const active = activeTab === cat.key;
+            return (
+              <button key={cat.key} onClick={() => setActiveTab(cat.key)}
+                className={`flex-1 px-3 py-2 text-[12px] font-semibold rounded-lg flex items-center justify-center gap-1.5 whitespace-nowrap transition-all
+                  ${active ? a.activeBg + ' ' + a.activeText : "text-slate-500 hover:text-slate-700"}`}>
+                <FileText size={12} className={active ? "" : "opacity-60"} />
+                {cat.label}
+                <span className={`text-[10px] ${active ? "text-slate-500" : "text-slate-400"}`}>({count})</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Cards */}
+      <div className="px-5 pb-5">
+        {docs.length === 0 ? (
+          <div className="py-10 text-center text-slate-400 text-[11px] border border-dashed border-slate-200 rounded-xl bg-slate-50/30">
+            {!readOnly && canUpload ? (
+              <>
+                <button onClick={onUploadClick} disabled={uploading}
+                  className="mx-auto px-4 py-2 border border-emerald-300 text-emerald-700 text-[11px] font-bold rounded-lg hover:bg-emerald-50 transition-all flex items-center gap-2 disabled:opacity-60">
+                  <Upload size={12} /> {uploading ? "Uploading…" : "Upload Document"}
+                </button>
+                <p className="mt-2">No {categories.find(c => c.key === activeTab)?.label.toLowerCase()} uploaded yet</p>
+              </>
+            ) : (
+              <p>No {categories.find(c => c.key === activeTab)?.label.toLowerCase()} captured</p>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+            {docs.map(d => (
+              <DocCard key={d.id} doc={d}
+                readOnly={readOnly}
+                onDelete={!readOnly && onDelete ? () => onDelete(d.id) : null}
+                isImage={isImage}
+                formatBytes={formatBytes}
+                accent={accent}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+};
+
+const DocCard = ({ doc, readOnly = false, onDelete, isImage, formatBytes, accent = "purple" }) => {
+  const img = isImage(doc.name, doc.url);
+  return (
+    <div className="group bg-slate-50 border border-slate-200 rounded-xl overflow-hidden hover:shadow-md hover:border-slate-300 transition-all">
+      <a href={doc.url} target="_blank" rel="noreferrer" className="block aspect-[4/3] bg-slate-100 flex items-center justify-center overflow-hidden">
+        {img ? (
+          <img src={doc.url} alt={doc.name} className="w-full h-full object-contain" />
+        ) : (
+          <FileText size={36} className="text-rose-400" />
+        )}
+      </a>
+      <div className="px-2.5 py-2 flex items-center justify-between gap-1 bg-white border-t border-slate-100">
+        <span className={`text-[10px] font-semibold truncate ${accent === "emerald" ? "text-emerald-700" : "text-purple-700"}`} title={doc.name}>
+          {doc.name}
+        </span>
+        <div className="flex items-center gap-0.5 shrink-0">
+          <a href={doc.url} download={doc.name} className="p-1 text-slate-400 hover:text-slate-700 transition-all" title="Download">
+            <Download size={12} />
+          </a>
+          {!readOnly && onDelete && (
+            <button onClick={onDelete} className="p-1 text-slate-400 hover:text-rose-600 transition-all opacity-0 group-hover:opacity-100" title="Delete">
+              <Trash2 size={12} />
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+

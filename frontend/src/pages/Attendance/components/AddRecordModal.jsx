@@ -119,7 +119,7 @@ const AddRecordModal = ({
     { key: "name",        label: "Name",             type: "text",  half: true, placeholder: "Full name" },
     { key: "empId",       label: "Emp ID",           type: "text",  half: true, placeholder: "BITL-XXX" },
     { key: "joiningDate", label: "Joining Date",     type: "date",  half: true                                     },
-    { key: "emailId",     label: "Email",            type: "text",  half: true, placeholder: "name@bootes.in" },
+    { key: "emailId",     label: "Email",            type: "text",  half: true, placeholder: "name@company.com" },
     { key: "contactNo",   label: "Contact no",       type: "text",  half: true, placeholder: "Phone number" },
     { key: "designation", label: "Designation",      type: "text",  half: true, placeholder: "e.g. Site Engineer" },
     { key: "department",  label: "Department",       type: "text",  half: true, placeholder: "e.g. Civil Engineer" },

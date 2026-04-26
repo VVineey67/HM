@@ -1,60 +1,211 @@
-import React, { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import React, { useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
-  LayoutDashboard, Users, Store, ShieldCheck, Image as ImageIcon,
-  LogOut, Briefcase, ChevronDown, ChevronRight,
-  Info, Box, CalendarCheck, IndianRupee, ClipboardList,
-  FileSpreadsheet, Settings2, ChevronsUpDown, PackagePlus,
-  Database, History,
+  Activity,
+  BarChart3,
+  Box,
+  CheckCircle2,
+  ChevronDown,
+  ChevronsUpDown,
+  ClipboardEdit,
+  Database,
+  FileSpreadsheet,
+  FileText,
+  Hammer,
+  Inbox,
+  Image as ImageIcon,
+  IndianRupee,
+  LayoutDashboard,
+  Lock,
+  LogOut,
+  MapPinned,
+  Package,
+  PanelLeftClose,
+  PanelLeftOpen,
+  ChevronRight,
+  Settings2,
+  ShieldCheck,
+  ShoppingCart,
+  Users,
+  Wallet,
+  Workflow,
+  Contact,
 } from "lucide-react";
 
-const toSubId = (parentId, subLabel) =>
-  `${parentId}__${subLabel.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "")}`;
+const cx = (...classes) => classes.filter(Boolean).join(" ");
+const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
-const globalMenu = [
-  { id: "about",       label: "Team Zyrex",       icon: Info           },
-  { id: "boq_prepare", label: "BOQ Prepare",       icon: FileSpreadsheet },
-  { id: "create",      label: "Create",            icon: PackagePlus,
-    sub: ["Intake", "Order"] },
-  { id: "proc_setup",  label: "Procurement Setup", icon: Settings2,
-    sub: ["Company List","Site List","Vendor List","UOM","Category List","Item List","Term Condition","Payment Terms","Government Laws","Contact List","Annexure"] },
-  { id: "master_data", label: "Master Data",       icon: Database,
-    sub: ["Vendor Master Data", "Item Master Data"] },
-  { id: "audit",       label: "Audit",             icon: History         },
+const TAB_MODULE_KEY = {
+  global_dashboard: "dashboard",
+  approvals: "approval_requests",
+  approvals__orders: "order",
+  approvals__intake: "intake",
+  approvals__payments: "payment_request",
+  master_data: "master_data",
+  master_data__vendor_master_data: "master_data",
+  master_data__item_master_data: "master_data",
+  audit: "audit",
+  proc_setup__company_list: "company_list",
+  proc_setup__site_list: "site_list",
+  proc_setup__vendor_list: "vendor_list",
+  proc_setup__item_list: "item_list",
+  proc_setup__category_list: "category_list",
+  proc_setup__uom: "uom",
+  proc_setup__term_condition: "term_condition",
+  proc_setup__payment_terms: "payment_terms",
+  proc_setup__payment_clauses: "payment_terms",
+  proc_setup__government_laws: "government_laws",
+  proc_setup__annexure: "annexure",
+  boq_prepare: "boq_prepare",
+  dashboard: "dashboard",
+  view_3d: "view_3d",
+  images__all_images: "all_images",
+  procurement__intake: "intake",
+  procurement__orders: "order",
+  inventory__received_material_grn: "received_record",
+  inventory__stock_inventory: "stock_available",
+  inventory__material_issue: "consumption_record",
+  operations__work_activity: "execution_plan",
+  operations__staff_attendance: "staff_attendance",
+  operations__manpower: "daily_manpower",
+  finance__payment_request: "payment_request",
+  finance__site_expense: "site_expense",
+  finance__petty_cash: "petty_cash",
+  finance__bills_documents: "bills_docs",
+  confidential__loa: "loa",
+  confidential__boq: "boq",
+  confidential__drawings: "drawings",
+  confidential__ra_bills: "ra_bills",
+};
+
+const globalRows = [
+  { id: "global_dashboard", label: "Global Dashboard", icon: LayoutDashboard, description: "Overall overview of all projects" },
+  { id: "approvals", label: "Inbox", icon: Inbox, description: "Pending approvals (Intake, Orders, Payments etc.)" },
 ];
 
-const projectMenu = [
-  { id: "dashboard",    label: "Dashboard",       icon: LayoutDashboard },
-  { id: "view_3d",      label: "3D View",          icon: Box             },
-  { id: "confidential", label: "Confidential",     icon: ShieldCheck,
-    sub: ["LOA","BOQ","Drawings","RA Bills"] },
-  { id: "finance",      label: "Finance",          icon: IndianRupee,
-    sub: ["Payment Request","Site Expense","Petty Cash","Bills Docs"] },
-  { id: "work",         label: "Work Activity",    icon: Briefcase,
-    sub: ["Execution Plan","MSP Plan"] },
-  { id: "staff",        label: "Staff Attendance", icon: CalendarCheck   },
-  { id: "manpower",     label: "Manpower",         icon: Users,
-    sub: ["Daily Manpower","All Record"] },
-  { id: "store",        label: "Store",            icon: Store,
-    sub: ["Received Record","Local Purchase","Consumption Record","Stock Available","GRN Docs"] },
-  { id: "procurement",  label: "Procurement",      icon: ClipboardList,
-    sub: ["Order Dashboard","Intake Dashboard"] },
-  { id: "images",       label: "Images",           icon: ImageIcon,
-    sub: ["All Images","Compare Images"] },
+const managementRows = [
+  { id: "audit", label: "Audit", icon: Activity, description: "System audit logs and history" },
 ];
 
-/* ─── Tooltip for collapsed ─── */
+const masterDataRows = [
+  { id: "master_data__vendor", label: "Vendor Master" },
+  { id: "master_data__products", label: "Products Master" },
+  { id: "master_data__orders", label: "Orders Master" },
+  { id: "master_data__intakes", label: "Intakes Master" },
+];
+
+const setupRows = [
+  { id: "proc_setup__company_list", label: "Company", description: "Manage companies" },
+  { id: "proc_setup__site_list", label: "Site", description: "Manage sites / locations" },
+  { id: "proc_setup__vendor_list", label: "Vendor", description: "Manage vendors" },
+  { id: "proc_setup__item_list", label: "Item", description: "Manage items" },
+  { id: "proc_setup__contact_list", label: "Contact", description: "Manage contacts" },
+  { id: "proc_setup__category_list", label: "Category", description: "Manage categories" },
+  { id: "proc_setup__uom", label: "UOM", description: "Units of measurement" },
+];
+
+const clauseRows = [
+  { id: "proc_setup__term_condition", label: "Terms & Conditions", description: "Define terms and conditions" },
+  { id: "proc_setup__payment_terms", label: "Payment Terms", description: "Manage payment terms" },
+  { id: "proc_setup__government_laws", label: "Government Laws", description: "Government laws and regulations" },
+  { id: "proc_setup__annexure", label: "Annexure", description: "Manage annexures and documents" },
+];
+
+const projectSections = [
+  {
+    key: "project",
+    label: null,
+    icon: LayoutDashboard,
+    rows: [
+      { id: "dashboard", label: "Dashboard", icon: BarChart3, description: "Project overview, progress, summary" },
+      { id: "view_3d", label: "3D View", icon: Box, description: "Project 3D model visualization" },
+    ],
+  },
+  {
+    key: "procurement",
+    label: "Procurement",
+    icon: ShoppingCart,
+    rows: [
+      { id: "procurement__intake", label: "Intake", description: "Create & manage intake" },
+      { id: "procurement__orders", label: "Orders", description: "Create & manage orders" },
+    ],
+  },
+  {
+    key: "inventory",
+    label: "Inventory",
+    icon: Package,
+    rows: [
+      { id: "inventory__received_material_grn", label: "Received Material (GRN)", description: "Record received material / GRN" },
+      { id: "inventory__stock_inventory", label: "Stock / Inventory", description: "View stock and inventory" },
+      { id: "inventory__material_issue", label: "Material Issue", description: "Issue material to sites / projects" },
+    ],
+  },
+  {
+    key: "operations",
+    label: "Operations",
+    icon: Hammer,
+    rows: [
+      { id: "operations__work_activity", label: "Work Activity", description: "Daily work activity & progress" },
+      { id: "operations__staff_attendance", label: "Staff Attendance", description: "Staff attendance tracking" },
+      { id: "operations__manpower", label: "Manpower", description: "Manpower planning & tracking" },
+    ],
+  },
+  {
+    key: "finance",
+    label: "Finance",
+    icon: Wallet,
+    rows: [
+      { id: "finance__payment_request", label: "Payment Request", description: "Payment requests" },
+      { id: "finance__site_expense", label: "Site Expense", description: "Site expenses" },
+      { id: "finance__petty_cash", label: "Petty Cash", description: "Petty cash entries" },
+      { id: "finance__bills_documents", label: "Bills / Documents", description: "Bills and documents" },
+    ],
+  },
+  {
+    key: "confidential",
+    label: "Confidential",
+    icon: Lock,
+    rows: [
+      { id: "confidential__loa", label: "LOA", description: "Letter of Award" },
+      { id: "confidential__boq", label: "BOQ", description: "Boq documents" },
+      { id: "confidential__drawings", label: "Drawings", description: "Project drawings" },
+      { id: "confidential__ra_bills", label: "RA Bills", description: "RA bills and documents" },
+    ],
+  },
+];
+
+const iconById = {
+  proc_setup__company_list: Users,
+  proc_setup__site_list: MapPinned,
+  proc_setup__vendor_list: Users,
+  proc_setup__item_list: Package,
+  proc_setup__contact_list: Contact,
+  proc_setup__category_list: Database,
+  proc_setup__uom: FileText,
+  proc_setup__term_condition: ClipboardEdit,
+  proc_setup__payment_terms: IndianRupee,
+  proc_setup__government_laws: ShieldCheck,
+  proc_setup__annexure: ClipboardEdit,
+  boq_prepare: FileSpreadsheet,
+};
+
 const Tip = ({ label, show, children }) => {
-  const [xy, setXY] = React.useState(null);
+  const [xy, setXY] = useState(null);
   return (
     <div
-      onMouseEnter={e => { if (!show) return; const r = e.currentTarget.getBoundingClientRect(); setXY({ top: r.top + r.height / 2, left: r.right + 8 }); }}
+      onMouseEnter={(e) => {
+        if (!show) return;
+        const r = e.currentTarget.getBoundingClientRect();
+        setXY({ top: r.top + r.height / 2, left: r.right + 8 });
+      }}
       onMouseLeave={() => setXY(null)}
     >
       {children}
       {show && xy && (
-        <div style={{ position:"fixed", top:xy.top, left:xy.left, transform:"translateY(-50%)", zIndex:9999 }}
-          className="pointer-events-none whitespace-nowrap rounded-md bg-[#2a2a2d] px-2.5 py-1.5 text-xs font-medium text-white shadow-xl ring-1 ring-white/10">
+        <div
+          style={{ position: "fixed", top: xy.top, left: xy.left, transform: "translateY(-50%)", zIndex: 9999 }}
+          className="pointer-events-none whitespace-nowrap rounded-md bg-[#071827] px-2.5 py-1.5 text-xs font-medium text-white shadow-xl ring-1 ring-cyan-400/20"
+        >
           {label}
         </div>
       )}
@@ -62,66 +213,8 @@ const Tip = ({ label, show, children }) => {
   );
 };
 
-/* ════════════════════════════ */
-// Map of sidebar tab ID → module_key in DB
-const TAB_MODULE_KEY = {
-  boq_prepare:                    "boq_prepare",
-  create__intake:                 "intake",
-  create__order:                  "order",
-  proc_setup__company_list:       "company_list",
-  proc_setup__site_list:          "site_list",
-  proc_setup__vendor_list:        "vendor_list",
-  proc_setup__uom:                "uom",
-  proc_setup__category_list:      "category_list",
-  proc_setup__item_list:          "item_list",
-  proc_setup__term_condition:     "term_condition",
-  proc_setup__payment_terms:      "payment_terms",
-  proc_setup__government_laws:    "government_laws",
-  proc_setup__contact_list:       "contact_list",
-  proc_setup__annexure:           "annexure",
-  dashboard:                      "dashboard",
-  view_3d:                        "view_3d",
-  confidential__loa:              "loa",
-  confidential__boq:              "boq",
-  confidential__drawings:         "drawings",
-  confidential__ra_bills:         "ra_bills",
-  finance__payment_request:       "payment_request",
-  finance__site_expense:          "site_expense",
-  finance__petty_cash:            "petty_cash",
-  finance__bills_docs:            "bills_docs",
-  work__execution_plan:           "execution_plan",
-  work__msp_plan:                 "msp_plan",
-  staff:                          "staff_attendance",
-  manpower__daily_manpower:       "daily_manpower",
-  manpower__all_record:           "manpower_all_record",
-  store__received_record:         "received_record",
-  store__local_purchase:          "local_purchase",
-  store__consumption_record:      "consumption_record",
-  store__stock_available:         "stock_available",
-  store__grn_docs:                "grn_docs",
-  procurement__order_dashboard:   "order_dashboard",
-  procurement__intake_dashboard:  "intake_dashboard",
-  images__all_images:             "all_images",
-  images__compare_images:         "compare_images",
-  approvals__config:              "approval_workflows",
-  master_data:                    "master_data",
-  master_data__vendor_master_data: "master_data",
-  master_data__item_master_data:   "master_data",
-  audit:                          "audit",
-};
-
-/* ─── Z brand mark (image, no frame) ─── */
-const ZMark = ({ size = 52 }) => (
-  <img
-    src="/Z.png"
-    alt="Zyrex"
-    style={{ width: size, height: size }}
-    className="object-contain shrink-0"
-  />
-);
-
-const Sidebar = ({
-  activeTab = "about",
+export default function Sidebar({
+  activeTab = "global_dashboard",
   setActiveTab,
   selectedProject,
   setSelectedProject,
@@ -129,293 +222,346 @@ const Sidebar = ({
   setIsCollapsed,
   onLogout,
   isMobile = false,
-  userName = "Jitendar Goyal",
-  userEmail = "support@zyrex.app",
+  userName = "Test User",
+  userEmail = "office@bms.com",
   currentUser: currentUserProp = null,
   projects: projectsProp = null,
   userTabPermissions = null,
-}) => {
-  const currentUser = currentUserProp || (() => { try { return JSON.parse(localStorage.getItem("bms_user") || "{}"); } catch { return {}; } })();
-  const [openSub, setOpenSub]   = useState(null);
-  const [projOpen, setProjOpen] = useState(false);
-  const isGlobalAdmin = currentUser.role === "global_admin";
+}) {
+  const currentUser = currentUserProp || (() => {
+    try { return JSON.parse(localStorage.getItem("bms_user") || "{}"); } catch { return {}; }
+  })();
+  const [openSections, setOpenSections] = useState({
+    setup: false,
+    master_data: false,
+    clauses: false,
+    procurement: false,
+    inventory: false,
+    operations: false,
+    finance: false,
+    confidential: false,
+  });
 
-  // Check if a tab is visible based on permissions
-  // Rule: global_admin always sees all. Others: if userTabPermissions is set and has_any_permissions,
-  // only show tabs where can_view = true. If no permissions set → show all (backward compat).
+  useEffect(() => {
+    if (isCollapsed) {
+      setOpenSections({
+        setup: false,
+        master_data: false,
+        clauses: false,
+        procurement: false,
+        inventory: false,
+        operations: false,
+        finance: false,
+        confidential: false,
+      });
+    }
+  }, [isCollapsed]);
+  const [projOpen, setProjOpen] = useState(false);
+  const [approvalCount, setApprovalCount] = useState(0);
+  const collapsed = isMobile ? false : isCollapsed;
+  const isGlobalAdmin = currentUser.role === "global_admin";
+  const projects = projectsProp || [];
+  const userDisplayName = currentUser.name || userName;
+  const userDisplayEmail = currentUser.email || userEmail;
+  const initials = userDisplayName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
+
+  const visibleProjects = useMemo(() => projects.filter((p) => {
+    const name = typeof p === "string" ? p : p.name;
+    return name && name !== "All Project";
+  }), [projects]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const [ordersRes, intakesRes] = await Promise.all([
+          fetch(`${API}/api/orders`),
+          fetch(`${API}/api/intakes`),
+        ]);
+        const [ordersData, intakesData] = await Promise.all([
+          ordersRes.json().catch(() => ({})),
+          intakesRes.json().catch(() => ({})),
+        ]);
+        const orderCount = (ordersData.orders || []).filter((o) => ["Review", "Pending Issue"].includes(o.status)).length;
+        const intakeCount = (intakesData.intakes || []).filter((i) => ["submitted", "in_review"].includes(i.status)).length;
+        if (alive) setApprovalCount(orderCount + intakeCount);
+      } catch {
+        if (alive) setApprovalCount(0);
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
   const isTabVisible = (tabId) => {
-    if (tabId === "about" || tabId === "profile") return true; // always visible
+    if (["global_dashboard", "profile", "approvals"].includes(tabId)) return true;
     if (isGlobalAdmin) return true;
-    
-    // If permissions haven't loaded yet (null), keep gated tabs hidden
-    if (!userTabPermissions) return false; 
-    
-    // If no permission map or specifically no any permissions, hide all gated
+    if (!userTabPermissions) return false;
     if (!userTabPermissions.hasAny || !userTabPermissions.map) return false;
     const moduleKey = TAB_MODULE_KEY[tabId];
     if (!moduleKey) return true;
     const perm = userTabPermissions.map?.[moduleKey];
-    if (!perm) return true; // module not in DB → show
+    if (!perm) return true;
     return perm.can_view === true;
   };
 
-  const projects = projectsProp || [];
-  const collapsed = isMobile ? false : isCollapsed;
-  const initials  = userName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
-
-  const handleClick = (item, isGlobal) => {
-    if (item.sub) {
-      if (collapsed) { setIsCollapsed(false); setOpenSub(item.id); }
-      else setOpenSub(openSub === item.id ? null : item.id);
-    } else {
-      setActiveTab(item.id);
-      setOpenSub(null);
-      if (isGlobal) setSelectedProject(null);
-    }
+  const go = (id, isGlobal = false) => {
+    setActiveTab(id);
+    if (isGlobal) setSelectedProject(null);
   };
 
-  const renderItem = (item, isGlobal = false) => {
-    // Filter sub-items by permission
-    const visibleSubs = item.sub?.filter(s => isTabVisible(toSubId(item.id, s)));
-    // Hide parent if it has subs and none are visible; hide leaf item if not visible
-    if (item.sub && visibleSubs.length === 0) return null;
-    if (!item.sub && !isTabVisible(item.id)) return null;
+  const toggleSection = (key) => setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
 
-    const Icon      = item.icon;
-    const isActive  = activeTab === item.id || visibleSubs?.some(s => toSubId(item.id, s) === activeTab) || item.sub?.some(s => toSubId(item.id, s) === activeTab);
-    const isOpen    = openSub === item.id;
-
+  const RowButton = ({ row, isGlobal = false, nested = false }) => {
+    if (!isTabVisible(row.id)) return null;
+    const Icon = row.icon || iconById[row.id];
+    const isActive = activeTab === row.id || (row.id === "approvals" && activeTab.startsWith("approvals__"));
     return (
-      <div key={item.id}>
-        <Tip label={item.label} show={collapsed}>
-          <button
-            onClick={() => handleClick(item, isGlobal)}
-            className={`
-              group w-full flex items-center gap-3 rounded-lg px-2.5 py-2 text-[13.5px]
-              font-medium transition-all duration-100 mb-0.5
-              ${collapsed ? "justify-center" : "justify-between"}
-              ${isActive
-                ? "bg-cyan-400/10 text-white ring-1 ring-cyan-400/25"
-                : "text-[#8b95a3] hover:bg-cyan-400/5 hover:text-cyan-100"
-              }
-            `}
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <Icon
-                size={17}
-                strokeWidth={isActive ? 2 : 1.6}
-                className={`shrink-0 transition-colors ${isActive ? "text-cyan-300" : "text-[#5a6878] group-hover:text-cyan-300"}`}
-              />
-              {!collapsed && <span className="truncate">{item.label}</span>}
-            </div>
-            {!collapsed && item.sub && (
-              <ChevronDown
-                size={13}
-                className={`shrink-0 transition-transform duration-200 ${isActive ? "text-[#636366]" : "text-[#3a3a3c]"} ${isOpen ? "rotate-180" : ""}`}
-              />
-            )}
-          </button>
-        </Tip>
-
-        {/* Sub-items — track line + dot design */}
-        <AnimatePresence initial={false}>
-          {!collapsed && item.sub && isOpen && (
-            <motion.div
-              key="sub"
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.18, ease: "easeInOut" }}
-              className="overflow-hidden"
-            >
-              <div className="relative ml-[22px] mt-1 mb-2">
-                {/* Vertical track line */}
-                <div className="absolute left-[5px] top-0 bottom-0 w-px bg-[#2c2c2e]" />
-
-                {(visibleSubs || item.sub).map((sub) => {
-                  const subId    = toSubId(item.id, sub);
-                  const isSubAct = activeTab === subId;
-                  return (
-                    <button
-                      key={sub}
-                      onClick={() => setActiveTab(subId)}
-                      className="relative w-full text-left flex items-center gap-3 py-1.5 pl-5 pr-3 rounded-lg transition-all duration-100 group"
-                      style={isSubAct ? { background: "rgba(255,255,255,0.06)" } : {}}
-                    >
-                      {/* Dot on track */}
-                      <span className={`
-                        absolute left-[2px] w-[7px] h-[7px] rounded-full border-2 transition-all shrink-0
-                        ${isSubAct
-                          ? "bg-white border-white"
-                          : "bg-[#1c1c1e] border-[#3a3a3c] group-hover:border-[#636366]"
-                        }
-                      `} />
-                      <span className={`text-[12.5px] truncate transition-colors ${isSubAct ? "text-white font-semibold" : "text-[#636366] group-hover:text-[#aeaeb2]"}`}>
-                        {sub}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </motion.div>
+      <Tip label={row.label} show={collapsed}>
+        <button
+          type="button"
+          onClick={() => go(row.id, isGlobal)}
+          className={cx(
+            "group relative w-full rounded-md border text-left transition-all duration-150",
+            collapsed 
+              ? "flex h-10 items-center justify-center px-0" 
+              : nested 
+                ? "flex items-center px-3 py-1.5" 
+                : "grid grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2",
+            isActive
+              ? "border-cyan-300/18 bg-cyan-400/12 text-white"
+              : "border-transparent text-slate-400 hover:text-white"
           )}
-        </AnimatePresence>
-      </div>
+        >
+          {isActive && !collapsed && <span className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-full bg-cyan-300" />}
+          
+          {!nested && (
+            <span className={cx("flex items-center justify-center w-6")}>
+              {Icon ? <Icon size={17} strokeWidth={isActive ? 2.5 : 2} className={isActive ? "text-cyan-300" : "text-slate-300 group-hover:text-cyan-100"} /> : <span className={cx("h-1.5 w-1.5 rounded-full", isActive ? "bg-white" : "bg-cyan-300/80")} />}
+            </span>
+          )}
+
+          {!collapsed && (
+            <>
+              <span className={cx("min-w-0 truncate font-medium", nested ? "text-[13px]" : "text-[14px]")}>{row.label}</span>
+              <span className="flex items-center gap-2">
+                {row.id === "approvals" && approvalCount > 0 ? <span className="rounded-full bg-rose-500 px-2 py-0.5 text-[11px] font-bold text-white">{approvalCount}</span> : null}
+              </span>
+            </>
+          )}
+        </button>
+      </Tip>
     );
   };
 
-  return (
-    <motion.div
-      initial={false}
-      animate={{ width: collapsed ? "60px" : "240px" }}
-      transition={{ duration: 0.22, ease: "easeInOut" }}
-      className="h-screen flex flex-col shrink-0 overflow-hidden print:hidden"
-      style={{ background: "#06111f", borderRight: "1px solid rgba(34,211,238,0.12)" }}
-    >
-      {/* ── HEADER ── */}
-      <div className={`relative shrink-0 border-b ${collapsed ? "px-2 py-2 flex justify-center" : "px-3 py-2"}`}
-        style={{ borderColor: "rgba(34,211,238,0.12)" }}>
-        {collapsed ? (
-          <button onClick={() => setIsCollapsed(false)} title="Expand" className="flex items-center justify-center">
-            <img src="/Z.png" alt="Zyrex" className="h-8 w-auto object-contain" />
-          </button>
-        ) : (
-          <>
-            <img
-              src="/Z.png"
-              alt="Zyrex ERP Solutions"
-              className="block w-[85%] h-auto object-contain mx-auto"
-            />
-            <button onClick={() => setIsCollapsed(true)}
-              title="Collapse"
-              className="absolute top-1 right-1 text-[#48484a] hover:text-cyan-400 transition-colors p-1 rounded hover:bg-white/5 z-10">
-              <ChevronsUpDown size={13} />
-            </button>
-          </>
-        )}
+  const SectionHeader = ({ icon: Icon, label, sectionKey }) => {
+    const open = openSections[sectionKey];
+    return (
+      <Tip label={label} show={collapsed}>
+        <button
+          type="button"
+          onClick={() => toggleSection(sectionKey)}
+          className={cx(
+              "group flex w-full items-center rounded-md text-left transition-colors",
+            collapsed ? "h-10 justify-center" : "gap-3 px-3 py-2",
+            open ? "text-cyan-100" : "text-slate-400 hover:text-cyan-100"
+          )}
+          title={collapsed ? "" : label}
+        >
+          <div className="flex items-center justify-center w-6">
+            <Icon size={17} strokeWidth={2} className={open ? "text-cyan-300" : "text-slate-300 group-hover:text-cyan-300"} />
+          </div>
+          {!collapsed && (
+            <>
+              <span className="flex-1 truncate text-[13px] font-medium">{label}</span>
+              <ChevronRight size={13} className={cx("text-slate-500 transition-transform duration-200", open ? "rotate-90 text-cyan-400" : "")} />
+            </>
+          )}
+        </button>
+      </Tip>
+    );
+  };
+
+  const NestedRows = ({ rows }) => (
+    <div className={cx("relative space-y-0.5", collapsed ? "" : "mt-1.5 ml-6 pl-3 border-l border-cyan-400/10")}>
+      {rows.map((row) => <RowButton key={row.id} row={row} nested />)}
+    </div>
+  );
+
+  const Group = ({ title, children, className = "" }) => (
+    <section className={cx("mb-3", className)}>
+      {!collapsed && title && (
+        <p className="mb-1.5 px-1 text-[10.5px] font-bold uppercase tracking-[0.12em] text-cyan-100/70">
+          {title}
+        </p>
+      )}
+      <div className={cx(!collapsed && "space-y-0.5")}>
+        {children}
       </div>
+    </section>
+  );
 
-
-      {/* ── SCROLL ── */}
-      <div className="flex-1 overflow-y-auto px-2 py-2" style={{ scrollbarWidth: "none" }}>
-
-        {/* GLOBAL */}
-        {!collapsed && (
-          <p className="px-2.5 pt-1 pb-1.5 text-[10.5px] font-semibold uppercase tracking-widest text-[#48484a]">Global</p>
-        )}
-        <div className="space-y-0.5 mb-2">
-          {globalMenu.map(item => renderItem(item, true))}
+  return (
+    <motion.aside
+      initial={false}
+      animate={{ width: collapsed ? "60px" : "220px" }}
+      transition={{ duration: 0.22, ease: "easeInOut" }}
+      className="group relative h-screen shrink-0 overflow-visible border-r border-cyan-400/15 bg-[#04111f] text-white print:hidden"
+      style={{ boxShadow: "inset -1px 0 0 rgba(34,211,238,0.08)" }}
+    >
+      <div className="flex h-full flex-col">
+        <div className={cx("relative shrink-0 border-b border-cyan-400/12", collapsed ? "px-2 py-2" : "px-4 py-2.5")}>
+          <button type="button" onClick={() => collapsed && setIsCollapsed(false)} className={cx("flex w-full items-center", collapsed ? "justify-center" : "justify-start pl-1")}>
+            <img src="/Z.png" alt="Zyrex ERP Solutions" className={cx("object-contain", collapsed ? "h-8 w-8" : "h-auto w-[65%]")} />
+          </button>
         </div>
 
-        <div className="h-px mx-2 my-2" style={{ background: "rgba(255,255,255,0.06)" }} />
+        {/* 🚀 MODERN FLOATING COLLAPSE TOGGLE */}
+        {!isMobile && (
+          <button
+            onClick={() => setIsCollapsed(!collapsed)}
+            className={cx(
+              "absolute -right-3 top-7 z-50 flex h-6 w-6 items-center justify-center rounded-full border border-cyan-400/30 bg-[#071827] text-cyan-300 shadow-lg transition-all hover:scale-110 hover:border-cyan-300 hover:bg-cyan-400/10",
+              collapsed ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+            )}
+            title={collapsed ? "Expand" : "Collapse"}
+          >
+            {collapsed ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}
+          </button>
+        )}
 
-        {/* PROJECT */}
-        {!collapsed ? (
-          <div className="mb-2">
-            <p className="px-2.5 pt-1 pb-1.5 text-[10.5px] font-semibold uppercase tracking-widest text-[#48484a]">Project</p>
-            <button
-              onClick={() => setProjOpen(!projOpen)}
-              className="w-full flex items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-[13px] font-medium text-[#d1d1d6] transition-all hover:bg-white/5 mb-1"
-            >
-              <span className="truncate">{selectedProject || "Select project…"}</span>
-              <ChevronDown size={13} className={`shrink-0 text-[#48484a] transition-transform ${projOpen ? "rotate-180" : ""}`} />
-            </button>
-            <AnimatePresence>
-              {projOpen && (
-                <motion.div
-                  initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
-                  transition={{ duration: 0.12 }}
-                  className="rounded-xl overflow-hidden mb-2 shadow-2xl"
-                  style={{ background: "#0a1828", border: "1px solid rgba(34,211,238,0.18)" }}
-                >
-                  {projects.map(p => {
-                    const name    = typeof p === "string" ? p : p.name;
-                    const logoUrl = typeof p === "object" ? p.logoUrl : null;
-                    return (
-                      <button key={name}
-                        onClick={() => { setSelectedProject(name); setProjOpen(false); }}
-                        className={`w-full text-left px-3 py-2 text-[12.5px] transition-all flex items-center gap-2
-                          ${selectedProject === name ? "text-white font-semibold bg-cyan-400/10" : "text-[#8b95a3] hover:bg-cyan-400/5 hover:text-cyan-100"}`}
-                      >
-                        {logoUrl ? (
-                          <img src={logoUrl} alt={name} className="w-5 h-5 rounded object-cover shrink-0" />
-                        ) : (
-                          selectedProject === name && <span className="w-1.5 h-1.5 rounded-full bg-white shrink-0" />
-                        )}
-                        {name}
-                      </button>
-                    );
-                  })}
+        <div className="flex-1 overflow-y-auto px-3 py-3" style={{ scrollbarWidth: "none" }}>
+          <Group title="Global">
+            {globalRows.map((row) => <RowButton key={row.id} row={row} isGlobal />)}
+          </Group>
+
+          <Group title="Management">
+            <SectionHeader icon={Settings2} label="Global Setup" sectionKey="setup" />
+            <AnimatePresence initial={false}>
+              {openSections.setup && (
+                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                  <NestedRows rows={[...setupRows, ...clauseRows]} />
                 </motion.div>
               )}
             </AnimatePresence>
-          </div>
-        ) : (
-          <button onClick={() => setIsCollapsed(false)} title="Select project" className="w-full flex justify-center mb-2">
-            {(() => {
-              const activePrj = projects.find(p => (typeof p === "string" ? p : p.name) === selectedProject);
-              const logo = activePrj && typeof activePrj === "object" ? activePrj.logoUrl : null;
-              return logo ? (
-                <img src={logo} alt={selectedProject} className="w-8 h-8 rounded-lg object-cover" />
-              ) : (
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center text-[9px] font-bold text-[#8b8b8f]"
-                  style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                  {selectedProject ? selectedProject.slice(0, 3).toUpperCase() : "PRJ"}
-                </div>
-              );
-            })()}
-          </button>
-        )}
 
-        {/* PROJECT MENU */}
-        <div className="space-y-0.5">
-          {projectMenu.map(item => renderItem(item, false))}
+            <SectionHeader icon={Database} label="Master Data" sectionKey="master_data" />
+            <AnimatePresence initial={false}>
+              {openSections.master_data && (
+                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                  <NestedRows rows={masterDataRows} />
+                </motion.div>
+              )}
+            </AnimatePresence>
+            {managementRows.map((row) => <RowButton key={row.id} row={row} isGlobal />)}
+          </Group>
+
+          <Group title="Project Selector">
+            {!collapsed ? (
+              <div>
+              <button
+                type="button"
+                onClick={() => setProjOpen(!projOpen)}
+                className="flex w-full items-center justify-between rounded-md border border-cyan-400/18 bg-[#03111d] px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:border-cyan-300/35"
+              >
+                <span className="truncate">{selectedProject || "Select project..."}</span>
+                <ChevronDown size={15} className={cx("transition-transform", projOpen ? "rotate-180" : "")} />
+              </button>
+              <AnimatePresence>
+                {projOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    className="thin-scrollbar mt-1.5 max-h-56 overflow-y-auto rounded-md border border-cyan-400/18 bg-[#071827] p-1 shadow-xl"
+                  >
+                    {visibleProjects.map((p) => {
+                      const name = typeof p === "string" ? p : p.name;
+                      return (
+                        <button
+                          type="button"
+                          key={name}
+                          onClick={() => { setSelectedProject(name); setProjOpen(false); }}
+                          className={cx(
+                            "flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors",
+                            selectedProject === name ? "bg-cyan-400/14 text-white" : "text-slate-300 hover:bg-cyan-400/8 hover:text-white"
+                          )}
+                        >
+                          <span className={cx("h-1.5 w-1.5 rounded-full", selectedProject === name ? "bg-white" : "bg-cyan-300")} />
+                          <span className="truncate">{name}</span>
+                        </button>
+                      );
+                    })}
+                    {visibleProjects.length === 0 && <p className="px-2 py-2 text-xs text-slate-500">No active projects</p>}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsCollapsed(false)}
+                title="Select project"
+                className="flex h-10 w-full items-center justify-center rounded-md border border-cyan-400/15 bg-white/5 text-[10px] font-bold text-cyan-200"
+              >
+                {selectedProject ? selectedProject.slice(0, 3).toUpperCase() : "PRJ"}
+              </button>
+            )}
+          </Group>
+
+          <div className={cx(!collapsed && "space-y-1")}>
+            {projectSections.map((section) => (
+            <div key={section.key} className="mb-1 last:mb-0">
+              {section.label ? (
+                <SectionHeader icon={section.icon} label={section.label} sectionKey={section.key} />
+              ) : !collapsed && selectedProject ? (
+                <p className="px-2 pb-1 pt-1 text-[10.5px] font-bold uppercase tracking-[0.12em] text-cyan-100/70">
+                  Project: <span className="text-cyan-300">{selectedProject}</span>
+                </p>
+              ) : null}
+              <AnimatePresence initial={false}>
+                {(section.label ? openSections[section.key] : true) && (
+                  <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                    {section.label ? <NestedRows rows={section.rows} /> : <div className="space-y-1">{section.rows.map((row) => <RowButton key={row.id} row={row} />)}</div>}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="shrink-0 border-t border-cyan-400/12 px-3 py-3">
+          {!collapsed ? (
+            <div className="flex items-center gap-2 rounded-md border border-cyan-400/15 bg-cyan-400/[0.06] p-2">
+              <button type="button" onClick={() => setActiveTab("profile")} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-cyan-500/20 text-sm font-bold text-cyan-100 ring-1 ring-cyan-300/30">
+                  {currentUser.avatar ? <img src={currentUser.avatar} alt="" className="h-full w-full object-cover" /> : initials}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-white">{userDisplayName}</p>
+                  <p className="truncate text-[11px] text-slate-400">{userDisplayEmail}</p>
+                </div>
+              </button>
+              <button type="button" onClick={onLogout} title="Logout" className="rounded-md border border-cyan-400/15 p-2 text-slate-300 transition-colors hover:border-red-400/30 hover:bg-red-500/10 hover:text-red-300">
+                <LogOut size={16} />
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-2">
+              <Tip label="Profile" show={collapsed}>
+                <button type="button" onClick={() => setActiveTab("profile")} className="flex h-9 w-9 items-center justify-center rounded-full bg-cyan-500/20 text-xs font-bold text-cyan-100 ring-1 ring-cyan-300/30">
+                  {initials}
+                </button>
+              </Tip>
+              <Tip label="Logout" show={collapsed}>
+                <button type="button" onClick={onLogout} className="text-slate-400 hover:text-red-300">
+                  <LogOut size={15} />
+                </button>
+              </Tip>
+            </div>
+          )}
         </div>
       </div>
-
-      {/* ── FOOTER ── */}
-      <div className="shrink-0 px-2 py-2" style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }}>
-        {!collapsed ? (
-          <div className="rounded-xl px-2.5 py-2 flex items-center gap-2.5"
-            style={{ background: "rgba(34,211,238,0.05)", border: "1px solid rgba(34,211,238,0.15)" }}>
-            <button onClick={() => setActiveTab("profile")} className="flex items-center gap-2.5 flex-1 min-w-0 text-left">
-              <div className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0 overflow-hidden ring-2 ring-cyan-400/20"
-                style={{ background: "linear-gradient(135deg,#0891b2,#22d3ee)" }}>
-                {currentUser.avatar
-                  ? <img src={currentUser.avatar} alt="" className="w-full h-full object-cover" />
-                  : (currentUser.name || userName).split(" ").map(n => n[0]).join("").slice(0,2).toUpperCase()
-                }
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[12px] font-semibold text-white truncate leading-tight">{currentUser.name || userName}</p>
-                <p className="text-[10px] text-[#48484a] mt-0.5 truncate">{currentUser.email || userEmail}</p>
-              </div>
-            </button>
-            <button onClick={onLogout} title="Logout"
-              className="text-[#48484a] hover:text-red-400 transition-colors p-1.5 rounded-lg hover:bg-white/5 shrink-0">
-              <LogOut size={13} />
-            </button>
-          </div>
-        ) : (
-          <div className="flex flex-col items-center gap-2">
-            <button onClick={() => setActiveTab("profile")} title="Profile">
-              <div className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white overflow-hidden ring-2 ring-cyan-400/20"
-                style={{ background: "linear-gradient(135deg,#0891b2,#22d3ee)" }}>
-                {currentUser.avatar
-                  ? <img src={currentUser.avatar} alt="" className="w-full h-full object-cover" />
-                  : (currentUser.name || userName).split(" ").map(n => n[0]).join("").slice(0,2).toUpperCase()
-                }
-              </div>
-            </button>
-            <button onClick={onLogout} title="Logout"
-              className="text-[#48484a] hover:text-red-400 transition-colors">
-              <LogOut size={12} />
-            </button>
-          </div>
-        )}
-      </div>
-    </motion.div>
+    </motion.aside>
   );
-};
-
-export default Sidebar;
+}

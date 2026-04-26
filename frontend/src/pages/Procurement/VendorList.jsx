@@ -399,7 +399,9 @@ export default function VendorList() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Upload failed");
-      showToast(`${data.inserted} vendors uploaded`);
+      showToast(data.skipped > 0
+        ? `${data.inserted} vendors uploaded, ${data.skipped} skipped (duplicates)`
+        : `${data.inserted} vendors uploaded`);
       setShowBulk(false); setBulkRows([]); setBulkFile("");
       fetchVendors();
     } catch (err) { showToast(err.message, "error"); }

@@ -22,9 +22,9 @@ const pushUrl = (tab, project) => {
   window.history.pushState(null, "", `#${params.toString()}`);
 };
 
-import About from "./pages/About";
 import Profile from "./pages/Profile";
 import MasterData from "./pages/MasterData";
+import Approvals from "./pages/Approvals";
  
 import View3D from "./pages/Model";
 import Dashboard from "./pages/Dashboard";
@@ -118,7 +118,7 @@ function App() {
   // Restore tab + project from URL on load
   const [activeTab, setActiveTab] = useState(() => {
     const { isReset, tab } = parseHash();
-    return (!isReset && loggedIn) ? tab : "about";
+    return (!isReset && loggedIn) ? tab : "global_dashboard";
   });
   const [selectedProject, setSelectedProject] = useState(() => {
     const { isReset, project } = parseHash();
@@ -172,8 +172,8 @@ function App() {
     setUserRole(user.role);
     setCurrentUser(user);
     setIsLoggedIn(true);
-    setActiveTab("about");
-    pushUrl("about", null);
+    setActiveTab("global_dashboard");
+    pushUrl("global_dashboard", null);
   };
 
   const handleLogout = () => {
@@ -183,7 +183,7 @@ function App() {
     setUserRole(null);
     setCurrentUser({});
     setSelectedProject(null);
-    setActiveTab("about");
+    setActiveTab("global_dashboard");
     window.history.replaceState(null, "", window.location.pathname);
   };
 
@@ -196,8 +196,8 @@ function App() {
   };
  
   const handleTabChange = (tab) => {
-    const proj = tab === "about" ? null : selectedProject;
-    if (tab === "about") setSelectedProject(null);
+    const proj = tab === "global_dashboard" ? null : selectedProject;
+    if (tab === "global_dashboard") setSelectedProject(null);
     setActiveTab(tab);
     pushUrl(tab, proj);
     if (isMobile) setMobileOpen(false);
@@ -232,8 +232,10 @@ function App() {
   }, []);
  
   const renderPage = () => {
-    if (activeTab === "about") return <About />;
+    if (activeTab === "master_data__orders") return <GlobalCreateOrder project={null} editOrderId={editingOrderId} onEditComplete={() => setEditingOrderId(null)} />;
+    if (activeTab === "global_dashboard") return <Dashboard project="All Project" />;
     if (activeTab === "profile") return <Profile onProfileUpdate={handleProfileUpdate} onProjectsUpdate={handleProjectsUpdate} />;
+    if (activeTab === "approvals") return <Approvals />;
 
     // Global Create tabs
     if (activeTab === "create__intake") return <IntakeList />;
@@ -253,8 +255,19 @@ function App() {
     if (activeTab === "proc_setup__annexure") return <AnnexureMaster />;
     if (activeTab === "approvals__config") return <ApprovalConfig showToast={(msg, type) => alert(`${type?.toUpperCase()}: ${msg}`)} />;
 
-    if (activeTab === "master_data" || activeTab === "master_data__vendor_master_data") return <MasterData view="vendor" />;
-    if (activeTab === "master_data__item_master_data") return <MasterData view="item" />;
+    if (activeTab === "master_data" || activeTab === "master_data__vendor") return <MasterData view="vendor" />;
+    
+    if (activeTab === "master_data__products" || activeTab === "master_data__orders" || activeTab === "master_data__intakes") {
+      return (
+        <div className="flex min-h-screen items-center justify-center p-4 md:p-10 bg-[#f8fafc]">
+          <div className="bg-white p-8 md:p-20 rounded-2xl md:rounded-[3rem] shadow-sm border border-slate-100 flex items-center justify-center w-full max-w-4xl">
+            <p className="text-slate-400 font-bold uppercase tracking-wider md:tracking-[0.3em] text-center text-sm md:text-base">
+              {activeTab.split("__")[1].toUpperCase()} MASTER — COMING SOON
+            </p>
+          </div>
+        </div>
+      );
+    }
 
     if (activeTab === "master_data") {
       return (
@@ -294,27 +307,22 @@ function App() {
     switch (activeTab) {
       case "dashboard": return <Dashboard project={selectedProject} />;
       case "view_3d": return <View3D project={selectedProject} />;
-      case "confidential_loa": return <LOA project={selectedProject} />;
-      case "confidential_boq": return <BOQ project={selectedProject} />;
-      case "confidential_drawings": return <Drawings project={selectedProject} />;
-      case "confidential_ra_bills": return <RABills project={selectedProject} />;
-      case "finance_site_expense": return <SiteExpense project={selectedProject} />;
-      case "finance_petty_cash": return <PettyCash project={selectedProject} />;
-      case "finance_bills_docs": return <BillsDocs project={selectedProject} />;
-      case "work_execution_plan": return <ExecutionPlan project={selectedProject} />;
-      case "work_msp_plan": return <MSPPlan project={selectedProject} />;
-      case "manpower_daily_manpower": return <DailyManpower project={selectedProject} />;
-      case "manpower_all_record": return <AllRecordManpower project={selectedProject} />;
-      case "store_received_record": return <ReceivedRecord project={selectedProject} />;
-      case "store_local_purchase": return <LocalPurchase project={selectedProject} />;
-      case "store_consumption_record": return <ConsumptionRecord project={selectedProject} />;
-      case "store_stock_available": return <StockAvailable project={selectedProject} />;
-      case "store_grn_docs": return <GRNDocs project={selectedProject} />;
-      case "procurement__order_dashboard": return <OrderDashboard project={selectedProject} />;
-      case "procurement__intake_dashboard": return <IntakeList project={selectedProject} />;
-      case "images_all_images": return <AllImages project={selectedProject} />;
-      case "images_compare_images": return <CompareImages project={selectedProject} />;
-      case "staff": return <Attendance selectedProject={selectedProject} />;
+      case "confidential__loa": return <LOA project={selectedProject} />;
+      case "confidential__boq": return <BOQ project={selectedProject} />;
+      case "confidential__drawings": return <Drawings project={selectedProject} />;
+      case "confidential__ra_bills": return <RABills project={selectedProject} />;
+      case "finance__site_expense": return <SiteExpense project={selectedProject} />;
+      case "finance__petty_cash": return <PettyCash project={selectedProject} />;
+      case "finance__bills_documents": return <BillsDocs project={selectedProject} />;
+      case "operations__work_activity": return <ExecutionPlan project={selectedProject} />;
+      case "operations__manpower": return <DailyManpower project={selectedProject} />;
+      case "inventory__received_material_grn": return <ReceivedRecord project={selectedProject} />;
+      case "inventory__stock_inventory": return <StockAvailable project={selectedProject} />;
+      case "inventory__material_issue": return <ConsumptionRecord project={selectedProject} />;
+      case "procurement__orders": return <GlobalCreateOrder project={selectedProject} editOrderId={editingOrderId} onEditComplete={() => setEditingOrderId(null)} />;
+      case "procurement__intake": return <IntakeList project={selectedProject} />;
+      case "operations__staff_attendance": return <Attendance selectedProject={selectedProject} />;
+      case "finance__payment_request": return <PaymentRequest project={selectedProject} />;
       default:
         return (
           <div className="flex min-h-screen items-center justify-center text-slate-400 font-bold text-xl uppercase tracking-widest">
@@ -383,7 +391,7 @@ function App() {
         `}
       >
         <main className={`flex-1 min-w-0 min-h-screen overflow-y-auto relative
-          ${isMobile ? "pt-14 px-3 pb-4" : "p-3 sm:p-4 lg:p-6"}
+          ${isMobile ? "pt-14 px-3 pb-4" : "pt-2 sm:pt-3 lg:pt-4 px-3 sm:px-4 lg:px-6 pb-4"}
         `}>
           {renderPage()}
         </main>

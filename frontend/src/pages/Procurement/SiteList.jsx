@@ -148,16 +148,21 @@ export default function SiteList() {
           .filter(r => r.siteName);
         if (!rows.length) { showToast("No valid rows found", "error"); setBulking(false); return; }
         const currentUser = JSON.parse(localStorage.getItem("bms_user") || "{}");
-        await fetch(`${API}/api/procurement/sites/bulk`, { 
-          method: "POST", 
-          headers: { "Content-Type": "application/json" }, 
-          body: JSON.stringify({ 
+        const res = await fetch(`${API}/api/procurement/sites/bulk`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
             rows,
             createdById: currentUser.id || "",
             createdByName: currentUser.name || ""
-          }) 
+          })
         });
-        showToast(`${rows.length} site${rows.length !== 1 ? "s" : ""} added`);
+        const data = await res.json();
+        const inserted = data.count ?? 0;
+        const skipped = data.skipped ?? 0;
+        showToast(skipped > 0
+          ? `${inserted} site${inserted !== 1 ? "s" : ""} added, ${skipped} skipped (duplicates)`
+          : `${inserted} site${inserted !== 1 ? "s" : ""} added`);
         fetchSites();
       } catch { showToast("Bulk upload failed", "error"); }
       setBulking(false);
@@ -238,7 +243,7 @@ export default function SiteList() {
         const pageCount = doc.internal.getNumberOfPages();
         doc.setFontSize(7); doc.setTextColor(148, 163, 184);
         doc.text(`Page ${data.pageNumber} of ${pageCount}`, pageW - 14, doc.internal.pageSize.getHeight() - 8, { align: "right" });
-        doc.text("Bootes BMS — Site List", 14, doc.internal.pageSize.getHeight() - 8);
+        doc.text("BMS — Site List", 14, doc.internal.pageSize.getHeight() - 8);
       },
     });
 

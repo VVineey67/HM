@@ -19,6 +19,102 @@ const sanitizeRichTextDeep = (value) => {
   return normalizeNbsp(value);
 };
 
+const HISTORY_ID_PREFIX = "history:";
+const isHistoryId = (id = "") => String(id).startsWith(HISTORY_ID_PREFIX);
+const getHistoryRows = (order = {}) => Array.isArray(order.snapshot?.status_history) ? order.snapshot.status_history : [];
+const makeHistoryListOrder = (order, history) => {
+  const frozen = history.order || {};
+  return sanitizeRichTextDeep({
+    ...order,
+    ...frozen,
+    id: history.history_id,
+    live_order_id: order.id,
+    status: history.action,
+    updated_at: history.action_at || frozen.updated_at || order.updated_at,
+    _history: true,
+    _history_action: history.action,
+    _history_at: history.action_at,
+    _history_by: history.action_by,
+    _history_comments: history.comments,
+    companies: frozen.companies || order.companies,
+    sites: frozen.sites || order.sites,
+    vendors: frozen.vendors || order.vendors,
+    snapshot: frozen.snapshot || order.snapshot || {},
+  });
+};
+
+const loadHistoryOrder = async (historyId) => {
+  const { data: orders, error } = await supabase.schema("procurement")
+    .from("purchase_orders")
+    .select("*, sites(*), companies(*), vendors(*), contact_person:contacts(*)");
+  if (error) throw error;
+
+  for (const order of orders || []) {
+    const history = getHistoryRows(order).find(h => h.history_id === historyId);
+    if (history) {
+      const frozenOrder = {
+        ...order,
+        ...(history.order || {}),
+        id: history.history_id,
+        live_order_id: order.id,
+        status: history.action,
+        updated_at: history.action_at || history.order?.updated_at || order.updated_at,
+        _history: true,
+        _history_action: history.action,
+        _history_at: history.action_at,
+        _history_by: history.action_by,
+        _history_comments: history.comments,
+      };
+      return {
+        order: sanitizeRichTextDeep(frozenOrder),
+        items: sanitizeRichTextDeep(history.items || []),
+      };
+    }
+  }
+  return null;
+};
+
+const appendStatusHistorySnapshot = async ({ orderId, action, comments = "", actionBy = "" }) => {
+  if (!["Reverted", "Recalled"].includes(action)) return;
+
+  const [orderRes, itemRes] = await Promise.all([
+    supabase.schema("procurement")
+      .from("purchase_orders")
+      .select("*, sites(*), companies(*), vendors(*), contact_person:contacts(*)")
+      .eq("id", orderId)
+      .single(),
+    supabase.schema("procurement")
+      .from("purchase_order_items")
+      .select("*, items(*)")
+      .eq("order_id", orderId),
+  ]);
+  if (orderRes.error) throw orderRes.error;
+  if (itemRes.error) throw itemRes.error;
+
+  const order = orderRes.data;
+  const existingSnapshot = order.snapshot || {};
+  const { status_history: _oldHistory, ...frozenSnapshot } = existingSnapshot;
+  const history = Array.isArray(existingSnapshot.status_history) ? existingSnapshot.status_history : [];
+  const actionAt = new Date().toISOString();
+
+  history.push({
+    history_id: `history:${orderId}:${Date.now()}`,
+    action,
+    comments,
+    action_by: actionBy,
+    action_at: actionAt,
+    order: { ...order, status: action, snapshot: frozenSnapshot },
+    items: itemRes.data || [],
+  });
+
+  const nextSnapshot = { ...existingSnapshot, status_history: history };
+  await supabase.schema("procurement")
+    .from("purchase_orders")
+    .update({ snapshot: nextSnapshot })
+    .eq("id", orderId);
+  return nextSnapshot;
+};
+
 const parseJsonArr = (v) => {
   if (Array.isArray(v)) return v;
   try {
@@ -157,7 +253,16 @@ router.get("/", async (req, res) => {
       throw error;
     }
     console.log(`Fetched ${data?.length || 0} orders from DB`);
-    res.json({ orders: sanitizeRichTextDeep(data || []) });
+    const orders = sanitizeRichTextDeep(data || []);
+    const historyOrders = [];
+    for (const order of orders) {
+      for (const history of getHistoryRows(order)) {
+        if (["Reverted", "Recalled"].includes(history.action)) {
+          historyOrders.push(makeHistoryListOrder(order, history));
+        }
+      }
+    }
+    res.json({ orders: [...orders, ...historyOrders] });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -174,6 +279,7 @@ router.get("/master/vendor-data", async (_req, res) => {
       supabase.schema("procurement")
         .from("vendors")
         .select("id, vendor_code, vendor_name, email, mobile, bank_city, bank_state, company_codes, site_codes")
+        .is("deleted_at", null)
         .order("vendor_code", { ascending: true }),
     ]);
     if (ordersRes.error) throw ordersRes.error;
@@ -234,9 +340,9 @@ router.get("/master/vendor-data", async (_req, res) => {
 
     const placeholderRows = allVendors
       .filter(v => !vendorIdsWithOrders.has(v.id))
-      .flatMap(v => {
+      .map(v => {
         const siteCodes = parseJsonArr(v.site_codes).map(s => String(s || "").trim()).filter(Boolean);
-        const base = {
+        return {
           orderId: "",
           vendorId: v.id || "",
           vendorCode: v.vendor_code || "",
@@ -244,6 +350,7 @@ router.get("/master/vendor-data", async (_req, res) => {
           companyCodes: parseJsonArr(v.company_codes).map(c => String(c || "").trim()).filter(Boolean),
           state: v.bank_state || "",
           city: v.bank_city || "",
+          siteCode: siteCodes.join(", "),
           orderType: "",
           orderNo: "",
           item: "",
@@ -253,8 +360,6 @@ router.get("/master/vendor-data", async (_req, res) => {
           createdAt: "",
           isPlaceholder: true,
         };
-        if (!siteCodes.length) return [{ ...base, siteCode: "" }];
-        return siteCodes.map(sc => ({ ...base, siteCode: sc }));
       })
       .filter(row => row.vendorName || row.vendorCode);
 
@@ -340,6 +445,12 @@ router.post("/", upload.fields([
 
 router.get("/:id", async (req, res) => {
   try {
+    if (isHistoryId(req.params.id)) {
+      const historical = await loadHistoryOrder(req.params.id);
+      if (!historical) return res.status(404).json({ error: "History snapshot not found" });
+      return res.json(historical);
+    }
+
     const { data: order, error: orderErr } = await supabase.schema("procurement")
       .from("purchase_orders")
       .select("*, sites(*), companies(*), vendors(*), contact_person:contacts(*)")
@@ -733,10 +844,26 @@ router.put("/:id", upload.fields([
     mainData = sanitizeRichTextDeep(mainData || {});
     items = sanitizeRichTextDeep(items || []);
 
-    // Fetch existing urls
+    // Fetch existing urls/status before any mutation so locked orders remain read-only.
     const { data: existing } = await supabase.schema("procurement")
-      .from("purchase_orders").select("quotation_url, comparative_sheet_url")
+      .from("purchase_orders").select("quotation_url, comparative_sheet_url, status")
       .eq("id", req.params.id).single();
+
+    const lockedStatuses = ["Rejected", "Cancelled", "Reverted", "Recalled"];
+    if (lockedStatuses.includes(existing?.status)) {
+      return res.status(400).json({ error: `${existing.status} orders cannot be edited` });
+    }
+
+    if (["Reverted", "Recalled"].includes(mainData.status)) {
+      const nextSnapshot = await appendStatusHistorySnapshot({
+        orderId: req.params.id,
+        action: mainData.status,
+        comments: mainData.comments || mainData.reason || "",
+        actionBy: mainData.action_by || "",
+      });
+      mainData.status = "Draft";
+      mainData.snapshot = nextSnapshot;
+    }
 
     let quotationUrl    = existing?.quotation_url    || "";
     let comparativeUrl  = existing?.comparative_sheet_url || "";
@@ -851,6 +978,18 @@ const { renderPdf } = require("../services/pdfService");
 const { renderOrderHtml, renderHeaderTemplate, renderFooterTemplate, renderPreviewHeader } = require("../pdf/orderTemplate");
 
 const loadOrderForRender = async (orderId) => {
+  if (isHistoryId(orderId)) {
+    const historical = await loadHistoryOrder(orderId);
+    if (!historical) throw new Error("History snapshot not found");
+    const cleanOrder = historical.order;
+    const cleanItems = historical.items || [];
+    const comp = cleanOrder.companies || cleanOrder.snapshot?.company || {};
+    const vend = cleanOrder.vendors || cleanOrder.snapshot?.vendor || {};
+    const site = cleanOrder.sites || cleanOrder.snapshot?.site || {};
+    const contacts = cleanOrder.snapshot?.contacts || [];
+    return { cleanOrder, cleanItems, comp, vend, site, contacts };
+  }
+
   const [orderRes, itemRes] = await Promise.all([
     supabase.schema("procurement")
       .from("purchase_orders")
@@ -1020,11 +1159,113 @@ router.get("/:id/pdf", async (req, res) => {
 
 router.delete("/:id", async (req, res) => {
   try {
+    if (isHistoryId(req.params.id)) {
+      return res.status(400).json({ error: "History snapshots cannot be deleted" });
+    }
+    const { data: order, error: orderErr } = await supabase.schema("procurement")
+      .from("purchase_orders")
+      .select("status")
+      .eq("id", req.params.id)
+      .single();
+    if (orderErr) throw orderErr;
+    if (["Issued", "Rejected", "Cancelled", "Reverted", "Recalled"].includes(order?.status)) {
+      return res.status(400).json({ error: `${order.status} orders cannot be deleted` });
+    }
     await supabase.schema("procurement").from("purchase_order_items").delete().eq("order_id", req.params.id);
     const { error } = await supabase.schema("procurement").from("purchase_orders").delete().eq("id", req.params.id);
     if (error) throw error;
     res.json({ success: true });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ════════════════════════════════════
+   POST-PO DOCUMENTS  (live, editable after issue)
+   Categories: quotations, comparative, vendor-docs, other, vendor-acceptance
+   ════════════════════════════════════ */
+
+const POST_DOC_CATEGORIES = ["quotations", "comparative", "vendor-docs", "other", "vendor-acceptance"];
+
+router.post("/:id/post-documents", upload.single("file"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const category = (req.body.category || "").trim();
+    const uploadedById   = req.body.uploadedById   || null;
+    const uploadedByName = req.body.uploadedByName || "Unknown";
+    if (!POST_DOC_CATEGORIES.includes(category)) {
+      return res.status(400).json({ error: `Invalid category. Allowed: ${POST_DOC_CATEGORIES.join(", ")}` });
+    }
+    if (!req.file) return res.status(400).json({ error: "File is required" });
+
+    const { data: order, error: ordErr } = await supabase.schema("procurement")
+      .from("purchase_orders")
+      .select("order_number, post_documents")
+      .eq("id", id).single();
+    if (ordErr) throw ordErr;
+
+    const safeName = req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const storagePath = `orders/${order.order_number || id}/post/${category}/${Date.now()}_${safeName}`;
+    const url = await uploadToStorage("procurement-docs", storagePath, req.file.buffer, req.file.mimetype);
+
+    const newDoc = {
+      id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      category,
+      url,
+      storage_path: storagePath,
+      name: req.file.originalname,
+      size: req.file.size,
+      mimetype: req.file.mimetype,
+      uploaded_at: new Date().toISOString(),
+      uploaded_by_id: uploadedById,
+      uploaded_by_name: uploadedByName,
+    };
+
+    const existingArr = Array.isArray(order.post_documents) ? order.post_documents : [];
+    const nextArr = [...existingArr, newDoc];
+
+    const { error: updErr } = await supabase.schema("procurement")
+      .from("purchase_orders")
+      .update({ post_documents: nextArr })
+      .eq("id", id);
+    if (updErr) throw updErr;
+
+    res.json({ success: true, document: newDoc });
+  } catch (err) {
+    console.error("Post-doc upload error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete("/:id/post-documents/:docId", async (req, res) => {
+  try {
+    const { id, docId } = req.params;
+    const { data: order, error: ordErr } = await supabase.schema("procurement")
+      .from("purchase_orders")
+      .select("post_documents")
+      .eq("id", id).single();
+    if (ordErr) throw ordErr;
+
+    const arr = Array.isArray(order.post_documents) ? order.post_documents : [];
+    const target = arr.find(d => d.id === docId);
+    if (!target) return res.status(404).json({ error: "Document not found" });
+
+    // Delete from storage (best-effort)
+    if (target.storage_path) {
+      await supabase.storage.from("procurement-docs").remove([target.storage_path])
+        .catch(err => console.warn("Storage delete warning:", err.message));
+    }
+
+    const next = arr.filter(d => d.id !== docId);
+    const { error: updErr } = await supabase.schema("procurement")
+      .from("purchase_orders")
+      .update({ post_documents: next })
+      .eq("id", id);
+    if (updErr) throw updErr;
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Post-doc delete error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });

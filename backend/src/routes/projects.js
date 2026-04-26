@@ -118,26 +118,65 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
-/* ── POST bulk insert projects ── */
+/* ── POST bulk insert projects (dedupe by project_code, then by name+city) ── */
 router.post("/bulk", async (req, res) => {
   try {
     const { rows } = req.body;
     if (!rows || !rows.length) return res.status(400).json({ error: "No rows provided" });
-    const inserts = rows.map(r => ({
-      project_name: r.projectName || "",
-      project_code: r.projectCode || "",
-      city:         r.city        || "",
-      state:        r.state       || "",
-      pincode:      r.pincode     || "",
-      address:      r.address     || "",
-      logo_url:     "",
-      is_active:    true,
-      created_by_id: null,
-      created_by_name: "Bulk Upload",
-    }));
-    const { error } = await supabase.from("projects").insert(inserts);
-    if (error) throw error;
-    res.json({ success: true, count: rows.length });
+
+    // Fetch existing for dedupe
+    const { data: existing, error: fetchErr } = await supabase
+      .from("projects")
+      .select("project_code, project_name, city");
+    if (fetchErr) throw fetchErr;
+
+    const codeSet = new Set((existing || []).map(p => (p.project_code || "").trim().toLowerCase()).filter(Boolean));
+    const nameCitySet = new Set((existing || []).map(p =>
+      `${(p.project_name || "").trim().toLowerCase()}|${(p.city || "").trim().toLowerCase()}`
+    ));
+
+    const skipped = [];
+    const seenInBatch = new Set();
+    const inserts = [];
+
+    for (const r of rows) {
+      const code = (r.projectCode || "").trim();
+      const name = (r.projectName || "").trim();
+      const city = (r.city || "").trim();
+      const codeKey = code.toLowerCase();
+      const nameCityKey = `${name.toLowerCase()}|${city.toLowerCase()}`;
+
+      // dedupe vs DB
+      if (codeKey && codeSet.has(codeKey)) { skipped.push({ row: r, reason: `project_code "${code}" already exists` }); continue; }
+      if (!codeKey && nameCitySet.has(nameCityKey)) { skipped.push({ row: r, reason: `project "${name}" in "${city}" already exists` }); continue; }
+
+      // dedupe within the same upload batch
+      const batchKey = codeKey || nameCityKey;
+      if (seenInBatch.has(batchKey)) { skipped.push({ row: r, reason: "duplicate within upload" }); continue; }
+      seenInBatch.add(batchKey);
+
+      inserts.push({
+        project_name: name,
+        project_code: code,
+        city,
+        state:    r.state    || "",
+        pincode:  r.pincode  || "",
+        address:  r.address  || "",
+        logo_url: "",
+        is_active: true,
+        created_by_id: null,
+        created_by_name: "Bulk Upload",
+      });
+    }
+
+    let inserted = 0;
+    if (inserts.length > 0) {
+      const { error } = await supabase.from("projects").insert(inserts);
+      if (error) throw error;
+      inserted = inserts.length;
+    }
+
+    res.json({ success: true, count: inserted, skipped: skipped.length, skippedDetails: skipped });
   } catch (err) {
     console.error("Bulk project insert error:", err.message);
     res.status(500).json({ error: err.message });

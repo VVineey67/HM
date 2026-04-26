@@ -9,6 +9,52 @@ const getAdminClient = () => createClient(
   { auth: { persistSession: false, autoRefreshToken: false } }
 );
 
+const appendOrderHistorySnapshot = async (admin, { documentId, action, comments, actionBy }) => {
+  if (!["Reverted", "Recalled", "Cancelled", "Rejected"].includes(action)) return;
+
+  const [orderRes, itemRes] = await Promise.all([
+    admin.schema("procurement")
+      .from("purchase_orders")
+      .select("*, sites(*), companies(*), vendors(*), contact_person:contacts(*)")
+      .eq("id", documentId)
+      .single(),
+    admin.schema("procurement")
+      .from("purchase_order_items")
+      .select("*, items(*)")
+      .eq("order_id", documentId),
+  ]);
+
+  if (orderRes.error) throw orderRes.error;
+  if (itemRes.error) throw itemRes.error;
+
+  const order = orderRes.data;
+  const existingSnapshot = order.snapshot || {};
+  const { status_history: _oldHistory, ...frozenSnapshot } = existingSnapshot;
+  const history = Array.isArray(existingSnapshot.status_history) ? existingSnapshot.status_history : [];
+  const actionAt = new Date().toISOString();
+
+  const frozenOrder = {
+    ...order,
+    status: action,
+    snapshot: frozenSnapshot,
+  };
+
+  history.push({
+    history_id: `history:${documentId}:${Date.now()}`,
+    action,
+    comments: comments || "",
+    action_by: actionBy,
+    action_at: actionAt,
+    order: frozenOrder,
+    items: itemRes.data || [],
+  });
+
+  await admin.schema("procurement")
+    .from("purchase_orders")
+    .update({ snapshot: { ...existingSnapshot, status_history: history } })
+    .eq("id", documentId);
+};
+
 // Basic auth middleware
 const extractUserId = (token) => {
   try {
@@ -208,7 +254,15 @@ router.post("/requests", requireAuth, async (req, res) => {
     workflow = data;
   }
   if (!workflow || !workflow.is_active) {
-    return res.status(400).json({ error: `No active approval workflow configured for module "${module_key}". Please configure one in Approval Engine → Config.` });
+    // Diagnostic: list what workflows do exist, to help debug module_key mismatches
+    const { data: allWfs } = await admin
+      .from("approval_workflows")
+      .select("module_key, point_key, flow_name, is_active");
+    const existing = (allWfs || []).map(w => `${w.module_key}/${w.point_key} (active=${w.is_active})`).join(" | ");
+    console.warn(`[approvals/requests] No workflow matched module_key="${module_key}" point_key="${point_key}". Existing: ${existing || "none"}`);
+    return res.status(400).json({
+      error: `No active approval workflow configured for module "${module_key}". Existing: ${existing || "none"}. Please configure/activate one in Approval Engine → Config.`
+    });
   }
 
   // 2. Upsert Request
@@ -230,20 +284,62 @@ router.post("/requests", requireAuth, async (req, res) => {
   res.json({ success: true, request });
 });
 
-// Action (Approve, Reject, Revert)
+// Action (Approve, Issue, Reject, Revert, Recall after Issue, Cancel after Issue)
+const ACTION_PERM_MAP = {
+  Approved:  'approve',
+  Issued:    'issue',
+  Rejected:  'reject',
+  Reverted:  'revert',
+  Recalled:  'recall_after_issue',
+  Cancelled: 'cancel_after_issue',
+};
+
 router.post("/action", requireAuth, async (req, res) => {
   const admin = getAdminClient();
   const { request_id, action, comments } = req.body;
-  // action in: Approved, Rejected, Reverted
 
-  const { data: request } = await admin.from("approval_requests").select(`*, workflow:approval_workflows(steps:approval_steps(*))`).eq("id", request_id).single();
+  if (!ACTION_PERM_MAP[action]) {
+    return res.status(400).json({ error: `Invalid action "${action}"` });
+  }
+
+  const { data: request } = await admin.from("approval_requests")
+    .select(`*, workflow:approval_workflows(steps:approval_steps(*))`)
+    .eq("id", request_id).single();
   if (!request) return res.status(404).json({ error: "Request not found" });
 
   const userId = req.userId;
-  
-  // Must verify if `req.userId` is the assigned approver OR global_admin override? (Trust frontend for now, or check here)
 
-  // 1. Log Action
+  // Resolve global admin
+  const { data: userRow } = await admin.from("users").select("role").eq("id", userId).maybeSingle();
+  const isGlobalAdmin = userRow?.role === "global_admin";
+
+  const stepsSorted = (request.workflow?.steps || []).slice().sort((a, b) => a.step_number - b.step_number);
+  const totalSteps = stepsSorted.length;
+  const permKey = ACTION_PERM_MAP[action];
+  const isPostIssue = action === "Recalled" || action === "Cancelled";
+
+  // ── Permission check ──
+  if (!isGlobalAdmin) {
+    if (isPostIssue) {
+      // Any step where this user has the post-issue power
+      const allowed = stepsSorted.some(s =>
+        String(s.approver_id) === String(userId) && !!(s.permissions || {})[permKey]
+      );
+      if (!allowed) {
+        return res.status(403).json({ error: `You are not authorized to ${action.toLowerCase()} this issued order.` });
+      }
+    } else {
+      // Must be the current step's approver and have the permission
+      const currentStep = stepsSorted.find(s => s.step_number === request.current_step);
+      if (!currentStep) return res.status(400).json({ error: "Workflow current step not found" });
+      const isApprover = String(currentStep.approver_id) === String(userId);
+      const hasPerm = !!(currentStep.permissions || {})[permKey];
+      if (!isApprover) return res.status(403).json({ error: "It is not your turn to act on this request." });
+      if (!hasPerm)    return res.status(403).json({ error: `Action "${action}" is not allowed at your stage.` });
+    }
+  }
+
+  // ── Log action ──
   await admin.from("approval_logs").insert({
     request_id,
     step_number: request.current_step,
@@ -252,28 +348,28 @@ router.post("/action", requireAuth, async (req, res) => {
     comments
   });
 
-  // 2. Adjust Request State
+  // ── Compute state transition ──
   let nextStep = request.current_step;
-  let nextStatus = action; // 'Rejected', 'Reverted'
+  let nextStatus = action; // default: Rejected, Reverted, Recalled, Cancelled
   let isFinal = false;
-
-  const totalSteps = request.workflow.steps.length;
 
   if (action === 'Approved') {
     if (nextStep < totalSteps) {
       nextStep += 1;
       nextStatus = 'Pending';
     } else {
-      nextStatus = 'Approved'; 
+      // Last stage approved — treat as final issue
+      nextStatus = 'Approved';
       isFinal = true;
     }
   } else if (action === 'Issued') {
-     nextStatus = 'Approved';
-     isFinal = true;
+    nextStatus = 'Approved';
+    isFinal = true;
   } else if (action === 'Recalled') {
-     nextStep = 1;
-     nextStatus = 'Recalled';
-     isFinal = false;
+    nextStep = 1;
+    nextStatus = 'Recalled';
+  } else if (action === 'Cancelled') {
+    nextStatus = 'Cancelled';
   }
 
   await admin.from("approval_requests").update({
@@ -282,10 +378,17 @@ router.post("/action", requireAuth, async (req, res) => {
   }).eq("id", request.id);
 
   // Sync back to procurement order status if module_key matches
-  if (request.module_key === "create_order") {
+  if (request.module_key === "procurement" || request.module_key === "create_order") {
      const docUpd = {};
-     if (action === 'Reverted') docUpd.status = 'Reverted';
-     if (action === 'Recalled') docUpd.status = 'Recalled';
+     if (action === 'Reverted' || action === 'Recalled' || action === 'Cancelled' || action === 'Rejected') {
+        await appendOrderHistorySnapshot(admin, {
+          documentId: request.document_id,
+          action,
+          comments,
+          actionBy: userId,
+        });
+     }
+     if (action === 'Reverted' || action === 'Recalled') docUpd.status = 'Draft';
      if (action === 'Rejected') docUpd.status = 'Rejected';
      if (action === 'Cancelled') docUpd.status = 'Cancelled';
      
@@ -305,38 +408,41 @@ router.post("/action", requireAuth, async (req, res) => {
           // Stamp issuedAt into totals JSON
           docUpd.totals = { ...(order?.totals || {}), issuedAt: new Date().toISOString() };
           
-          if (order && order.order_number.startsWith("PENDING-")) {
-            // 2. Compute current financial year in 2425 format
+          if (order && order.order_number?.startsWith("PENDING-")) {
+            // 2. Compute current financial year in 2024-25 format
             const now = new Date();
             const fyStart = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
             const fy = `${fyStart}-${String(fyStart + 1).slice(-2)}`;
+            const kindForSerial = order.order_type === "Supply" ? "Supply" : "SITC";
 
-            // 3. Fetch Serialization Settings for this site + FY
+            // 3. Fetch Serialization Settings for this site + FY + order_kind
             let { data: serialObj } = await admin
               .schema("procurement")
               .from("serialization_settings")
               .select("*")
               .eq("site_id", order.site_id)
               .eq("financial_year", fy)
-              .single();
+              .eq("order_kind", kindForSerial)
+              .maybeSingle();
 
-            // 4. If no record for this FY, create one starting at 1
+            // 4. If no record for this FY, create one starting at 0
             if (!serialObj) {
-              const { data: created } = await admin
+              const { data: created, error: insErr } = await admin
                 .schema("procurement")
                 .from("serialization_settings")
-                .insert({ site_id: order.site_id, financial_year: fy, current_number: 1 })
+                .insert({ site_id: order.site_id, financial_year: fy, current_number: 0, order_kind: kindForSerial })
                 .select()
                 .single();
+              if (insErr) console.error("Serial insert failed:", insErr.message);
               serialObj = created;
             }
 
             if (serialObj) {
-              const serialNum = serialObj.current_number;
+              const nextSerial = (serialObj.current_number || 0) + 1;
               const typeCode  = order.order_type === 'Supply' ? 'PO' : 'WO';
               const compCode  = order.companies?.company_code || 'CO';
               const siteCode  = order.sites?.site_code || 'SITE';
-              const finalNo   = `${compCode}/${siteCode}/${typeCode}/${fy}/${String(serialNum).padStart(3, '0')}`;
+              const finalNo   = `${compCode}/${siteCode}/${typeCode}/${fy}/${nextSerial}`;
 
               docUpd.order_number = finalNo;
 
@@ -344,7 +450,7 @@ router.post("/action", requireAuth, async (req, res) => {
               await admin
                 .schema("procurement")
                 .from("serialization_settings")
-                .update({ current_number: serialNum + 1 })
+                .update({ current_number: nextSerial })
                 .eq("id", serialObj.id);
 
               console.log(`✅ Order number assigned: ${finalNo}`);
@@ -358,7 +464,7 @@ router.post("/action", requireAuth, async (req, res) => {
      }
      
      if (Object.keys(docUpd).length > 0) {
-        await admin.from("purchase_orders").update(docUpd).eq("id", request.document_id);
+        await admin.schema("procurement").from("purchase_orders").update(docUpd).eq("id", request.document_id);
      }
   }
 

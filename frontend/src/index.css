@@ -12,6 +12,20 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Thin themed scrollbar (dark sidebar dropdowns, etc.) */
+.thin-scrollbar { scrollbar-width: thin; scrollbar-color: rgba(34,211,238,0.35) transparent; }
+.thin-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+.thin-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.thin-scrollbar::-webkit-scrollbar-thumb { background: rgba(34,211,238,0.30); border-radius: 9999px; }
+.thin-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(34,211,238,0.55); }
+
+/* Light variant for white panels */
+.thin-scrollbar-light { scrollbar-width: thin; scrollbar-color: rgba(100,116,139,0.30) transparent; }
+.thin-scrollbar-light::-webkit-scrollbar { width: 4px; height: 4px; }
+.thin-scrollbar-light::-webkit-scrollbar-track { background: transparent; }
+.thin-scrollbar-light::-webkit-scrollbar-thumb { background: rgba(100,116,139,0.30); border-radius: 9999px; }
+.thin-scrollbar-light::-webkit-scrollbar-thumb:hover { background: rgba(100,116,139,0.55); }
+
 /* Quill rich-text display (cards, history, view modal) */
 .quill-content ol { list-style: decimal !important; padding-left: 1.5rem !important; margin-bottom: 0.25rem; }
 .quill-content ul { list-style: disc    !important; padding-left: 1.5rem !important; margin-bottom: 0.25rem; }
