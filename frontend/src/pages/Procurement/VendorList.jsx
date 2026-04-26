@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Plus, Search, Pencil, Trash2, X, Building2, Upload, FileText, ChevronLeft, ChevronRight, Download, FileSpreadsheet, ChevronDown, Eye, Copy, Check } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, X, Building2, Upload, FileText, ChevronLeft, ChevronRight, Download, FileSpreadsheet, ChevronDown, Eye, Copy, Check, Trash, RotateCcw } from "lucide-react";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -12,7 +12,7 @@ const emptyForm = {
   gstin: "", pan: "", aadharNo: "", msmeNumber: "",
   bankName: "", accountHolder: "", accountNumber: "", ifscCode: "",
   bankBranch: "", bankCity: "", bankState: "", address: "",
-  siteCodes: [],
+  companyCodes: [], siteCodes: [],
   logo: null, logoPreview: "",
   docGst: null, docPan: null, docAadhaar: null, docCoi: null,
   docMsme: null, docCancelCheque: null, docOther: null, docOther2: null,
@@ -60,6 +60,7 @@ const DocUpload = ({ label, fieldKey, form, setForm }) => {
 const COLS = [
   { label: "Vendor ID",              key: "vendorCode",     w: "w-[9%] min-w-[100px]", mono: true },
   { label: "Vendor Firm Name",       key: "vendorName",     w: "w-[22%] min-w-[180px]" },
+  { label: "Company Codes",          key: "companyCodes",   w: "w-[10%] min-w-[110px]" },
   { label: "Site Codes",             key: "siteCodes",      w: "w-[8%] min-w-[80px]" },
   { label: "Email",                  key: "email",          w: "w-[18%] min-w-[160px]" },
   { label: "Contact Number",         key: "mobile",         w: "w-[12%] min-w-[120px]" },
@@ -118,9 +119,45 @@ export default function VendorList() {
   const [loading, setLoading]     = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [viewVendor, setViewVendor] = useState(null);
+  const [showTrash, setShowTrash] = useState(false);
+  const [trashVendors, setTrashVendors] = useState([]);
+  const [trashLoading, setTrashLoading] = useState(false);
+
+  const fetchTrash = async () => {
+    setTrashLoading(true);
+    try {
+      const res = await fetch(`${API}/api/procurement/vendors/trash`);
+      const data = await res.json();
+      setTrashVendors(data.vendors || []);
+    } catch { setTrashVendors([]); }
+    finally { setTrashLoading(false); }
+  };
+
+  const openTrash = () => { setShowTrash(true); fetchTrash(); };
+
+  const handleRestore = async (id) => {
+    try {
+      await fetch(`${API}/api/procurement/vendors/${id}/restore`, { method: "POST" });
+      showToast("Vendor restored");
+      fetchTrash();
+      fetchVendors();
+    } catch { showToast("Failed to restore", "error"); }
+  };
+
+  const handlePermanentDelete = async (id, name) => {
+    if (!confirm(`Permanently delete "${name}"?\n\nThis cannot be undone.`)) return;
+    try {
+      await fetch(`${API}/api/procurement/vendors/${id}/permanent`, { method: "DELETE" });
+      showToast("Vendor permanently deleted");
+      fetchTrash();
+    } catch { showToast("Failed to delete", "error"); }
+  };
   const [form, setForm]           = useState(emptyForm);
   const [editId, setEditId]       = useState(null);
   const [search, setSearch]       = useState("");
+  const [nameFilter, setNameFilter]     = useState([]);
+  const [entityFilter, setEntityFilter] = useState([]);
+  const [siteFilter, setSiteFilter]     = useState([]);
   const [saving, setSaving]       = useState(false);
   const [toast, setToast]         = useState(null);
   const [tab, setTab]             = useState("basic");
@@ -131,6 +168,8 @@ export default function VendorList() {
   const [bulkSaving, setBulkSaving] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const [sites, setSites]         = useState([]);
+  const [companies, setCompanies] = useState([]);
+  const [showCompanySearch, setShowCompanySearch] = useState(false);
   const [showSiteSearch, setShowSiteSearch] = useState(false);
   const [copiedKey, setCopiedKey] = useState(""); // `${vendorId}:${field}`
 
@@ -144,11 +183,15 @@ export default function VendorList() {
   const logoRef                   = useRef();
   const bulkRef                   = useRef();
   const siteRef                   = useRef();
+  const companyRef                = useRef();
 
-  useEffect(() => { fetchVendors(); fetchSites(); }, []);
+  useEffect(() => { fetchVendors(); fetchSites(); fetchCompanies(); }, []);
 
   useEffect(() => {
-    const click = (e) => { if (siteRef.current && !siteRef.current.contains(e.target)) setShowSiteSearch(false); };
+    const click = (e) => {
+      if (siteRef.current && !siteRef.current.contains(e.target)) setShowSiteSearch(false);
+      if (companyRef.current && !companyRef.current.contains(e.target)) setShowCompanySearch(false);
+    };
     document.addEventListener("mousedown", click);
     return () => document.removeEventListener("mousedown", click);
   }, []);
@@ -159,6 +202,14 @@ export default function VendorList() {
       const data = await res.json();
       setSites(data.sites || []);
     } catch { setSites([]); }
+  };
+
+  const fetchCompanies = async () => {
+    try {
+      const res = await fetch(`${API}/api/procurement/companies`);
+      const data = await res.json();
+      setCompanies(data.companies || []);
+    } catch { setCompanies([]); }
   };
 
   const fetchVendors = async () => {
@@ -199,7 +250,7 @@ export default function VendorList() {
       Object.entries(form).forEach(([k, v]) => {
         if (k === "logoPreview") return;
         if (v instanceof File) fd.append(k, v);
-        else if (k === "siteCodes") fd.append(k, JSON.stringify(v || []));
+        else if (k === "siteCodes" || k === "companyCodes") fd.append(k, JSON.stringify(v || []));
         else if (v) fd.append(k, v);
       });
       const url    = editId ? `${API}/api/procurement/vendors/${editId}` : `${API}/api/procurement/vendors`;
@@ -214,10 +265,15 @@ export default function VendorList() {
   };
 
   const handleDelete = async (id) => {
-    if (!confirm("Delete this vendor?")) return;
+    if (!confirm("Move this vendor to Trash? You can restore it later.")) return;
     try {
-      await fetch(`${API}/api/procurement/vendors/${id}`, { method: "DELETE" });
-      showToast("Vendor deleted");
+      const currentUser = JSON.parse(localStorage.getItem("bms_user") || "{}");
+      await fetch(`${API}/api/procurement/vendors/${id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deletedById: currentUser.id || "", deletedByName: currentUser.name || "" }),
+      });
+      showToast("Vendor moved to trash");
       fetchVendors();
     } catch { showToast("Failed to delete", "error"); }
   };
@@ -242,7 +298,7 @@ export default function VendorList() {
 
   /* ── Export helpers ── */
   const EXPORT_COLS = [
-    ["Vendor ID", "vendorCode"], ["Vendor Firm Name", "vendorName"], ["Site Codes", "siteCodes"], ["Email", "email"],
+    ["Vendor ID", "vendorCode"], ["Vendor Firm Name", "vendorName"], ["Company Codes", "companyCodes"], ["Site Codes", "siteCodes"], ["Email", "email"],
     ["Contact Person Name", "contactPerson"], ["Contact Person Number", "mobile"],
     ["GST No", "gstin"], ["PAN No", "pan"], ["Aadhar No", "aadharNo"],
     ["MSME Number", "msmeNumber"], ["Bank Name", "bankName"],
@@ -254,7 +310,7 @@ export default function VendorList() {
   const exportExcel = () => {
     const rows = filtered.map(v => Object.fromEntries(EXPORT_COLS.map(([h, k]) => {
       let val = v[k] || "";
-      if (k === "siteCodes") val = Array.isArray(v[k]) ? v[k].join(", ") : "";
+      if (k === "siteCodes" || k === "companyCodes") val = Array.isArray(v[k]) ? v[k].join(", ") : "";
       return [h, val];
     })));
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -274,7 +330,7 @@ export default function VendorList() {
       startY: 25,
       head: [EXPORT_COLS.map(([h]) => h)],
       body: filtered.map(v => EXPORT_COLS.map(([, k]) => {
-        if (k === "siteCodes") return Array.isArray(v[k]) ? v[k].join(", ") : "";
+        if (k === "siteCodes" || k === "companyCodes") return Array.isArray(v[k]) ? v[k].join(", ") : "";
         return v[k] || "";
       })),
       styles: { fontSize: 6.5, cellPadding: 2 },
@@ -288,6 +344,8 @@ export default function VendorList() {
   const downloadTemplate = () => {
     const ws = XLSX.utils.json_to_sheet([{
       "Vendor Firm Name": "ABC Constructions Pvt Ltd",
+      "Company Codes": "BITL, ZYX",
+      "Site Codes": "SITE-001, SITE-002",
       "Email": "abc@example.com",
       "Contact Person Name": "Rajesh Kumar",
       "Contact Person Number": "9876543210",
@@ -348,12 +406,29 @@ export default function VendorList() {
     setBulkSaving(false);
   };
 
-  const filtered   = vendors.filter(v =>
-    v.vendorCode?.toLowerCase().includes(search.toLowerCase()) ||
-    v.vendorName?.toLowerCase().includes(search.toLowerCase()) ||
-    v.gstin?.toLowerCase().includes(search.toLowerCase()) ||
-    v.email?.toLowerCase().includes(search.toLowerCase())
-  );
+  const filterOptions = React.useMemo(() => {
+    const names = new Set(), entities = new Set(), sites = new Set();
+    vendors.forEach(v => {
+      if (v.vendorName) names.add(v.vendorName);
+      (v.companyCodes || []).forEach(c => c && entities.add(c));
+      (v.siteCodes || []).forEach(s => s && sites.add(s));
+    });
+    return { names: [...names].sort(), entities: [...entities].sort(), sites: [...sites].sort() };
+  }, [vendors]);
+
+  const filtered = vendors.filter(v => {
+    if (nameFilter.length && !nameFilter.includes(v.vendorName)) return false;
+    if (entityFilter.length && !(v.companyCodes || []).some(c => entityFilter.includes(c))) return false;
+    if (siteFilter.length && !(v.siteCodes || []).some(s => siteFilter.includes(s))) return false;
+    const t = search.toLowerCase();
+    if (!t) return true;
+    return (
+      v.vendorCode?.toLowerCase().includes(t) ||
+      v.vendorName?.toLowerCase().includes(t) ||
+      v.gstin?.toLowerCase().includes(t) ||
+      v.email?.toLowerCase().includes(t)
+    );
+  });
   const totalPages = Math.ceil(filtered.length / PER_PAGE) || 1;
   const paginated  = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
 
@@ -409,6 +484,11 @@ export default function VendorList() {
               <Upload size={14} /> Bulk Upload
             </button>
           )}
+
+          <button onClick={openTrash}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-all" title="View deleted vendors">
+            <Trash size={14} /> Trash
+          </button>
 
           {canAdd && (
             <button onClick={openAdd}
@@ -483,12 +563,25 @@ export default function VendorList() {
         </div>
       )}
 
-      {/* Search */}
-      <div className="relative mb-4">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-        <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
-          placeholder="Search by name, GSTIN or email…"
-          className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm outline-none focus:border-indigo-400 bg-white text-slate-700" />
+      {/* Search + Filters */}
+      <div className="flex flex-col gap-2 mb-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="relative lg:max-w-md flex-1">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
+            placeholder="Search by name, GSTIN or email…"
+            className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:border-indigo-400 bg-white text-slate-700" />
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <VendorMultiFilter label="Name" options={filterOptions.names} selected={nameFilter} onChange={v => { setNameFilter(v); setPage(1); }} />
+          <VendorMultiFilter label="Entity" options={filterOptions.entities} selected={entityFilter} onChange={v => { setEntityFilter(v); setPage(1); }} />
+          <VendorMultiFilter label="Site" options={filterOptions.sites} selected={siteFilter} onChange={v => { setSiteFilter(v); setPage(1); }} />
+          {(nameFilter.length || entityFilter.length || siteFilter.length) ? (
+            <button onClick={() => { setNameFilter([]); setEntityFilter([]); setSiteFilter([]); setPage(1); }}
+              className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-500 hover:bg-slate-50">
+              <X size={12} /> Clear
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {/* Table */}
@@ -498,19 +591,29 @@ export default function VendorList() {
         ) : filtered.length === 0 ? (
           <div className="py-16 text-center text-slate-300 font-bold uppercase tracking-widest text-xs">No vendors found</div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto thin-scroll">
+            <style>{`
+              .thin-scroll { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+              .thin-scroll::-webkit-scrollbar { height: 6px; width: 6px; }
+              .thin-scroll::-webkit-scrollbar-track { background: transparent; }
+              .thin-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
+              .thin-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+            `}</style>
             <table className="w-full text-sm border-collapse border border-slate-200">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 divide-x divide-slate-200">
-                  <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500 sticky-left-0 w-[50px]">
-                    S.NO
-                  </th>
-                  {COLS.map(c => (
-                    <th key={c.key} className={`px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500 whitespace-nowrap ${c.w}`}>
-                      {c.label}
-                    </th>
-                  ))}
-                  <th className="px-4 py-3 text-right text-[11px] font-bold uppercase tracking-wider text-slate-500 w-[100px] sticky-right-0">
+                  {COLS.map((c, i) => {
+                    const isVendorName = c.key === "vendorName";
+                    return (
+                      <th
+                        key={c.key}
+                        className={`px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500 whitespace-nowrap ${c.w} ${isVendorName ? "sticky left-0 z-20 bg-slate-50 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]" : ""}`}
+                      >
+                        {c.label}
+                      </th>
+                    );
+                  })}
+                  <th className="px-4 py-3 text-right text-[11px] font-bold uppercase tracking-wider text-slate-500 w-[100px] sticky right-0 z-20 bg-slate-50 shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.08)]">
                     Actions
                   </th>
                 </tr>
@@ -518,18 +621,21 @@ export default function VendorList() {
               <tbody className="divide-y divide-slate-200">
                 {paginated.map((v, idx) => (
                   <tr key={v.id} className="hover:bg-slate-50/60 transition-colors divide-x divide-slate-200 group">
-                    <td className="px-4 py-3 text-xs font-medium text-slate-400 sticky-left-0 w-[50px] text-center">
-                      {(page - 1) * PER_PAGE + idx + 1}
-                    </td>
-                    {COLS.map(c => (
-                      <td key={c.key} className={`px-4 py-3 text-slate-700 whitespace-nowrap ${c.w}`}>
+                    {COLS.map(c => {
+                      const isVendorName = c.key === "vendorName";
+                      return (
+                      <td key={c.key} className={`px-4 py-3 text-slate-700 whitespace-nowrap ${c.w} ${isVendorName ? "sticky left-0 z-10 bg-white group-hover:bg-slate-50 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]" : ""}`}>
                         {c.key === "vendorName" ? (
                           <span className="font-semibold text-slate-800 break-words whitespace-normal">{v[c.key] || "—"}</span>
-                        ) : c.key === "siteCodes" ? (
+                        ) : c.key === "siteCodes" || c.key === "companyCodes" ? (
                           <div className="flex flex-wrap gap-1">
-                            {v.siteCodes?.length > 0 ? (
-                              v.siteCodes.map((sc, i) => (
-                                <span key={i} className="px-1.5 py-0.5 bg-purple-50 text-purple-600 text-[10px] font-bold rounded border border-purple-100 uppercase tracking-tight">
+                            {v[c.key]?.filter(Boolean).length > 0 ? (
+                              v[c.key].filter(Boolean).map((sc, i) => (
+                                <span key={i} className={`px-1.5 py-0.5 text-[10px] font-bold rounded border uppercase tracking-tight ${
+                                  c.key === "companyCodes"
+                                    ? "bg-blue-50 text-blue-700 border-blue-100"
+                                    : "bg-purple-50 text-purple-600 border-purple-100"
+                                }`}>
                                   {sc}
                                 </span>
                               ))
@@ -577,8 +683,9 @@ export default function VendorList() {
                           </span>
                         )}
                       </td>
-                    ))}
-                    <td className="px-4 py-3 sticky-right-0 w-[100px]">
+                      );
+                    })}
+                    <td className="px-4 py-3 sticky right-0 z-10 bg-white group-hover:bg-slate-50 w-[100px] shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.08)]">
                       <div className="flex items-center justify-end gap-1">
                         <button onClick={() => setViewVendor(v)}
                           className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all" title="View Details">
@@ -736,6 +843,52 @@ export default function VendorList() {
                       <input className={inp} value={form.msmeNumber}
                         onChange={e => setForm(f => ({ ...f, msmeNumber: e.target.value }))}
                         placeholder="MSME Reg. No. (if any)" />
+                    </div>
+
+                    <div className="col-span-2 relative" ref={companyRef}>
+                      <label className={lbl}>Associated Company Codes</label>
+                      <div onClick={() => setShowCompanySearch(!showCompanySearch)}
+                        className={`min-h-[42px] border border-slate-200 rounded-xl px-3 py-2 text-sm flex flex-wrap gap-1 cursor-pointer transition-all ${showCompanySearch ? "ring-2 ring-indigo-50 border-indigo-400" : "hover:border-slate-300"}`}>
+                        {form.companyCodes.filter(Boolean).length === 0 ? (
+                          <span className="text-slate-400 py-0.5">Select companies...</span>
+                        ) : (
+                          form.companyCodes.filter(Boolean).map(cc => (
+                            <span key={cc} className="flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 rounded-lg text-xs font-semibold border border-blue-100 group">
+                              {cc}
+                              <X size={12} className="text-blue-300 group-hover:text-red-500" onClick={(e) => {
+                                e.stopPropagation();
+                                setForm(f => ({ ...f, companyCodes: f.companyCodes.filter(x => x !== cc) }));
+                              }} />
+                            </span>
+                          ))
+                        )}
+                      </div>
+
+                      {showCompanySearch && (
+                        <div className="absolute top-full left-0 right-0 mt-1 z-30 bg-white border border-slate-200 rounded-xl shadow-xl max-h-52 overflow-y-auto">
+                          <div className="py-1">
+                            {companies.length === 0 ? (
+                              <div className="px-4 py-3 text-xs text-slate-400 italic">No companies found...</div>
+                            ) : (
+                              companies.map(c => {
+                                const isSel = form.companyCodes.includes(c.companyCode);
+                                return (
+                                  <div key={c.id} onClick={() => {
+                                    setForm(f => {
+                                      const newCodes = isSel ? f.companyCodes.filter(x => x !== c.companyCode) : [...f.companyCodes, c.companyCode];
+                                      return { ...f, companyCodes: newCodes };
+                                    });
+                                  }}
+                                  className={`px-4 py-2.5 text-xs flex items-center justify-between cursor-pointer hover:bg-slate-50 transition-colors ${isSel ? "bg-blue-50/70 text-blue-700 font-bold" : "text-slate-600"}`}>
+                                    <span>{c.companyCode} <span className="text-slate-400 font-normal ml-1">- {c.companyName}</span></span>
+                                    {isSel && <div className="w-1.5 h-1.5 rounded-full bg-blue-600" />}
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div className="col-span-2 relative" ref={siteRef}>
@@ -933,15 +1086,97 @@ export default function VendorList() {
       )}
 
       {/* ── VIEW MODAL ── */}
+      {showTrash && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-lg bg-red-50 flex items-center justify-center">
+                  <Trash size={16} className="text-red-500" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-slate-800">Vendor Trash</h2>
+                  <p className="text-[11px] text-slate-500">{trashVendors.length} deleted vendor(s) — restore or delete permanently</p>
+                </div>
+              </div>
+              <button onClick={() => setShowTrash(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 bg-slate-50">
+              {trashLoading ? (
+                <div className="py-16 text-center text-sm text-slate-400">Loading…</div>
+              ) : trashVendors.length === 0 ? (
+                <div className="py-16 text-center">
+                  <Trash size={32} className="mx-auto text-slate-200 mb-2" />
+                  <p className="text-sm font-bold text-slate-400">Trash is empty</p>
+                  <p className="text-xs text-slate-400 mt-1">Deleted vendors will appear here</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {trashVendors.map(v => {
+                    const d = v.deletedAt ? new Date(v.deletedAt) : null;
+                    const dateStr = d && !isNaN(d.getTime())
+                      ? `${d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })} at ${d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}`
+                      : "";
+                    return (
+                      <div key={v.id} className="bg-white rounded-xl border border-slate-200 p-4 flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-mono text-[11px] text-slate-500">{v.vendorCode}</span>
+                            <span className="font-bold text-sm text-slate-800 truncate">{v.vendorName}</span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 truncate">{v.email || "—"} · {v.mobile || "—"}</p>
+                          {dateStr && (
+                            <p className="text-[11px] text-red-500 mt-1">
+                              Deleted by <span className="font-semibold">{v.deletedByName || "—"}</span> on <span className="font-semibold">{dateStr}</span>
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button onClick={() => handleRestore(v.id)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-bold hover:bg-emerald-100 transition-all">
+                            <RotateCcw size={12} /> Restore
+                          </button>
+                          <button onClick={() => handlePermanentDelete(v.id, v.vendorName)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 text-red-600 text-xs font-bold hover:bg-red-100 transition-all">
+                            <Trash2 size={12} /> Delete
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {viewVendor && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
-              <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                <Building2 size={18} className="text-indigo-600" />
-                {viewVendor.vendorName}
-              </h2>
-              <button onClick={() => setViewVendor(null)} className="text-slate-400 hover:text-slate-600 transition-colors">
+            <div className="flex items-start justify-between gap-4 px-6 py-4 border-b border-slate-100 shrink-0">
+              <div className="flex flex-col gap-0.5 min-w-0">
+                <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                  <Building2 size={18} className="text-indigo-600 shrink-0" />
+                  <span className="truncate">{viewVendor.vendorName}</span>
+                </h2>
+                {(viewVendor.createdByName || viewVendor.createdAt) && (
+                  <p className="text-[11px] text-slate-500 ml-7">
+                    Registered by <span className="font-semibold text-slate-700">{viewVendor.createdByName || "—"}</span>
+                    {viewVendor.createdAt && (() => {
+                      const d = new Date(viewVendor.createdAt);
+                      if (isNaN(d.getTime())) return null;
+                      const date = d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+                      const time = d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
+                      return <> on <span className="font-semibold text-slate-700">{date}</span> at <span className="font-semibold text-slate-700">{time}</span></>;
+                    })()}
+                  </p>
+                )}
+              </div>
+              <button onClick={() => setViewVendor(null)} className="text-slate-400 hover:text-slate-600 transition-colors shrink-0">
                 <X size={18} />
               </button>
             </div>
@@ -989,6 +1224,20 @@ export default function VendorList() {
                   <div className="bg-slate-50 rounded-xl p-3 border border-slate-100/50">
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">MSME NO</p>
                     <p className="text-sm font-semibold text-slate-700 break-words">{viewVendor.msmeNumber || "—"}</p>
+                  </div>
+                  <div className="col-span-full bg-slate-50 rounded-xl p-3 border border-slate-100/50">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Associated Company Codes</p>
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {viewVendor.companyCodes?.length > 0 ? (
+                        viewVendor.companyCodes.map((cc, i) => (
+                          <span key={i} className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded border border-blue-200 uppercase tracking-tight">
+                            {cc}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-sm text-slate-400 font-medium italic">No companies associated</span>
+                      )}
+                    </div>
                   </div>
                   <div className="col-span-full bg-slate-50 rounded-xl p-3 border border-slate-100/50">
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Associated Site Codes</p>
@@ -1118,6 +1367,75 @@ export default function VendorList() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function VendorMultiFilter({ label, options, selected, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [open]);
+
+  const toggle = (value) => {
+    if (selected.includes(value)) onChange(selected.filter(v => v !== value));
+    else onChange([...selected, value]);
+  };
+
+  const filtered = query ? options.filter(o => String(o).toLowerCase().includes(query.toLowerCase())) : options;
+
+  return (
+    <div ref={ref} className="relative">
+      <button onClick={() => setOpen(o => !o)}
+        className={`inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-xs font-bold shadow-sm transition ${selected.length ? "border-indigo-300 bg-indigo-50 text-indigo-700" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}>
+        <span>{label}</span>
+        {selected.length > 0 && (
+          <span className="grid h-5 min-w-5 place-items-center rounded-full bg-indigo-600 px-1.5 text-[10px] font-black text-white">{selected.length}</span>
+        )}
+        <ChevronDown size={12} className={`transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="absolute right-0 z-30 mt-2 w-64 rounded-lg border border-slate-200 bg-white shadow-2xl">
+          <div className="border-b border-slate-100 p-2">
+            <div className="flex items-center gap-2 rounded-md border border-slate-200 px-2">
+              <Search size={12} className="text-slate-400" />
+              <input autoFocus value={query} onChange={e => setQuery(e.target.value)}
+                placeholder={`Search ${label.toLowerCase()}...`}
+                className="h-8 w-full bg-transparent text-xs outline-none placeholder:text-slate-400" />
+            </div>
+          </div>
+          <div className="max-h-60 overflow-y-auto py-1">
+            {filtered.length === 0 ? (
+              <p className="px-3 py-4 text-center text-xs text-slate-400">No options</p>
+            ) : (
+              filtered.map(opt => {
+                const checked = selected.includes(opt);
+                return (
+                  <button key={opt} onClick={() => toggle(opt)}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-slate-700 hover:bg-slate-50">
+                    <span className={`grid h-4 w-4 place-items-center rounded border ${checked ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-300 bg-white"}`}>
+                      {checked && <span className="text-[10px] font-black leading-none">✓</span>}
+                    </span>
+                    <span className="truncate">{opt}</span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+          {selected.length > 0 && (
+            <div className="flex items-center justify-between border-t border-slate-100 px-3 py-2">
+              <span className="text-[11px] font-bold text-slate-500">{selected.length} selected</span>
+              <button onClick={() => onChange([])} className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800">Clear</button>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -558,8 +558,16 @@ const getNextVendorCode = async () => {
 router.get("/vendors", async (_req, res) => {
   try {
     const { data, error } = await supabase
-      .schema("procurement").from("vendors").select("*").order("vendor_code", { ascending: true });
+      .schema("procurement").from("vendors").select("*").is("deleted_at", null).order("vendor_code", { ascending: true });
     if (error) throw error;
+
+    const userIds = [...new Set((data || []).map(r => r.created_by_id).filter(Boolean))];
+    const userNameById = new Map();
+    if (userIds.length) {
+      const { data: users } = await supabase.from("users").select("id, name, email").in("id", userIds);
+      (users || []).forEach(u => userNameById.set(u.id, u.name || u.email || ""));
+    }
+
     const vendors = (data || []).map(r => ({
       id:             r.id,
       vendorCode:     r.vendor_code     || "",
@@ -579,6 +587,7 @@ router.get("/vendors", async (_req, res) => {
       contactPerson:  r.contact_person  || "",
       mobile:         r.mobile          || "",
       email:          r.email           || "",
+      companyCodes:   parseJsonArr(r.company_codes).map(x => String(x || "").trim()).filter(Boolean),
       logoUrl:             r.logo_url              || "",
       docGstUrl:           r.doc_gst_url           || "",
       docPanUrl:           r.doc_pan_url           || "",
@@ -590,7 +599,8 @@ router.get("/vendors", async (_req, res) => {
       docOther2Url:        r.doc_other2_url        || "",
       siteCodes:           parseJsonArr(r.site_codes),
       createdById:         r.created_by_id         || "",
-      createdByName:       r.created_by_name       || "",
+      createdByName:       r.created_by_name       || userNameById.get(r.created_by_id) || "",
+      createdAt:           r.created_at            || "",
     }));
     res.json({ vendors });
   } catch (err) {
@@ -636,6 +646,7 @@ router.post("/vendors", vendorUpload, async (req, res) => {
       contact_person:  b.contactPerson  || "",
       mobile:          b.mobile         || "",
       email:           b.email          || "",
+      company_codes:   JSON.stringify(parseJsonArr(req.body.companyCodes).map(x => String(x || "").trim()).filter(Boolean)),
       logo_url:              logoUrl             || "",
       doc_gst_url:           docGstUrl           || "",
       doc_pan_url:           docPanUrl           || "",
@@ -693,6 +704,7 @@ router.put("/vendors/:id", vendorUpload, async (req, res) => {
       contact_person:  b.contactPerson  || "",
       mobile:          b.mobile         || "",
       email:           b.email          || "",
+      company_codes:   JSON.stringify(parseJsonArr(b.companyCodes).map(x => String(x || "").trim()).filter(Boolean)),
       logo_url:              newLogo             || b.logoUrl            || "",
       doc_gst_url:           newDocGst           || b.docGstUrl          || "",
       doc_pan_url:           newDocPan           || b.docPanUrl          || "",
@@ -714,11 +726,74 @@ router.put("/vendors/:id", vendorUpload, async (req, res) => {
 
 router.delete("/vendors/:id", async (req, res) => {
   try {
-    const { error } = await supabase.schema("procurement").from("vendors").delete().eq("id", req.params.id);
+    const { error } = await supabase.schema("procurement").from("vendors").update({
+      deleted_at: new Date().toISOString(),
+      deleted_by_id: req.body?.deletedById || req.query?.deletedById || null,
+      deleted_by_name: req.body?.deletedByName || req.query?.deletedByName || "",
+    }).eq("id", req.params.id);
     if (error) throw error;
     res.json({ success: true });
   } catch (err) {
     console.error("Vendor delete error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/vendors/trash", async (_req, res) => {
+  try {
+    const { data, error } = await supabase
+      .schema("procurement").from("vendors").select("id, vendor_code, vendor_name, email, mobile, gstin, deleted_at, deleted_by_id, deleted_by_name")
+      .not("deleted_at", "is", null)
+      .order("deleted_at", { ascending: false });
+    if (error) throw error;
+
+    const userIds = [...new Set((data || []).map(r => r.deleted_by_id).filter(Boolean))];
+    const userNameById = new Map();
+    if (userIds.length) {
+      const { data: users } = await supabase.from("users").select("id, name, email").in("id", userIds);
+      (users || []).forEach(u => userNameById.set(u.id, u.name || u.email || ""));
+    }
+
+    res.json({
+      vendors: (data || []).map(r => ({
+        id: r.id,
+        vendorCode: r.vendor_code || "",
+        vendorName: r.vendor_name || "",
+        email: r.email || "",
+        mobile: r.mobile || "",
+        gstin: r.gstin || "",
+        deletedAt: r.deleted_at || "",
+        deletedByName: r.deleted_by_name || userNameById.get(r.deleted_by_id) || "",
+      })),
+    });
+  } catch (err) {
+    console.error("Vendors trash error:", err.message);
+    res.json({ vendors: [] });
+  }
+});
+
+router.post("/vendors/:id/restore", async (req, res) => {
+  try {
+    const { error } = await supabase.schema("procurement").from("vendors").update({
+      deleted_at: null,
+      deleted_by_id: null,
+      deleted_by_name: null,
+    }).eq("id", req.params.id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Vendor restore error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete("/vendors/:id/permanent", async (req, res) => {
+  try {
+    const { error } = await supabase.schema("procurement").from("vendors").delete().eq("id", req.params.id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Vendor permanent delete error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -731,7 +806,10 @@ router.post("/vendors/bulk", async (req, res) => {
     const { data: existingV } = await supabase.schema("procurement").from("vendors").select("vendor_code");
     const existingNums = (existingV || []).map(r => parseInt((r.vendor_code || "").replace("VEN-", "")) || 0);
     let nextNum = (existingNums.length ? Math.max(...existingNums) : 0) + 1;
-    const records = rows.map(r => ({
+    const records = rows.map(r => {
+      const siteCodes = r["Site Codes"] || r["Site Code"] || r["siteCodes"] || r["siteCode"] || "";
+      const companyCodes = r["Company Codes"] || r["Company Code"] || r["companyCodes"] || r["companyCode"] || "";
+      return {
       vendor_code:     `VEN-${String(nextNum++).padStart(3, "0")}`,
       vendor_name:     r["Vendor Firm Name"]       || "",
       email:           r["Email"]                  || "",
@@ -749,10 +827,12 @@ router.post("/vendors/bulk", async (req, res) => {
       bank_city:       r["Bank City"]              || "",
       bank_state:      r["Bank State"]             || "",
       address:         r["Address"]                || "",
-      site_codes:      JSON.stringify((r["Site Codes"] || "").toString().split(",").map(sc => sc.trim()).filter(Boolean)),
+      company_codes:   JSON.stringify(companyCodes.toString().split(",").map(cc => cc.trim()).filter(Boolean)),
+      site_codes:      JSON.stringify(siteCodes.toString().split(",").map(sc => sc.trim()).filter(Boolean)),
       created_by_id:   req.body.createdById        || null,
       created_by_name: req.body.createdByName      || "Bulk Upload",
-    })).filter(r => r.vendor_name);
+      };
+    }).filter(r => r.vendor_name);
     if (!records.length) return res.status(400).json({ error: "No valid rows (Vendor Firm Name required)" });
     const { error } = await supabase.schema("procurement").from("vendors").insert(records);
     if (error) throw error;

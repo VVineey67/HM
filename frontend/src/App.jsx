@@ -24,6 +24,7 @@ const pushUrl = (tab, project) => {
 
 import About from "./pages/About";
 import Profile from "./pages/Profile";
+import MasterData from "./pages/MasterData";
  
 import View3D from "./pages/Model";
 import Dashboard from "./pages/Dashboard";
@@ -251,6 +252,9 @@ function App() {
     if (activeTab === "proc_setup__contact_list") return <ContactList />;
     if (activeTab === "proc_setup__annexure") return <AnnexureMaster />;
     if (activeTab === "approvals__config") return <ApprovalConfig showToast={(msg, type) => alert(`${type?.toUpperCase()}: ${msg}`)} />;
+
+    if (activeTab === "master_data" || activeTab === "master_data__vendor_master_data") return <MasterData view="vendor" />;
+    if (activeTab === "master_data__item_master_data") return <MasterData view="item" />;
 
     if (activeTab === "master_data") {
       return (

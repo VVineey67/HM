@@ -18,7 +18,8 @@ const globalMenu = [
     sub: ["Intake", "Order"] },
   { id: "proc_setup",  label: "Procurement Setup", icon: Settings2,
     sub: ["Company List","Site List","Vendor List","UOM","Category List","Item List","Term Condition","Payment Terms","Government Laws","Contact List","Annexure"] },
-  { id: "master_data", label: "Master Data",       icon: Database        },
+  { id: "master_data", label: "Master Data",       icon: Database,
+    sub: ["Vendor Master Data", "Item Master Data"] },
   { id: "audit",       label: "Audit",             icon: History         },
 ];
 
@@ -104,6 +105,8 @@ const TAB_MODULE_KEY = {
   images__compare_images:         "compare_images",
   approvals__config:              "approval_workflows",
   master_data:                    "master_data",
+  master_data__vendor_master_data: "master_data",
+  master_data__item_master_data:   "master_data",
   audit:                          "audit",
 };
 
@@ -323,7 +326,7 @@ const Sidebar = ({
                   initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
                   transition={{ duration: 0.12 }}
                   className="rounded-xl overflow-hidden mb-2 shadow-2xl"
-                  style={{ background: "#2c2c2e", border: "1px solid rgba(255,255,255,0.1)" }}
+                  style={{ background: "#0a1828", border: "1px solid rgba(34,211,238,0.18)" }}
                 >
                   {projects.map(p => {
                     const name    = typeof p === "string" ? p : p.name;
@@ -332,7 +335,7 @@ const Sidebar = ({
                       <button key={name}
                         onClick={() => { setSelectedProject(name); setProjOpen(false); }}
                         className={`w-full text-left px-3 py-2 text-[12.5px] transition-all flex items-center gap-2
-                          ${selectedProject === name ? "text-white font-semibold bg-white/8" : "text-[#8b8b8f] hover:bg-white/5 hover:text-white"}`}
+                          ${selectedProject === name ? "text-white font-semibold bg-cyan-400/10" : "text-[#8b95a3] hover:bg-cyan-400/5 hover:text-cyan-100"}`}
                       >
                         {logoUrl ? (
                           <img src={logoUrl} alt={name} className="w-5 h-5 rounded object-cover shrink-0" />

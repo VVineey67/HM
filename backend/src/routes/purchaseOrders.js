@@ -19,6 +19,16 @@ const sanitizeRichTextDeep = (value) => {
   return normalizeNbsp(value);
 };
 
+const parseJsonArr = (v) => {
+  if (Array.isArray(v)) return v;
+  try {
+    const parsed = JSON.parse(v || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return String(v || "").split(",").map(x => x.trim()).filter(Boolean);
+  }
+};
+
 /* ─── Storage upload helper ─── */
 const uploadToStorage = async (bucket, path, buffer, mimetype) => {
   const { error } = await supabase.storage
@@ -149,6 +159,110 @@ router.get("/", async (req, res) => {
     console.log(`Fetched ${data?.length || 0} orders from DB`);
     res.json({ orders: sanitizeRichTextDeep(data || []) });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/master/vendor-data", async (_req, res) => {
+  try {
+    const [ordersRes, vendorsRes] = await Promise.all([
+      supabase.schema("procurement")
+        .from("purchase_orders")
+        .select("id, order_number, order_type, status, totals, vendor_id, site_id, snapshot, created_at, date_of_creation, sites(site_code, city, state), companies(company_code), vendors(id, vendor_code, vendor_name, email, mobile, bank_city, bank_state, address, company_codes)")
+        .eq("status", "Issued")
+        .order("created_at", { ascending: false }),
+      supabase.schema("procurement")
+        .from("vendors")
+        .select("id, vendor_code, vendor_name, email, mobile, bank_city, bank_state, company_codes, site_codes")
+        .order("vendor_code", { ascending: true }),
+    ]);
+    if (ordersRes.error) throw ordersRes.error;
+    if (vendorsRes.error) throw vendorsRes.error;
+    const orders = ordersRes.data || [];
+    const allVendors = vendorsRes.data || [];
+
+    const { data: orderItems, error: itemErr } = await supabase.schema("procurement")
+      .from("purchase_order_items")
+      .select("order_id, item_id, description, items(material_name, item_code)");
+    if (itemErr) throw itemErr;
+
+    const itemsByOrder = new Map();
+    (orderItems || []).forEach(row => {
+      const name = row.items?.material_name || row.description || "";
+      if (!name) return;
+      const list = itemsByOrder.get(row.order_id) || [];
+      list.push(name);
+      itemsByOrder.set(row.order_id, list);
+    });
+
+    const getTaxableOrderValue = (totals = {}) => {
+      const subtotal = Number(totals.subtotal) || 0;
+      const discount = Number(totals.totalDiscountAmt) || 0;
+      const freight = Number(totals.frightCharges ?? totals.fright) || 0;
+      return Math.max(subtotal - discount + freight, 0);
+    };
+
+    const orderRows = orders.map(order => {
+      const vendor = order.vendors || order.snapshot?.vendor || {};
+      const site = order.sites || order.snapshot?.site || {};
+      const uniqueItems = [...new Set((itemsByOrder.get(order.id) || []).map(x => String(x).trim()).filter(Boolean))];
+
+      return {
+        orderId: order.id,
+        vendorId: vendor.id || order.vendor_id || "",
+        vendorCode: vendor.vendor_code || vendor.vendorCode || "",
+        vendorName: vendor.vendor_name || vendor.vendorName || "",
+        companyCodes: (parseJsonArr(vendor.company_codes).length
+          ? parseJsonArr(vendor.company_codes)
+          : [order.companies?.company_code || order.snapshot?.company?.companyCode]
+        ).map(c => String(c || "").trim()).filter(Boolean),
+        state: vendor.bank_state || vendor.state || site.state || "",
+        city: vendor.bank_city || vendor.city || site.city || "",
+        siteCode: site.site_code || site.siteCode || "",
+        orderType: order.order_type || "",
+        orderNo: order.order_number || "",
+        item: uniqueItems.join(", "),
+        orderValue: getTaxableOrderValue(order.totals || {}),
+        vendorEmail: vendor.email || "",
+        vendorContactNo: vendor.mobile || vendor.contactNo || vendor.contact_person_number || "",
+        createdAt: order.date_of_creation || order.created_at || "",
+        isPlaceholder: false,
+      };
+    }).filter(row => row.vendorName || row.vendorCode || row.orderNo);
+
+    const vendorIdsWithOrders = new Set(orderRows.map(r => r.vendorId).filter(Boolean));
+
+    const placeholderRows = allVendors
+      .filter(v => !vendorIdsWithOrders.has(v.id))
+      .flatMap(v => {
+        const siteCodes = parseJsonArr(v.site_codes).map(s => String(s || "").trim()).filter(Boolean);
+        const base = {
+          orderId: "",
+          vendorId: v.id || "",
+          vendorCode: v.vendor_code || "",
+          vendorName: v.vendor_name || "",
+          companyCodes: parseJsonArr(v.company_codes).map(c => String(c || "").trim()).filter(Boolean),
+          state: v.bank_state || "",
+          city: v.bank_city || "",
+          orderType: "",
+          orderNo: "",
+          item: "",
+          orderValue: null,
+          vendorEmail: v.email || "",
+          vendorContactNo: v.mobile || "",
+          createdAt: "",
+          isPlaceholder: true,
+        };
+        if (!siteCodes.length) return [{ ...base, siteCode: "" }];
+        return siteCodes.map(sc => ({ ...base, siteCode: sc }));
+      })
+      .filter(row => row.vendorName || row.vendorCode);
+
+    const rows = [...orderRows, ...placeholderRows];
+
+    res.json({ rows: sanitizeRichTextDeep(rows) });
+  } catch (err) {
+    console.error("Vendor master data error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
