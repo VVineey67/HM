@@ -36,15 +36,18 @@ const cx = (...classes) => classes.filter(Boolean).join(" ");
 const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
 const TAB_MODULE_KEY = {
-  global_dashboard: "dashboard",
-  approvals: "approval_requests",
+  global_dashboard: "global_dashboard",
+  approvals: "inbox",
   approvals__orders: "order",
   approvals__intake: "intake",
   approvals__payments: "payment_request",
-  master_data: "master_data",
-  master_data__vendor_master_data: "master_data",
-  master_data__item_master_data: "master_data",
+  master_data__vendor:   "master_data_vendor",
+  master_data__products: "master_data_products",
+  master_data__orders:   "master_data_orders",
+  master_data__intakes:  "master_data_intakes",
   audit: "audit",
+  proc_setup__contact_list: "contact_list",
+  proc_setup__annexure: "annexure",
   proc_setup__company_list: "company_list",
   proc_setup__site_list: "site_list",
   proc_setup__vendor_list: "vendor_list",
@@ -56,10 +59,8 @@ const TAB_MODULE_KEY = {
   proc_setup__payment_clauses: "payment_terms",
   proc_setup__government_laws: "government_laws",
   proc_setup__annexure: "annexure",
-  boq_prepare: "boq_prepare",
   dashboard: "dashboard",
   view_3d: "view_3d",
-  images__all_images: "all_images",
   procurement__intake: "intake",
   procurement__orders: "order",
   inventory__received_material_grn: "received_record",
@@ -274,18 +275,23 @@ export default function Sidebar({
     let alive = true;
     (async () => {
       try {
-        const [ordersRes, intakesRes] = await Promise.all([
+        const [ordersRes, intakesRes, amendRes] = await Promise.all([
           fetch(`${API}/api/orders`),
           fetch(`${API}/api/intakes`),
+          fetch(`${API}/api/amendments/requests`, {
+            headers: { 'Authorization': `Bearer ${localStorage.getItem("bms_token") || ""}` }
+          })
         ]);
-        const [ordersData, intakesData] = await Promise.all([
-          ordersRes.json().catch(() => ({})),
-          intakesRes.json().catch(() => ({})),
-        ]);
-        const orderCount = (ordersData.orders || []).filter((o) => ["Review", "Pending Issue"].includes(o.status)).length;
-        const intakeCount = (intakesData.intakes || []).filter((i) => ["submitted", "in_review"].includes(i.status)).length;
-        if (alive) setApprovalCount(orderCount + intakeCount);
-      } catch {
+        const ordersData = ordersRes.ok ? await ordersRes.json().catch(() => ({})) : {};
+        const intakesData = intakesRes.ok ? await intakesRes.json().catch(() => ({})) : {};
+        const amendData = amendRes.ok ? await amendRes.json().catch(() => ({})) : {};
+
+        const orderCount = (ordersData.orders || []).filter((o) => ["Review", "Pending Issue"].includes(o?.status)).length;
+        const intakeCount = (intakesData.intakes || []).filter((i) => ["submitted", "in_review"].includes(i?.status)).length;
+        const amendmentCount = (amendData.requests || []).length;
+        if (alive) setApprovalCount(orderCount + intakeCount + amendmentCount);
+      } catch (err) {
+        console.error("Sidebar fetch error:", err);
         if (alive) setApprovalCount(0);
       }
     })();
@@ -293,7 +299,9 @@ export default function Sidebar({
   }, []);
 
   const isTabVisible = (tabId) => {
-    if (["global_dashboard", "profile", "approvals"].includes(tabId)) return true;
+    // Profile is always reachable (own account). Global Dashboard and Inbox now
+    // respect their permission entries so admins can lock them down per user.
+    if (tabId === "profile") return true;
     if (isGlobalAdmin) return true;
     if (!userTabPermissions) return false;
     if (!userTabPermissions.hasAny || !userTabPermissions.map) return false;
@@ -381,6 +389,10 @@ export default function Sidebar({
     );
   };
 
+  // True if at least one row in this list is visible to the current user.
+  // Used to hide section headers entirely when every child tab is denied.
+  const anyRowVisible = (rows) => rows.some(r => isTabVisible(r.id));
+
   const NestedRows = ({ rows }) => (
     <div className={cx("relative space-y-0.5", collapsed ? "" : "mt-1.5 ml-6 pl-3 border-l border-cyan-400/10")}>
       {rows.map((row) => <RowButton key={row.id} row={row} nested />)}
@@ -434,26 +446,44 @@ export default function Sidebar({
             {globalRows.map((row) => <RowButton key={row.id} row={row} isGlobal />)}
           </Group>
 
-          <Group title="Management">
-            <SectionHeader icon={Settings2} label="Global Setup" sectionKey="setup" />
-            <AnimatePresence initial={false}>
-              {openSections.setup && (
-                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                  <NestedRows rows={[...setupRows, ...clauseRows]} />
-                </motion.div>
-              )}
-            </AnimatePresence>
+          {(() => {
+            const setupAll       = [...setupRows, ...clauseRows];
+            const setupVisible   = anyRowVisible(setupAll);
+            const masterVisible  = anyRowVisible(masterDataRows);
+            const mgmtVisible    = managementRows.some(r => isTabVisible(r.id));
+            if (!setupVisible && !masterVisible && !mgmtVisible) return null;
+            return (
+              <Group title="Management">
+                {setupVisible && (
+                  <>
+                    <SectionHeader icon={Settings2} label="Global Setup" sectionKey="setup" />
+                    <AnimatePresence initial={false}>
+                      {openSections.setup && (
+                        <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                          <NestedRows rows={setupAll} />
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </>
+                )}
 
-            <SectionHeader icon={Database} label="Master Data" sectionKey="master_data" />
-            <AnimatePresence initial={false}>
-              {openSections.master_data && (
-                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                  <NestedRows rows={masterDataRows} />
-                </motion.div>
-              )}
-            </AnimatePresence>
-            {managementRows.map((row) => <RowButton key={row.id} row={row} isGlobal />)}
-          </Group>
+                {masterVisible && (
+                  <>
+                    <SectionHeader icon={Database} label="Master Data" sectionKey="master_data" />
+                    <AnimatePresence initial={false}>
+                      {openSections.master_data && (
+                        <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                          <NestedRows rows={masterDataRows} />
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </>
+                )}
+
+                {managementRows.map((row) => <RowButton key={row.id} row={row} isGlobal />)}
+              </Group>
+            );
+          })()}
 
           <Group title="Project Selector">
             {!collapsed ? (
@@ -509,24 +539,28 @@ export default function Sidebar({
           </Group>
 
           <div className={cx(!collapsed && "space-y-1")}>
-            {projectSections.map((section) => (
-            <div key={section.key} className="mb-1 last:mb-0">
-              {section.label ? (
-                <SectionHeader icon={section.icon} label={section.label} sectionKey={section.key} />
-              ) : !collapsed && selectedProject ? (
-                <p className="px-2 pb-1 pt-1 text-[10.5px] font-bold uppercase tracking-[0.12em] text-cyan-100/70">
-                  Project: <span className="text-cyan-300">{selectedProject}</span>
-                </p>
-              ) : null}
-              <AnimatePresence initial={false}>
-                {(section.label ? openSections[section.key] : true) && (
-                  <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                    {section.label ? <NestedRows rows={section.rows} /> : <div className="space-y-1">{section.rows.map((row) => <RowButton key={row.id} row={row} />)}</div>}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-            ))}
+            {projectSections.map((section) => {
+              // Hide the whole section if every child tab is denied
+              if (!anyRowVisible(section.rows)) return null;
+              return (
+                <div key={section.key} className="mb-1 last:mb-0">
+                  {section.label ? (
+                    <SectionHeader icon={section.icon} label={section.label} sectionKey={section.key} />
+                  ) : !collapsed && selectedProject ? (
+                    <p className="px-2 pb-1 pt-1 text-[10.5px] font-bold uppercase tracking-[0.12em] text-cyan-100/70">
+                      Project: <span className="text-cyan-300">{selectedProject}</span>
+                    </p>
+                  ) : null}
+                  <AnimatePresence initial={false}>
+                    {(section.label ? openSections[section.key] : true) && (
+                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                        {section.label ? <NestedRows rows={section.rows} /> : <div className="space-y-1">{section.rows.map((row) => <RowButton key={row.id} row={row} />)}</div>}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              );
+            })}
           </div>
         </div>
 

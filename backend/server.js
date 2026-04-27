@@ -14,6 +14,8 @@ const projectsRoutes      = require("./src/routes/projects");
 const intakesRoutes       = require("./src/routes/intakes");
 const purchaseOrderRoutes = require("./src/routes/purchaseOrders");
 const approvalsRoutes     = require("./src/routes/approvals");
+const amendmentsRoutes    = require("./src/routes/amendments");
+const designationsRoutes  = require("./src/routes/designations");
 
 const app = express();
 
@@ -38,8 +40,13 @@ app.use("/api/projects",    projectsRoutes);
 app.use("/api/intakes",     intakesRoutes);
 app.use("/api/orders",      purchaseOrderRoutes);
 app.use("/api/approvals",   approvalsRoutes);
+app.use("/api/amendments",  amendmentsRoutes);
+app.use("/api/designations", designationsRoutes);
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, "0.0.0.0", () => console.log(`✅ Backend on port ${PORT}`));
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`✅ Backend on port ${PORT}`);
+  console.log(`🔗 Connected to: ${process.env.SUPABASE_URL}`);
+});
 
 process.on("SIGTERM", () => process.exit(0));

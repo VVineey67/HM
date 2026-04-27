@@ -71,12 +71,20 @@ router.post("/login", async (req, res) => {
   const app_permissions = (modules || []).map(mod => {
     const p = perms?.find(cp => cp.module_id === mod.id) || {};
     return {
-      module_key: mod.module_key,
-      can_view:   p.can_view   || false,
-      can_add:    p.can_add    || false,
-      can_edit:   p.can_edit   || false,
-      can_delete: p.can_delete || false,
-      can_export: p.can_export || false,
+      module_key:            mod.module_key,
+      can_view:              p.can_view              || false,
+      can_add:               p.can_add               || false,
+      can_edit:              p.can_edit              || false,
+      can_delete:            p.can_delete            || false,
+      can_bulk_upload:       p.can_bulk_upload       || false,
+      can_export:            p.can_export            || false,
+      can_download_document: p.can_download_document || false,
+      can_issue:             p.can_issue             || false,
+      can_recall:            p.can_recall            || false,
+      can_reject:            p.can_reject            || false,
+      can_revert:            p.can_revert            || false,
+      can_cancel:            p.can_cancel            || false,
+      can_manage_amend:      p.can_manage_amend      || false,
     };
   });
 
@@ -165,14 +173,15 @@ router.put("/profile", async (req, res) => {
   const dbUser = await getUserFromToken(token);
   if (!dbUser) return res.status(401).json({ error: "Invalid token" });
 
-  const { name, contact_no, designation, department } = req.body;
+  // Designation is admin-managed (linked to permission templates) — user cannot
+  // self-edit it from Personal Info. Update flow is via Manage Users / Permissions tab.
+  const { name, contact_no, department } = req.body;
   const admin = getAdminClient();
   const currentPerms = dbUser.profile_permissions || {};
   const updates = {};
 
   if (name        !== undefined) updates.name        = name;
   if (contact_no  !== undefined) updates.contact_no  = contact_no;
-  if (designation !== undefined) updates.designation = designation;
   if (department  !== undefined) updates.department  = department;
 
   // If header_theme or cover_image provided, nest them in profile_permissions.ui
@@ -460,6 +469,12 @@ router.get("/my-permissions", async (req, res) => {
       can_bulk_upload:       perm.can_bulk_upload       || false,
       can_export:            perm.can_export            || false,
       can_download_document: perm.can_download_document || false,
+      can_issue:             perm.can_issue             || false,
+      can_recall:            perm.can_recall            || false,
+      can_reject:            perm.can_reject            || false,
+      can_revert:            perm.can_revert            || false,
+      can_cancel:            perm.can_cancel            || false,
+      can_manage_amend:      perm.can_manage_amend      || false,
       has_explicit_entry:    !!perms?.find(p => p.module_id === mod.id),
     };
   });

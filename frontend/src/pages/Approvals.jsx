@@ -20,30 +20,58 @@ export default function Approvals() {
   const [activeTab, setActiveTab] = useState("orders");
   const [orders, setOrders] = useState([]);
   const [intakes, setIntakes] = useState([]);
+  const [amendments, setAmendments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(null); // request_id being processed
   const [search, setSearch] = useState("");
 
   const load = async () => {
     setLoading(true);
     try {
-      const [ordersRes, intakesRes] = await Promise.all([
+      const [ordersRes, intakesRes, amendRes] = await Promise.all([
         fetch(`${API}/api/orders`),
         fetch(`${API}/api/intakes`),
+        fetch(`${API}/api/amendments/requests`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem("bms_token") || ""}` }
+        }),
       ]);
-      const [ordersData, intakesData] = await Promise.all([
+      const [ordersData, intakesData, amendData] = await Promise.all([
         ordersRes.json().catch(() => ({})),
         intakesRes.json().catch(() => ({})),
+        amendRes.json().catch(() => ({})),
       ]);
       setOrders(ordersData.orders || []);
       setIntakes(intakesData.intakes || []);
+      setAmendments(amendData.requests || []);
     } catch {
       setOrders([]);
       setIntakes([]);
+      setAmendments([]);
     }
     setLoading(false);
   };
 
   useEffect(() => { load(); }, []);
+
+  const handleAmendAction = async (request_id, action) => {
+    setActionLoading(request_id);
+    try {
+      const res = await fetch(`${API}/api/amendments/action`, {
+        method: "POST",
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem("bms_token") || ""}` },
+        body: JSON.stringify({ request_id, action })
+      });
+      const data = await res.json();
+      if (data.success) {
+        load(); // Refresh list
+      } else {
+        alert(data.error);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+    setActionLoading(null);
+  };
 
   const pendingOrders = useMemo(() => (
     orders.filter((o) => ["Review", "Pending Issue"].includes(o.status))
@@ -56,6 +84,7 @@ export default function Approvals() {
   const tabs = [
     { key: "orders", label: "Orders", icon: ClipboardList, count: pendingOrders.length },
     { key: "intake", label: "Intake", icon: FileText, count: pendingIntakes.length },
+    { key: "amendments", label: "Amendments", icon: RefreshCw, count: amendments.length },
     { key: "payments", label: "Payments", icon: IndianRupee, count: 0 },
   ];
 
@@ -147,19 +176,56 @@ export default function Approvals() {
             status: o.status,
           }))}
         />
-      ) : activeTab === "intake" ? (
-        <ApprovalTable
-          emptyText="No pending intake approval requests."
-          rows={filteredIntakes.map((i) => ({
-            id: i.id,
-            number: intakeTitle(i),
-            title: i.name || "Intake approval",
-            source: i.site_name || "-",
-            owner: i.requisition_by || "-",
-            amount: `${i.intake_items?.length || 0} items`,
-            status: i.status,
-          }))}
-        />
+      ) : activeTab === "amendments" ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {amendments.length === 0 ? (
+            <div className={`${cardCls} col-span-full p-8 text-center text-sm font-semibold text-slate-400`}>No pending amendment requests.</div>
+          ) : amendments.map((req) => (
+            <div key={req.id} className={`${cardCls} p-5 flex flex-col`}>
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="h-8 w-8 bg-amber-50 rounded flex items-center justify-center text-amber-600">
+                    <RefreshCw size={16} />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-black text-slate-900 uppercase tracking-tight">{req.original_order?.order_number}</h3>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase">Requested by {req.requestor?.name}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex-1 space-y-3">
+                <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Reason</p>
+                  <p className="text-xs text-slate-700 leading-relaxed font-medium">{req.reason}</p>
+                </div>
+                
+                {req.attachment_url && (
+                  <a href={req.attachment_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-[10px] font-bold text-indigo-600 hover:underline">
+                    <FileText size={12} /> VIEW ATTACHED PROOF
+                  </a>
+                )}
+              </div>
+
+              <div className="mt-5 pt-4 border-t border-slate-100 flex gap-2">
+                <button
+                  disabled={actionLoading === req.id}
+                  onClick={() => handleAmendAction(req.id, "Rejected")}
+                  className="flex-1 px-3 py-2 bg-white border border-slate-200 text-slate-600 font-bold rounded-lg text-[11px] hover:bg-slate-50"
+                >
+                  REJECT
+                </button>
+                <button
+                  disabled={actionLoading === req.id}
+                  onClick={() => handleAmendAction(req.id, "Approved")}
+                  className="flex-1 px-3 py-2 bg-amber-500 text-white font-bold rounded-lg text-[11px] hover:bg-amber-600 shadow-sm"
+                >
+                  {actionLoading === req.id ? "..." : "APPROVE"}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
       ) : (
         <div className={`${cardCls} p-8 text-center`}>
           <Clock size={24} className="mx-auto mb-2 text-slate-300" />

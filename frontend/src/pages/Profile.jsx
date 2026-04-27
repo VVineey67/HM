@@ -35,149 +35,321 @@ const DEFAULT_PROFILE_PERMS = {
 };
 
 const MODULE_PERM_KEYS = [
-  { key: "can_view",              label: "View"     },
-  { key: "can_edit",              label: "Edit"     },
-  { key: "can_bulk_upload",       label: "Bulk Up"  },
-  { key: "can_add",               label: "Doc Up"   },
-  { key: "can_delete",            label: "Delete"   },
-  { key: "can_export",            label: "Export"   },
-  { key: "can_download_document", label: "Dl Doc"   },
+  { key: "can_view",              label: "View"        },
+  { key: "can_add",               label: "Add"         },
+  { key: "can_edit",              label: "Edit"        },
+  { key: "can_delete",            label: "Delete"      },
+  { key: "can_export",            label: "Export"      },
+  { key: "can_bulk_upload",       label: "Bulk Up"     },
+  { key: "can_download_document", label: "Download"    },
+  { key: "can_issue",             label: "Issue"       },
+  { key: "can_recall",            label: "Recall"      },
+  { key: "can_reject",            label: "Reject"      },
+  { key: "can_revert",            label: "Revert"      },
+  { key: "can_cancel",            label: "Cancel"      },
+  { key: "can_manage_amend",      label: "Manage Amend"},
 ];
 
 // Per-module available permissions (based on what features each tab has)
 const PERM_LABELS = {
   can_view:              "View",
+  can_add:               "Add",
   can_edit:              "Edit",
-  can_add:               "Upload / Add",
-  can_bulk_upload:       "Bulk Upload",
   can_delete:            "Delete",
   can_export:            "Export",
+  can_bulk_upload:       "Bulk Upload",
   can_download_document: "Download",
+  can_issue:             "Issue",
+  can_recall:            "Recall",
+  can_reject:            "Reject",
+  can_revert:            "Revert",
+  can_cancel:            "Cancel",
+  can_manage_amend:      "Manage Amend",
 };
 
+// Each module gets ONLY the permissions that are actually meaningful for it.
+// Naming: can_add = create a new record OR upload a document (depending on tab type)
 const MODULE_PERM_CONFIG = {
-  // Read-only tabs
+  /* ── Top-level / Management ── */
+  global_dashboard:       ["can_view", "can_export"],
+  inbox:                  ["can_view"],
+  audit:                  ["can_view", "can_export"],
+
+  /* ── Master Data (4 sub-tabs, each its own module) ── */
+  master_data_vendor:     ["can_view", "can_edit", "can_export"],
+  master_data_products:   ["can_view", "can_edit", "can_export"],
+  master_data_orders:     ["can_view", "can_edit", "can_export"],
+  master_data_intakes:    ["can_view", "can_edit", "can_export"],
+
+  /* ── Project Display ── */
   dashboard:              ["can_view"],
   view_3d:                ["can_view"],
-  manpower_all_record:    ["can_view", "can_export"],
   stock_available:        ["can_view", "can_export"],
-  compare_images:         ["can_view"],
-  order_record:           ["can_view", "can_export"],
-  // Simple edit tabs
-  term_condition:         ["can_view", "can_edit"],
-  payment_terms:          ["can_view", "can_edit"],
-  government_laws:        ["can_view", "can_edit"],
-  boq_prepare:            ["can_view", "can_edit", "can_delete", "can_export"],
-  // Standard tabs
-  site_list:              ["can_view", "can_edit", "can_delete", "can_export"],
-  category_list:          ["can_view", "can_edit", "can_delete", "can_export"],
-  uom:                    ["can_view", "can_edit", "can_delete", "can_export"],
-  execution_plan:         ["can_view", "can_edit", "can_delete", "can_export"],
-  msp_plan:               ["can_view", "can_edit", "can_delete", "can_export"],
-  daily_manpower:         ["can_view", "can_edit", "can_delete", "can_export"],
-  site_expense:           ["can_view", "can_edit", "can_delete", "can_export"],
-  petty_cash:             ["can_view", "can_edit", "can_delete", "can_export"],
-  payment_request:        ["can_view", "can_edit", "can_delete", "can_export"],
-  local_purchase:         ["can_view", "can_edit", "can_delete", "can_export"],
-  consumption_record:     ["can_view", "can_edit", "can_delete", "can_export"],
-  create_order:           ["can_view", "can_edit", "can_delete", "can_export"],
-  // With doc upload
-  company_list:           ["can_view", "can_edit", "can_delete", "can_export", "can_add"],
-  vendor_list:            ["can_view", "can_edit", "can_delete", "can_export", "can_add"],
-  received_record:        ["can_view", "can_edit", "can_delete", "can_export", "can_add"],
-  // With bulk upload
-  item_list:              ["can_view", "can_edit", "can_bulk_upload", "can_delete", "can_export"],
-  staff_attendance:       ["can_view", "can_edit", "can_bulk_upload", "can_delete", "can_export"],
-  // With document download
-  loa:                    ["can_view", "can_edit", "can_delete", "can_add", "can_download_document"],
-  boq:                    ["can_view", "can_edit", "can_delete", "can_add", "can_download_document"],
-  drawings:               ["can_view", "can_add",  "can_delete", "can_download_document"],
-  ra_bills:               ["can_view", "can_edit", "can_delete", "can_add", "can_download_document"],
-  bills_docs:             ["can_view", "can_add",  "can_delete", "can_download_document"],
-  grn_docs:               ["can_view", "can_add",  "can_delete", "can_download_document"],
-  all_images:             ["can_view", "can_add",  "can_delete", "can_download_document"],
-  // Intake / Order with full set
-  intake:                 ["can_view", "can_edit", "can_delete", "can_export", "can_add", "can_download_document"],
-  order:                  ["can_view", "can_edit", "can_delete", "can_export"],
+
+  /* ── Procurement Setup ── */
+  company_list:           ["can_view", "can_add", "can_edit", "can_delete", "can_export"],
+  vendor_list:            ["can_view", "can_add", "can_edit", "can_delete", "can_export", "can_download_document"],
+  site_list:              ["can_view", "can_add", "can_edit", "can_delete", "can_export"],
+  category_list:          ["can_view", "can_add", "can_edit", "can_delete", "can_export"],
+  uom:                    ["can_view", "can_add", "can_edit", "can_delete", "can_export"],
+  item_list:              ["can_view", "can_add", "can_edit", "can_delete", "can_export", "can_bulk_upload"],
+  contact_list:           ["can_view", "can_add", "can_edit", "can_delete", "can_export"],
+
+  /* ── Clauses / Terms (text masters) ── */
+  term_condition:         ["can_view", "can_add", "can_edit", "can_delete"],
+  payment_terms:          ["can_view", "can_add", "can_edit", "can_delete"],
+  government_laws:        ["can_view", "can_add", "can_edit", "can_delete"],
+  annexure:               ["can_view", "can_add", "can_edit", "can_delete", "can_download_document"],
+
+  /* ── Confidential Documents (file-based) ── */
+  loa:                    ["can_view", "can_add", "can_edit", "can_delete", "can_download_document"],
+  boq:                    ["can_view", "can_add", "can_edit", "can_delete", "can_download_document"],
+  drawings:               ["can_view", "can_add", "can_delete", "can_download_document"],
+  ra_bills:               ["can_view", "can_add", "can_edit", "can_delete", "can_download_document"],
+
+  /* ── Finance ── */
+  payment_request:        ["can_view", "can_add", "can_edit", "can_delete", "can_export"],
+  site_expense:           ["can_view", "can_add", "can_edit", "can_delete", "can_export"],
+  petty_cash:             ["can_view", "can_add", "can_edit", "can_delete", "can_export"],
+  bills_docs:             ["can_view", "can_add", "can_delete", "can_download_document"],
+
+  /* ── Operations ── */
+  execution_plan:         ["can_view", "can_add", "can_edit", "can_delete", "can_export"],
+  staff_attendance:       ["can_view", "can_add", "can_edit", "can_delete", "can_export", "can_bulk_upload"],
+  daily_manpower:         ["can_view", "can_add", "can_edit", "can_delete", "can_export"],
+
+  /* ── Inventory / Store ── */
+  received_record:        ["can_view", "can_add", "can_edit", "can_delete", "can_export"],
+  consumption_record:     ["can_view", "can_add", "can_edit", "can_delete", "can_export"],
+
+  /* ── Procurement Workflow ── */
+  intake:                 ["can_view", "can_add", "can_edit", "can_delete", "can_export", "can_download_document"],
+  order:                  ["can_view", "can_add", "can_edit", "can_delete", "can_export",
+                           "can_issue", "can_recall", "can_reject", "can_revert", "can_cancel",
+                           "can_manage_amend"],
 };
-const DEFAULT_MODULE_PERMS = ["can_view", "can_edit", "can_delete", "can_export"];
+const DEFAULT_MODULE_PERMS = ["can_view", "can_add", "can_edit", "can_delete", "can_export"];
+
+// Modules currently shipped in production. Unbuilt modules (placeholders in
+// the sidebar) get only View permission until their pages are implemented.
+// All current modules are production-ready. Add new entries with `: false`
+// to mark them as "Soon" (view-only) when they haven't shipped yet.
+const MODULE_BUILT_STATUS = {
+  global_dashboard: true, inbox: true, audit: true, annexure: true,
+  master_data_vendor: true, master_data_products: true,
+  master_data_orders: true, master_data_intakes: true,
+  dashboard: true, view_3d: true,
+  intake: true, order: true,
+  company_list: true, vendor_list: true, site_list: true, uom: true,
+  category_list: true, item_list: true, contact_list: true,
+  term_condition: true, payment_terms: true, government_laws: true,
+  loa: true, boq: true, drawings: true, ra_bills: true,
+  site_expense: true, petty_cash: true, bills_docs: true, payment_request: true,
+  execution_plan: true, daily_manpower: true, staff_attendance: true,
+  received_record: true, stock_available: true, consumption_record: true,
+};
+
+const isModuleBuilt = (key) => MODULE_BUILT_STATUS[key] !== false;
+
+// Use this everywhere instead of MODULE_PERM_CONFIG directly. It collapses
+// unbuilt modules to view-only so their UI/save behaviour stays consistent.
+const getModulePerms = (key) =>
+  isModuleBuilt(key)
+    ? (MODULE_PERM_CONFIG[key] || DEFAULT_MODULE_PERMS)
+    : ["can_view"];
 
 // 2-level hierarchy matching sidebar exactly
 const MODULE_SECTIONS = [
   {
     section: "Global",
     groups: [
-      { label: "BOQ Prepare",       keys: ["boq_prepare"],              single: true },
-      { label: "Create",            keys: ["intake","order"] },
-      { label: "Procurement Setup", keys: ["company_list","site_list","vendor_list","uom","category_list","item_list","term_condition","payment_terms","government_laws"] },
+      { label: "Top Level",         keys: ["global_dashboard", "inbox"] },
+      { label: "Procurement Setup", keys: ["company_list","site_list","vendor_list","uom","category_list","item_list","contact_list","term_condition","payment_terms","government_laws","annexure"] },
+      { label: "Master Data",       keys: ["master_data_vendor","master_data_products","master_data_orders","master_data_intakes"] },
+      { label: "Audit",             keys: ["audit"], single: true },
     ],
   },
   {
     section: "Project",
     groups: [
-      { label: "Dashboard",         keys: ["dashboard"],                                                                    single: true },
-      { label: "3D View",           keys: ["view_3d"],                                                                   single: true },
-      { label: "Confidential",      keys: ["loa","boq","drawings","ra_bills"] },
+      { label: "Dashboard",         keys: ["dashboard"],     single: true },
+      { label: "3D View",           keys: ["view_3d"],       single: true },
+      { label: "Procurement",       keys: ["intake","order"] },
+      { label: "Inventory",         keys: ["received_record","stock_available","consumption_record"] },
+      { label: "Operations",        keys: ["execution_plan","staff_attendance","daily_manpower"] },
       { label: "Finance",           keys: ["payment_request","site_expense","petty_cash","bills_docs"] },
-      { label: "Work Activity",     keys: ["execution_plan","msp_plan"] },
-      { label: "Staff Attendance",  keys: ["staff_attendance"],                                                          single: true },
-      { label: "Manpower",          keys: ["daily_manpower","manpower_all_record"] },
-      { label: "Store",             keys: ["received_record","local_purchase","consumption_record","stock_available","grn_docs"] },
-      { label: "Procurement",       keys: ["create_order","order_record"] },
-      { label: "Images",            keys: ["all_images","compare_images"] },
+      { label: "Confidential",      keys: ["loa","boq","drawings","ra_bills"] },
     ],
   },
 ];
+
+// Color theme per permission key — keeps the dense checkbox grid scannable.
+const PERM_COLOR = {
+  can_view:              "text-slate-600",
+  can_add:               "text-emerald-600",
+  can_edit:              "text-amber-600",
+  can_delete:            "text-rose-600",
+  can_export:            "text-indigo-600",
+  can_bulk_upload:       "text-cyan-600",
+  can_download_document: "text-sky-600",
+  can_issue:             "text-violet-600",
+  can_recall:            "text-fuchsia-600",
+  can_reject:            "text-red-600",
+  can_revert:            "text-orange-600",
+  can_cancel:            "text-stone-600",
+  can_manage_amend:      "text-purple-700",
+};
+
+/* Compact searchable dropdown for picking a designation template.
+   Type to filter, click to apply — closes on outside click. */
+const SearchableTemplateSelect = ({ designations, onPick }) => {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const wrapRef = useRef(null);
+
+  useEffect(() => {
+    const onDocClick = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
+        setOpen(false); setQuery("");
+      }
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+
+  const filtered = designations.filter(d =>
+    d.name.toLowerCase().includes(query.toLowerCase()) ||
+    (d.description || "").toLowerCase().includes(query.toLowerCase())
+  );
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <button type="button" onClick={() => setOpen(o => !o)}
+        className="w-56 flex items-center justify-between pl-3 pr-2 py-1.5 bg-white border border-indigo-200 rounded-lg text-[13px] font-medium outline-none hover:border-indigo-300 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 cursor-pointer">
+        <span className="text-slate-500">Choose...</span>
+        <ChevronDown size={14} className={`text-indigo-500 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="absolute z-50 mt-1 w-72 bg-white border border-indigo-200 rounded-xl shadow-lg overflow-hidden">
+          <div className="p-2 border-b border-slate-100 bg-slate-50">
+            <input autoFocus value={query} onChange={e => setQuery(e.target.value)}
+              placeholder="Search template..."
+              className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-md text-[12px] font-medium outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-100" />
+          </div>
+          <div className="max-h-64 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <p className="px-3 py-4 text-center text-[12px] text-slate-400">No templates match</p>
+            ) : filtered.map(d => (
+              <button key={d.id} type="button"
+                onClick={() => { onPick(d); setOpen(false); setQuery(""); }}
+                className="w-full text-left px-3 py-2 hover:bg-indigo-50 transition border-b border-slate-50 last:border-0">
+                <p className="text-[13px] font-bold text-slate-800">{d.name}</p>
+                {d.description && (
+                  <p className="text-[10px] text-slate-500 mt-0.5 line-clamp-1">{d.description}</p>
+                )}
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+                  {(d.app_permissions || []).filter(p => p.can_view).length} modules
+                </p>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 /* Reusable grouped permission renderer — mirrors sidebar hierarchy */
 const GroupedPermissions = ({ modules, onChange }) => {
   const allSectionKeys = MODULE_SECTIONS.flatMap(s => s.groups.flatMap(g => g.keys));
   const ungrouped = modules.filter(m => !allSectionKeys.includes(m.module_key));
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [filter, setFilter] = useState("all"); // all | built | unbuilt | edited
+  const [search, setSearch] = useState("");
+
+  const matchesFilter = (m) => {
+    if (search && !m.module_name.toLowerCase().includes(search.toLowerCase()) && !m.module_key.includes(search.toLowerCase())) return false;
+    const built = isModuleBuilt(m.module_key);
+    if (filter === "built"   && !built) return false;
+    if (filter === "unbuilt" &&  built) return false;
+    if (filter === "edited") {
+      const keys = getModulePerms(m.module_key);
+      if (!keys.some(k => m[k])) return false;
+    }
+    return true;
+  };
 
   const toggleAllGlobal = (key, val) => {
     modules.forEach(m => {
-      const avail = MODULE_PERM_CONFIG[m.module_key] || DEFAULT_MODULE_PERMS;
+      const avail = getModulePerms(m.module_key);
       if (avail.includes(key)) onChange(m.module_id, key, val);
     });
   };
 
   const toggleAllSection = (groupKeys, val) => {
     modules.filter(m => groupKeys.includes(m.module_key)).forEach(m => {
-      const avail = MODULE_PERM_CONFIG[m.module_key] || DEFAULT_MODULE_PERMS;
+      const avail = getModulePerms(m.module_key);
       avail.forEach(k => onChange(m.module_id, k, val));
     });
   };
 
+  // Card-style row — title on top (like Profile Section Access cards),
+  // permissions in a 3-column grid below.
   const renderRow = (mod) => {
-    const availKeys = MODULE_PERM_CONFIG[mod.module_key] || DEFAULT_MODULE_PERMS;
+    const availKeys = getModulePerms(mod.module_key);
+    const built = isModuleBuilt(mod.module_key);
     const allChecked = availKeys.every(k => mod[k]);
     const anyChecked = availKeys.some(k => mod[k]);
     return (
       <div key={mod.module_id}
-        className={`flex items-center gap-4 px-5 py-3 border-b border-slate-50 last:border-0 transition-colors ${anyChecked ? "bg-blue-50/30" : "hover:bg-slate-50/80"}`}>
-        <div className="w-48 shrink-0">
-          <p className="text-[13px] font-bold text-slate-700 truncate">{mod.module_name}</p>
-          <p className="text-[9px] font-medium text-slate-400 uppercase tracking-widest mt-0.5">{mod.module_key}</p>
-        </div>
-        
-        {/* Per-row All toggle */}
-        <div className="w-16 shrink-0 flex justify-center border-r border-slate-100 pr-2 mr-1">
-          <label className="flex flex-col items-center gap-1 cursor-pointer select-none">
-            <input type="checkbox" checked={allChecked}
-              ref={el => { if (el) el.indeterminate = anyChecked && !allChecked; }}
-              onChange={e => availKeys.forEach(k => onChange(mod.module_id, k, e.target.checked))}
-              className="w-4 h-4 rounded-md accent-blue-600 cursor-pointer" />
-            <span className="text-[8px] font-black text-slate-400 uppercase">All</span>
-          </label>
+        className={`rounded-xl border p-3.5 transition-all
+          ${!built
+            ? "border-amber-100 bg-amber-50/30"
+            : anyChecked
+              ? "border-blue-200 bg-blue-50/40"
+              : "border-slate-200 bg-white hover:border-slate-300"
+          }`}>
+        {/* Title row */}
+        <div className="flex items-start justify-between gap-2 mb-3 pb-2.5 border-b border-slate-100">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className={`text-[13px] font-bold truncate ${built ? "text-slate-800" : "text-slate-500"}`}>
+                {mod.module_name}
+              </p>
+              {!built && (
+                <span title="Module not yet implemented — only View applies"
+                  className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[8px] font-black uppercase tracking-widest border border-amber-200">
+                  Soon
+                </span>
+              )}
+            </div>
+            <p className="text-[9px] font-medium text-slate-400 uppercase tracking-widest mt-0.5 truncate">
+              {mod.module_key}
+            </p>
+          </div>
+          {availKeys.length > 1 && (
+            <label className="flex items-center gap-1.5 cursor-pointer select-none shrink-0 px-2 py-1 rounded-md hover:bg-slate-100/70 transition">
+              <input type="checkbox" checked={allChecked}
+                ref={el => { if (el) el.indeterminate = anyChecked && !allChecked; }}
+                onChange={e => availKeys.forEach(k => onChange(mod.module_id, k, e.target.checked))}
+                className="w-3.5 h-3.5 rounded accent-blue-600 cursor-pointer" />
+              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">All</span>
+            </label>
+          )}
         </div>
 
-        <div className="flex flex-1 flex-wrap gap-x-6 gap-y-2">
+        {/* Permission grid — 3 per row, wraps as needed */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-2">
           {availKeys.map(key => (
-            <label key={key} className="flex items-center gap-2 cursor-pointer select-none group">
+            <label key={key}
+              className="flex items-center gap-2 cursor-pointer select-none group px-1.5 py-1 rounded-md hover:bg-white/80 transition">
               <input type="checkbox" checked={mod[key] || false}
                 onChange={e => onChange(mod.module_id, key, e.target.checked)}
-                className="w-4 h-4 rounded-md accent-blue-600 cursor-pointer transition-transform group-active:scale-90" />
-              <span className="text-[11px] font-medium text-slate-500 group-hover:text-slate-700 transition-colors">{PERM_LABELS[key]}</span>
+                className="w-4 h-4 rounded accent-blue-600 cursor-pointer transition-transform group-active:scale-90" />
+              <span className={`text-[11px] font-semibold ${PERM_COLOR[key] || "text-slate-500"} group-hover:opacity-80 transition`}>
+                {PERM_LABELS[key]}
+              </span>
             </label>
           ))}
         </div>
@@ -186,30 +358,57 @@ const GroupedPermissions = ({ modules, onChange }) => {
   };
 
   return (
-    <div className="space-y-6">
-      {/* GLOBAL BULK ACTIONS */}
-      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 mb-6">
-        <div className="flex items-center gap-2 mb-3 px-1">
-          <div className="w-1.5 h-4 bg-blue-500 rounded-full" />
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Global Bulk Actions</p>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
-          {MODULE_PERM_KEYS.map(pk => (
-            <button key={pk.key} type="button"
-              onClick={() => toggleAllGlobal(pk.key, true)}
-              className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 hover:border-blue-400 hover:text-blue-600 hover:shadow-sm transition-all text-center">
-              All {pk.label}
+    <div className="space-y-5">
+      {/* SEARCH + FILTER STRIP */}
+      <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm py-2.5 -mx-1 px-1 border-b border-slate-100 flex flex-wrap items-center gap-3">
+        <input type="text" placeholder="Search module..." value={search} onChange={e => setSearch(e.target.value)}
+          className="flex-1 min-w-[180px] px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+        <div className="flex bg-slate-100 rounded-lg p-0.5 text-[10px] font-bold">
+          {[
+            { v: "all",     l: "All" },
+            { v: "built",   l: "Live" },
+            { v: "unbuilt", l: "Soon" },
+            { v: "edited",  l: "Edited" },
+          ].map(f => (
+            <button key={f.v} type="button" onClick={() => setFilter(f.v)}
+              className={`px-3 py-1 rounded-md uppercase tracking-wider transition
+                ${filter === f.v ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+              {f.l}
             </button>
           ))}
-          <button type="button" onClick={() => modules.forEach(m => (MODULE_PERM_CONFIG[m.module_key]||DEFAULT_MODULE_PERMS).forEach(k => onChange(m.module_id, k, false)))}
-            className="px-3 py-2 bg-red-50 border border-red-100 rounded-xl text-[10px] font-bold text-red-600 hover:bg-red-600 hover:text-white transition-all shadow-xs text-center">
-            Clear All
-          </button>
         </div>
       </div>
 
+      {/* GLOBAL BULK ACTIONS — collapsible to keep things calm */}
+      <div className="bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden">
+        <button type="button" onClick={() => setBulkOpen(o => !o)}
+          className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-100/50 transition">
+          <div className="flex items-center gap-2">
+            <div className="w-1.5 h-4 bg-blue-500 rounded-full" />
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-600">Global Bulk Actions</p>
+            <span className="text-[10px] text-slate-400 font-medium ml-1">(apply to every module)</span>
+          </div>
+          <ChevronDown size={14} className={`text-slate-400 transition-transform ${bulkOpen ? "rotate-180" : ""}`} />
+        </button>
+        {bulkOpen && (
+          <div className="px-4 pb-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+            {MODULE_PERM_KEYS.map(pk => (
+              <button key={pk.key} type="button"
+                onClick={() => toggleAllGlobal(pk.key, true)}
+                className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 hover:border-blue-400 hover:text-blue-600 hover:shadow-sm transition-all text-center">
+                All {pk.label}
+              </button>
+            ))}
+            <button type="button" onClick={() => modules.forEach(m => getModulePerms(m.module_key).forEach(k => onChange(m.module_id, k, false)))}
+              className="px-3 py-2 bg-red-50 border border-red-100 rounded-xl text-[10px] font-bold text-red-600 hover:bg-red-600 hover:text-white transition-all shadow-xs text-center">
+              Clear All
+            </button>
+          </div>
+        )}
+      </div>
+
       {MODULE_SECTIONS.map(({ section, groups }) => {
-        const sectionHasMods = groups.some(g => modules.some(m => g.keys.includes(m.module_key)));
+        const sectionHasMods = groups.some(g => modules.some(m => g.keys.includes(m.module_key) && matchesFilter(m)));
         if (!sectionHasMods) return null;
         return (
           <div key={section}>
@@ -220,13 +419,13 @@ const GroupedPermissions = ({ modules, onChange }) => {
 
             <div className="space-y-3 pl-2">
               {groups.map(group => {
-                const groupMods = modules.filter(m => group.keys.includes(m.module_key));
+                const groupMods = modules.filter(m => group.keys.includes(m.module_key) && matchesFilter(m));
                 if (groupMods.length === 0) return null;
 
-                const allInGroupChecked = groupMods.every(m => (MODULE_PERM_CONFIG[m.module_key]||DEFAULT_MODULE_PERMS).every(k => m[k]));
+                const allInGroupChecked = groupMods.every(m => getModulePerms(m.module_key).every(k => m[k]));
 
                 return (
-                  <div key={group.label} className="space-y-1.5">
+                  <div key={group.label} className="space-y-2">
                     <div className="flex items-center justify-between px-1">
                       <span className="text-[11px] font-bold text-slate-500">{group.label}</span>
                       <button type="button" onClick={() => toggleAllSection(group.keys, !allInGroupChecked)}
@@ -234,7 +433,7 @@ const GroupedPermissions = ({ modules, onChange }) => {
                         {allInGroupChecked ? "Unselect Group" : "Select Group"}
                       </button>
                     </div>
-                    <div className={`rounded-xl border overflow-hidden border-slate-200 bg-white`}>
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                       {groupMods.map(renderRow)}
                     </div>
                   </div>
@@ -245,14 +444,14 @@ const GroupedPermissions = ({ modules, onChange }) => {
         );
       })}
 
-      {ungrouped.length > 0 && (
+      {ungrouped.filter(matchesFilter).length > 0 && (
         <div>
           <div className="flex items-center gap-2 mb-2.5">
             <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Other</span>
             <div className="flex-1 h-px bg-slate-200" />
           </div>
-          <div className="rounded-xl border border-slate-200 bg-white overflow-hidden pl-2">
-            {ungrouped.map(renderRow)}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {ungrouped.filter(matchesFilter).map(renderRow)}
           </div>
         </div>
       )}
@@ -321,9 +520,11 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
   const isGlobalAdmin    = currentUser.role === "global_admin";
 
   const canManage = (viewerRole, targetRole, targetId) => {
-    if (targetId === currentUser.id) return false; // Cannot manage yourself
-    if (targetRole === "global_admin") return false; // Rule: No one touches Global Admin
-    if (viewerRole === "global_admin") return true;  // Global Admin manages everyone else
+    // Global Admin can manage themselves (assign their own designation/permissions).
+    // Everyone else needs a higher admin to manage them.
+    if (targetRole === "global_admin" && viewerRole !== "global_admin") return false;
+    if (targetId === currentUser.id && viewerRole !== "global_admin") return false;
+    if (viewerRole === "global_admin") return true;
     if (viewerRole === "super_admin") return ["admin", "user"].includes(targetRole);
     if (viewerRole === "admin") return targetRole === "user";
     return false;
@@ -410,6 +611,17 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
   const [viewType, setViewType]       = useState("list");
   const [confirmRoleChange, setConfirmRoleChange] = useState(null); // { member, newRole }
 
+  /* Designations / Permission Templates */
+  const [designations, setDesignations]               = useState([]);
+  const [designationsLoading, setDesignationsLoading] = useState(false);
+  const [showDesgModal, setShowDesgModal]             = useState(false);
+  const [editingDesg, setEditingDesg]                 = useState(null); // null = create, object = edit
+  const [desgName, setDesgName]                       = useState("");
+  const [desgDescription, setDesgDescription]         = useState("");
+  const [desgModules, setDesgModules]                 = useState([]);
+  const [desgProfilePerms, setDesgProfilePerms]       = useState(DEFAULT_PROFILE_PERMS);
+  const [desgSaving, setDesgSaving]                   = useState(false);
+
   /* Projects count for header stats */
   const [projectsCount, setProjectsCount] = useState(0);
   useEffect(() => {
@@ -453,8 +665,168 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
   }, [section]);
 
   useEffect(() => {
-    if (showAddUser && newUserModules.length === 0) fetchModulesForNewUser();
+    // Designations are needed both on the Permissions section (manage templates)
+    // and on Manage Users (apply template to existing user dropdown)
+    if (
+      (section === "permissions" || section === "team") &&
+      (isGlobalAdmin || currentUser.role === "super_admin")
+    ) {
+      fetchDesignations();
+    }
+  }, [section]);
+
+  useEffect(() => {
+    if (showAddUser) {
+      if (newUserModules.length === 0) fetchModulesForNewUser();
+      if (designations.length === 0) fetchDesignations();
+    }
   }, [showAddUser]);
+
+  const applyDesignationToNewUser = (desgId) => {
+    if (!desgId) return;
+    const tpl = designations.find(d => d.id === desgId);
+    if (!tpl) return;
+    setNewUser(p => ({ ...p, designation: tpl.name, designation_id: tpl.id }));
+    setNewUserProfilePerms(tpl.profile_permissions || DEFAULT_PROFILE_PERMS);
+    const stored = tpl.app_permissions || [];
+    setNewUserModules(prev => prev.map(m => {
+      const match = stored.find(s => s.module_id === m.module_id);
+      if (!match) return { ...m,
+        can_view: false, can_add: false, can_edit: false, can_delete: false,
+        can_bulk_upload: false, can_export: false, can_download_document: false,
+        can_issue: false, can_recall: false, can_reject: false, can_revert: false,
+        can_cancel: false, can_manage_amend: false,
+      };
+      return { ...m, ...match };
+    }));
+  };
+
+  /* ── Designation handlers ── */
+  const fetchDesignations = async () => {
+    setDesignationsLoading(true);
+    try {
+      const { data } = await api.get("/api/designations");
+      setDesignations(data.designations || []);
+    } catch { showToast("Failed to load designations", "error"); }
+    finally { setDesignationsLoading(false); }
+  };
+
+  const blankDesgModules = async () => {
+    const { data } = await api.get("/api/users/modules/list");
+    return (data.modules || []).map(m => ({
+      module_id:  m.id,
+      module_key: m.module_key,
+      module_name: m.module_name,
+      can_view: false, can_add: false, can_edit: false, can_delete: false,
+      can_bulk_upload: false, can_export: false, can_download_document: false,
+      can_issue: false, can_recall: false, can_reject: false, can_revert: false,
+      can_cancel: false, can_manage_amend: false,
+    }));
+  };
+
+  const openDesgCreate = async () => {
+    setEditingDesg(null);
+    setDesgName("");
+    setDesgDescription("");
+    setDesgProfilePerms(DEFAULT_PROFILE_PERMS);
+    setDesgModules(await blankDesgModules());
+    setShowDesgModal(true);
+  };
+
+  const openDesgEdit = async (d) => {
+    setEditingDesg(d);
+    setDesgName(d.name || "");
+    setDesgDescription(d.description || "");
+    setDesgProfilePerms(d.profile_permissions || DEFAULT_PROFILE_PERMS);
+    // Merge stored app_permissions onto fresh module list
+    const fresh = await blankDesgModules();
+    const stored = d.app_permissions || [];
+    setDesgModules(fresh.map(m => {
+      const match = stored.find(s => s.module_id === m.module_id);
+      return match ? { ...m, ...match } : m;
+    }));
+    setShowDesgModal(true);
+  };
+
+  const updateDesgModule = (modId, key, val) =>
+    setDesgModules(prev => prev.map(m => {
+      if (m.module_id !== modId) return m;
+      const updated = { ...m, [key]: val };
+      if (val === true && key !== "can_view") updated.can_view = true;
+      return updated;
+    }));
+
+  // Master toggle for the designation modal — flips every profile section AND
+  // every available app-tab permission for every module.
+  const setAllDesgPerms = (checked) => {
+    const nextProfile = {};
+    PROFILE_SECTIONS.forEach(s => { nextProfile[s.key] = { view: checked, edit: checked }; });
+    setDesgProfilePerms(nextProfile);
+    setDesgModules(prev => prev.map(m => {
+      const availKeys = getModulePerms(m.module_key);
+      return { ...m, ...Object.fromEntries(availKeys.map(k => [k, checked])) };
+    }));
+  };
+
+  // True only when literally everything is ticked — drives the master checkbox state
+  const isDesgAllChecked = () => {
+    if (!desgModules.length) return false;
+    const profileFull = PROFILE_SECTIONS.every(s =>
+      desgProfilePerms[s.key]?.view && desgProfilePerms[s.key]?.edit
+    );
+    const modulesFull = desgModules.every(m => {
+      const availKeys = getModulePerms(m.module_key);
+      return availKeys.every(k => m[k]);
+    });
+    return profileFull && modulesFull;
+  };
+
+  const saveDesignation = async () => {
+    if (!desgName.trim()) { showToast("Designation name is required", "error"); return; }
+    setDesgSaving(true);
+    try {
+      const payload = {
+        name: desgName.trim(),
+        description: desgDescription.trim() || null,
+        app_permissions: desgModules,
+        profile_permissions: desgProfilePerms,
+      };
+      if (editingDesg) {
+        await api.put(`/api/designations/${editingDesg.id}`, payload);
+        showToast("Designation updated");
+      } else {
+        await api.post("/api/designations", payload);
+        showToast("Designation created");
+      }
+      setShowDesgModal(false);
+      fetchDesignations();
+    } catch (err) {
+      showToast(err.response?.data?.error || "Save failed", "error");
+    } finally {
+      setDesgSaving(false);
+    }
+  };
+
+  const deleteDesignation = async (id) => {
+    if (!confirm("Delete this designation? Users currently assigned will keep their permissions but lose the template link.")) return;
+    try {
+      await api.delete(`/api/designations/${id}`);
+      showToast("Designation deleted");
+      fetchDesignations();
+    } catch (err) {
+      showToast(err.response?.data?.error || "Delete failed", "error");
+    }
+  };
+
+  const syncDesignation = async (d) => {
+    if (!confirm(`Re-apply "${d.name}" template to ALL users currently assigned this designation? This will overwrite their custom permissions.`)) return;
+    try {
+      const { data } = await api.post(`/api/designations/${d.id}/sync`);
+      showToast(`Synced ${data.synced} ${data.synced === 1 ? "user" : "users"}`);
+    } catch (err) {
+      showToast(err.response?.data?.error || "Sync failed", "error");
+    }
+  };
 
   const fetchModulesForNewUser = async () => {
     setModulesLoading(true);
@@ -471,6 +843,12 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
         can_bulk_upload:       false,
         can_export:            false,
         can_download_document: false,
+        can_issue:             false,
+        can_recall:            false,
+        can_reject:            false,
+        can_revert:            false,
+        can_cancel:            false,
+        can_manage_amend:      false,
       })));
     } catch { /* silent */ }
     finally { setModulesLoading(false); }
@@ -480,7 +858,7 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
     setNewUserModules(prev => prev.map(m => {
       if (m.module_id !== modId) return m;
       const updated = { ...m, [key]: val };
-      if (val === true && ["can_add", "can_edit", "can_delete", "can_bulk_upload", "can_export", "can_download_document"].includes(key)) {
+      if (val === true && key !== "can_view") {
         updated.can_view = true;
       }
       return updated;
@@ -489,7 +867,7 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
   const handleAllPerms = (checked) => {
     setAllPermsSelected(checked);
     setNewUserModules(prev => prev.map(m => {
-      const availKeys = MODULE_PERM_CONFIG[m.module_key] || DEFAULT_MODULE_PERMS;
+      const availKeys = getModulePerms(m.module_key);
       return { ...m, ...Object.fromEntries(availKeys.map(k => [k, checked])) };
     }));
     // Bulk update Profile Section Perms too
@@ -502,11 +880,12 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
     if (role === "user") return; // Keep manual for user
 
     // Handle App Tab Permissions
+    // can_manage_amend is restricted — only global_admin grants it manually.
     setNewUserModules(prev => prev.map(m => {
-      const availKeys = MODULE_PERM_CONFIG[m.module_key] || DEFAULT_MODULE_PERMS;
+      const availKeys = getModulePerms(m.module_key);
       const updates = {};
       availKeys.forEach(k => {
-        if (role === "super_admin") updates[k] = k !== "can_delete";
+        if (role === "super_admin") updates[k] = k !== "can_delete" && k !== "can_manage_amend";
         if (role === "admin")       updates[k] = k === "can_view";
       });
       return { ...m, ...updates };
@@ -673,7 +1052,7 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
       if (userId && newUserModules.some(m => MODULE_PERM_KEYS.some(k => m[k.key]))) {
         await api.put(`/api/users/${userId}/permissions`, { permissions: newUserModules });
       }
-      setNewUser({ name: "", email: "", contact_no: "", designation: "", department: "", role: "user" });
+      setNewUser({ name: "", email: "", contact_no: "", designation: "", designation_id: null, department: "", role: "user" });
       setNewUserProfilePerms(DEFAULT_PROFILE_PERMS);
       setAllPermsSelected(false);
       setNewUserModules(prev => prev.map(m => ({ ...m, can_view: false, can_add: false, can_edit: false, can_delete: false, can_bulk_upload: false, can_export: false, can_download_document: false })));
@@ -964,6 +1343,7 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
     { id: "profile",       label: "Personal info",  show: true },
     { id: "security",      label: "Security",        show: true },
     { id: "team",          label: "Manage Users",    show: isGlobalAdmin || !!pp.manage_user?.view   },
+    { id: "permissions",   label: "Permissions",     show: isGlobalAdmin || currentUser.role === "super_admin" },
     { id: "projects",      label: "Projects",        show: isGlobalAdmin || !!pp.add_project?.view   },
     { id: "serialization", label: "Serialization",   show: isGlobalAdmin || !!pp.serialization?.view },
     { id: "approval_flow", label: "Approval Flow",   show: isGlobalAdmin || !!pp.approval_flow?.view },
@@ -1137,19 +1517,27 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
                     <p className={lbl + " mb-5"}>Current Info</p>
                     <div className="space-y-4">
                       {[
-                        { icon: UserCircle, label: "Full Name",   value: currentUser.name,        color: "text-indigo-500", bg: "bg-indigo-50" },
-                        { icon: Mail,       label: "Email",        value: currentUser.email,       color: "text-blue-500",   bg: "bg-blue-50"   },
-                        { icon: Phone,      label: "Contact",      value: currentUser.contact_no,  color: "text-green-500",  bg: "bg-green-50"  },
-                        { icon: Briefcase,  label: "Designation",  value: currentUser.designation, color: "text-orange-500", bg: "bg-orange-50" },
-                        { icon: Building2,  label: "Department",   value: currentUser.department,  color: "text-purple-500", bg: "bg-purple-50" },
-                      ].map(({ icon: Icon, label: l, value, color, bg }) => (
+                        { icon: UserCircle,  label: "Full Name",   value: currentUser.name,        color: "text-indigo-500", bg: "bg-indigo-50" },
+                        { icon: Mail,        label: "Email",        value: currentUser.email,       color: "text-blue-500",   bg: "bg-blue-50"   },
+                        { icon: Phone,       label: "Contact",      value: currentUser.contact_no,  color: "text-green-500",  bg: "bg-green-50"  },
+                        { icon: ShieldCheck, label: "Role",         value: ROLE_BADGE[currentUser.role]?.label || "User",
+                                                                    color: "text-violet-500", bg: "bg-violet-50", isRole: true },
+                        { icon: Briefcase,   label: "Designation",  value: currentUser.designation, color: "text-orange-500", bg: "bg-orange-50" },
+                        { icon: Building2,   label: "Department",   value: currentUser.department,  color: "text-purple-500", bg: "bg-purple-50" },
+                      ].map(({ icon: Icon, label: l, value, color, bg, isRole }) => (
                         <div key={l} className="flex items-center gap-3">
                           <div className={`w-9 h-9 rounded-xl ${bg} flex items-center justify-center shrink-0`}>
                             <Icon size={15} className={color} />
                           </div>
                           <div className="min-w-0 flex-1">
                             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{l}</p>
-                            <p className="text-sm font-semibold text-slate-700 truncate mt-0.5">{value || "—"}</p>
+                            {isRole ? (
+                              <span className={`inline-flex items-center text-[11px] font-black px-2 py-0.5 rounded-md mt-0.5 ${ROLE_BADGE[currentUser.role]?.color || "bg-slate-100 text-slate-700"}`}>
+                                {value}
+                              </span>
+                            ) : (
+                              <p className="text-sm font-semibold text-slate-700 truncate mt-0.5">{value || "—"}</p>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -1201,10 +1589,17 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
                           <span className={lbl}>Designation</span>
                           <div className="relative">
                             <Briefcase size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                            <input className={`${inp} pl-10`} value={profile.designation}
-                              onChange={(e) => setProfile((p) => ({ ...p, designation: e.target.value }))}
-                              placeholder="Project Manager" />
+                            <input className={`${inp} pl-10 bg-slate-50 cursor-not-allowed text-slate-500`}
+                              value={currentUser.designation || "Not assigned"}
+                              readOnly disabled
+                              title="Designation is managed by your administrator" />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-black uppercase tracking-widest text-slate-400 bg-slate-200 px-1.5 py-0.5 rounded">
+                              Admin
+                            </span>
                           </div>
+                          <p className="text-[10px] text-slate-400 mt-1.5 ml-1">
+                            Set by your administrator. Contact admin to change.
+                          </p>
                         </div>
                         <div className="sm:col-span-2">
                           <span className={lbl}>Department</span>
@@ -1373,6 +1768,33 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
                       </button>
                     </div>
 
+                    {/* Apply Designation Template */}
+                    {designations.length > 0 && (
+                      <div className="mb-5 inline-flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl border border-indigo-100">
+                        <ShieldCheck size={15} className="text-indigo-600 shrink-0" />
+                        <p className="text-[12px] font-bold text-slate-700 shrink-0">Apply Template:</p>
+                        <SearchableTemplateSelect
+                          designations={designations}
+                          onPick={(tpl) => {
+                            if (!confirm(`Apply "${tpl.name}" template? This will overwrite current permissions (you can still customize before saving).`)) return;
+                            setEditingProfilePerms(tpl.profile_permissions || DEFAULT_PROFILE_PERMS);
+                            const stored = tpl.app_permissions || [];
+                            setPermissions(prev => prev.map(m => {
+                              const match = stored.find(s => s.module_id === m.module_id);
+                              if (!match) return { ...m,
+                                can_view: false, can_add: false, can_edit: false, can_delete: false,
+                                can_bulk_upload: false, can_export: false, can_download_document: false,
+                                can_issue: false, can_recall: false, can_reject: false, can_revert: false,
+                                can_cancel: false, can_manage_amend: false,
+                              };
+                              return { ...m, ...match };
+                            }));
+                            showToast(`Applied "${tpl.name}" template — review & save`);
+                          }}
+                        />
+                      </div>
+                    )}
+
                     {permLoading ? (
                       <div className="flex justify-center py-8">
                         <Loader2 size={24} className="animate-spin text-blue-500" />
@@ -1420,13 +1842,13 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
                                     <label className="flex items-center gap-2 cursor-pointer select-none">
                                         <input type="checkbox"
                                             checked={permissions.length > 0 && permissions.every(m => {
-                                                const availKeys = MODULE_PERM_CONFIG[m.module_key] || DEFAULT_MODULE_PERMS;
+                                                const availKeys = getModulePerms(m.module_key);
                                                 return availKeys.every(k => m[k]);
                                             })}
                                             onChange={e => {
                                                 const checked = e.target.checked;
                                                 setPermissions(prev => prev.map(m => {
-                                                    const availKeys = MODULE_PERM_CONFIG[m.module_key] || DEFAULT_MODULE_PERMS;
+                                                    const availKeys = getModulePerms(m.module_key);
                                                     return { ...m, ...Object.fromEntries(availKeys.map(k => [k, checked])) };
                                                 }));
                                                 // Also sync profile perms for consistency
@@ -1504,12 +1926,139 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
                         </div>
                         <p className="text-sm font-medium text-slate-400">No team members found.</p>
                       </div>
+                    ) : viewType === "list" ? (
+                      /* TABLE VIEW — bordered, business-app style */
+                      <div className="p-5">
+                        <div className="overflow-x-auto rounded-xl border border-slate-200">
+                          <table className="w-full text-left border-collapse">
+                            <thead className="bg-slate-50">
+                              <tr className="text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-200">
+                                <th className="px-5 py-3 border-r border-slate-200">User</th>
+                                <th className="px-5 py-3 border-r border-slate-200">Email</th>
+                                <th className="px-5 py-3 border-r border-slate-200">Designation</th>
+                                <th className="px-5 py-3 border-r border-slate-200">Role</th>
+                                <th className="px-5 py-3 border-r border-slate-200 text-center">Status</th>
+                                <th className="px-5 py-3 text-right">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {members.map((m, idx) => {
+                                const mb = ROLE_BADGE[m.role] || ROLE_BADGE.user;
+                                const initials = m.name?.split(" ").map(n => n[0]).join("").toUpperCase() || "?";
+                                const manageable = canManage(currentUser.role, m.role, m.id) && (isGlobalAdmin || !!pp.manage_user?.edit);
+                                const isSelf = m.id === currentUser.id;
+                                return (
+                                  <tr key={m.id}
+                                    className={`hover:bg-blue-50/30 transition group ${idx !== members.length - 1 ? "border-b border-slate-200" : ""}`}>
+                                    {/* USER */}
+                                    <td className="px-5 py-3.5 border-r border-slate-100">
+                                      <div className="flex items-center gap-3 min-w-0">
+                                        <div className="relative w-10 h-10 rounded-xl flex items-center justify-center text-white font-black text-sm overflow-hidden shadow-sm shrink-0"
+                                          style={{ background: "linear-gradient(135deg, #3b82f6, #8b5cf6)" }}>
+                                          {m.avatar ? <img src={m.avatar} alt="" className="w-full h-full object-cover" /> : initials}
+                                        </div>
+                                        <div className="min-w-0">
+                                          <div className="flex items-center gap-1.5">
+                                            <p className="font-bold text-[14px] text-slate-800 truncate">{m.name}</p>
+                                            {isSelf && (
+                                              <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[8px] font-black uppercase tracking-widest border border-blue-200">
+                                                You
+                                              </span>
+                                            )}
+                                          </div>
+                                          {m.contact_no && (
+                                            <p className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
+                                              <Phone size={10} /> {m.contact_no}
+                                            </p>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </td>
+                                    {/* EMAIL */}
+                                    <td className="px-5 py-3.5 border-r border-slate-100 text-[13px] text-slate-600">
+                                      <div className="flex items-center gap-2">
+                                        <Mail size={13} className="text-slate-400 shrink-0" />
+                                        <span className="truncate">{m.email}</span>
+                                      </div>
+                                    </td>
+                                    {/* DESIGNATION */}
+                                    <td className="px-5 py-3.5 border-r border-slate-100">
+                                      {m.designation ? (
+                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-[11px] font-bold border border-indigo-100">
+                                          <Briefcase size={11} /> {m.designation}
+                                        </span>
+                                      ) : (
+                                        <span className="text-[11px] text-slate-300 italic">— not assigned —</span>
+                                      )}
+                                    </td>
+                                    {/* ROLE */}
+                                    <td className="px-5 py-3.5 border-r border-slate-100">
+                                      {manageable && editingRoleId === m.id ? (
+                                        <select autoFocus
+                                          className="text-[11px] font-bold px-2 py-1 rounded-lg border border-blue-400 bg-white text-slate-700 outline-none shadow-sm"
+                                          defaultValue={m.role}
+                                          onChange={e => changeRole(m, e.target.value)}
+                                          onBlur={() => setEditingRoleId(null)}>
+                                          {getManageableRoles(currentUser.role).map(r => (
+                                            <option key={r} value={r}>{ROLE_BADGE[r]?.label || r}</option>
+                                          ))}
+                                        </select>
+                                      ) : (
+                                        <span
+                                          onClick={() => manageable && setEditingRoleId(m.id)}
+                                          className={`inline-flex items-center gap-1.5 text-[10px] font-black px-2.5 py-1 rounded-lg ${mb.color} ${manageable ? "cursor-pointer hover:shadow-sm" : ""}`}>
+                                          {mb.label.toUpperCase()}
+                                          {manageable && <Pencil size={9} className="opacity-50" />}
+                                        </span>
+                                      )}
+                                    </td>
+                                    {/* STATUS */}
+                                    <td className="px-5 py-3.5 border-r border-slate-100 text-center">
+                                      <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest ${m.is_active ? "text-emerald-600" : "text-rose-600"}`}>
+                                        <span className={`w-1.5 h-1.5 rounded-full ${m.is_active ? "bg-emerald-500" : "bg-rose-500"}`} />
+                                        {m.is_active ? "Active" : "Inactive"}
+                                      </span>
+                                    </td>
+                                    {/* ACTIONS */}
+                                    <td className="px-5 py-3.5">
+                                      <div className="flex items-center justify-end gap-1.5">
+                                        {manageable ? (
+                                          <>
+                                            <button onClick={() => viewPerms(m)} title="Manage Permissions"
+                                              className="p-2 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition border border-transparent hover:border-blue-200">
+                                              <ShieldCheck size={16} />
+                                            </button>
+                                            {!isSelf && (
+                                              <>
+                                                <button onClick={() => toggleActive(m)} title={m.is_active ? "Deactivate" : "Activate"}
+                                                  className={`p-2 rounded-lg transition border border-transparent ${m.is_active ? "text-slate-400 hover:text-amber-600 hover:bg-amber-50 hover:border-amber-200" : "text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 hover:border-emerald-200"}`}>
+                                                  {m.is_active ? <XCircle size={16} /> : <CheckCircle2 size={16} />}
+                                                </button>
+                                                <button onClick={() => removeUser(m)} title="Remove User"
+                                                  className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition border border-transparent hover:border-rose-200">
+                                                  <Trash2 size={16} />
+                                                </button>
+                                              </>
+                                            )}
+                                          </>
+                                        ) : (
+                                          <span className="text-[10px] text-slate-300 italic">—</span>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
                     ) : (
-                      <div className={viewType === "tile" ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 p-5 animate-in fade-in slide-in-from-bottom-2 duration-300" : "divide-y divide-slate-50"}>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 p-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
                         {members.map((m) => {
                           const mb = ROLE_BADGE[m.role] || ROLE_BADGE.user;
                           const initials = m.name?.split(" ").map(n => n[0]).join("").toUpperCase() || "?";
-                          
+
                           if (viewType === "tile") {
                             return (
                               <div key={m.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md hover:border-blue-100 transition-all group p-5 relative">
@@ -1653,6 +2202,168 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
                         })}
                       </div>
                     )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ─── PERMISSIONS / DESIGNATIONS ─── */}
+            {section === "permissions" && (isGlobalAdmin || currentUser.role === "super_admin") && (
+              <div className="space-y-4">
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+                  <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
+                    <div>
+                      <h3 className="text-base font-bold text-slate-800">Designation Templates</h3>
+                      <p className="text-[12px] text-slate-500 mt-0.5">
+                        Reusable permission sets. Assign a designation to a user and their permissions auto-fill — admin can still customize per user afterwards.
+                      </p>
+                    </div>
+                    <button onClick={openDesgCreate} className={btnPrimary}>
+                      <Plus size={16} /> New Designation
+                    </button>
+                  </div>
+
+                  {designationsLoading ? (
+                    <div className="flex items-center justify-center py-12 text-slate-400 text-sm">
+                      <Loader2 className="animate-spin mr-2" size={16} /> Loading...
+                    </div>
+                  ) : designations.length === 0 ? (
+                    <div className="border-2 border-dashed border-slate-200 rounded-2xl p-10 text-center">
+                      <ShieldCheck size={32} className="mx-auto text-slate-300 mb-3" />
+                      <p className="text-sm font-bold text-slate-500">No designations yet</p>
+                      <p className="text-[12px] text-slate-400 mt-1">Create templates like "Site Engineer", "Procurement Manager" to speed up user onboarding.</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {designations.map(d => {
+                        const tickedCount = (d.app_permissions || []).filter(p => p.can_view).length;
+                        return (
+                          <div key={d.id} className="border border-slate-200 rounded-2xl p-4 hover:border-indigo-300 hover:shadow-sm transition group">
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-bold text-slate-800 truncate">{d.name}</p>
+                                {d.description && (
+                                  <p className="text-[11px] text-slate-500 mt-1 line-clamp-2">{d.description}</p>
+                                )}
+                              </div>
+                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
+                                <button onClick={() => syncDesignation(d)}
+                                  title="Re-apply this template to all users assigned this designation"
+                                  className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-md transition">
+                                  <GitMerge size={13} />
+                                </button>
+                                <button onClick={() => openDesgEdit(d)}
+                                  title="Edit template"
+                                  className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition">
+                                  <Pencil size={13} />
+                                </button>
+                                <button onClick={() => deleteDesignation(d.id)}
+                                  title="Delete template"
+                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition">
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3 mt-3 pt-3 border-t border-slate-100">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                {tickedCount} {tickedCount === 1 ? "module" : "modules"}
+                              </span>
+                              <span className="text-[10px] text-slate-300">·</span>
+                              <span className="text-[10px] text-slate-400">
+                                {new Date(d.created_at).toLocaleDateString()}
+                              </span>
+                            </div>
+                            <button onClick={() => syncDesignation(d)}
+                              className="mt-3 w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-slate-50 hover:bg-emerald-50 border border-slate-100 hover:border-emerald-200 text-slate-500 hover:text-emerald-700 rounded-lg text-[10px] font-bold uppercase tracking-widest transition">
+                              <GitMerge size={11} />
+                              Sync to assigned users
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* CREATE / EDIT MODAL */}
+                {showDesgModal && (
+                  <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+                      <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-linear-to-r from-indigo-50 to-blue-50">
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 bg-indigo-100 rounded-xl flex items-center justify-center text-indigo-600">
+                            <ShieldCheck size={20} />
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-bold text-slate-900">{editingDesg ? "Edit Designation" : "New Designation"}</h3>
+                            <p className="text-[11px] text-slate-500">Define a reusable permission set</p>
+                          </div>
+                        </div>
+                        <button onClick={() => setShowDesgModal(false)}
+                          className="p-2 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-700 transition">
+                          <X size={18} />
+                        </button>
+                      </div>
+
+                      <div className="flex-1 overflow-y-auto p-6 space-y-5">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className={lbl}>Designation Name *</label>
+                            <input value={desgName} onChange={e => setDesgName(e.target.value)} className={inp}
+                              placeholder="e.g. Site Engineer, Procurement Manager" />
+                          </div>
+                          <div>
+                            <label className={lbl}>Description (optional)</label>
+                            <input value={desgDescription} onChange={e => setDesgDescription(e.target.value)} className={inp}
+                              placeholder="Brief role description" />
+                          </div>
+                        </div>
+
+                        {/* Profile section permissions */}
+                        <div>
+                          <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-2">Profile Section Access</p>
+                          <div className="bg-slate-50 rounded-xl p-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            {PROFILE_SECTIONS.map(s => (
+                              <div key={s.key} className="bg-white rounded-lg p-3 border border-slate-100">
+                                <p className="text-[12px] font-bold text-slate-700 mb-2">{s.label}</p>
+                                <div className="flex gap-3">
+                                  <label className="flex items-center gap-1.5 text-[11px] cursor-pointer">
+                                    <input type="checkbox" checked={!!desgProfilePerms[s.key]?.view}
+                                      onChange={e => setDesgProfilePerms(prev => ({ ...prev, [s.key]: { ...prev[s.key], view: e.target.checked } }))}
+                                      className="w-3.5 h-3.5 accent-indigo-600" />
+                                    View
+                                  </label>
+                                  <label className="flex items-center gap-1.5 text-[11px] cursor-pointer">
+                                    <input type="checkbox" checked={!!desgProfilePerms[s.key]?.edit}
+                                      onChange={e => setDesgProfilePerms(prev => ({ ...prev, [s.key]: { ...prev[s.key], edit: e.target.checked } }))}
+                                      className="w-3.5 h-3.5 accent-indigo-600" />
+                                    Edit
+                                  </label>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* App tab permissions */}
+                        <div>
+                          <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-2">App Tab Permissions</p>
+                          <GroupedPermissions modules={desgModules} onChange={updateDesgModule} />
+                        </div>
+                      </div>
+
+                      <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-3 bg-slate-50">
+                        <button onClick={() => setShowDesgModal(false)}
+                          className="px-5 py-2.5 border border-slate-200 text-slate-600 font-bold rounded-xl text-sm hover:bg-white transition">
+                          Cancel
+                        </button>
+                        <button onClick={saveDesignation} disabled={desgSaving}
+                          className={btnPrimary}>
+                          {desgSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                          {editingDesg ? "Update" : "Create"}
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -1929,7 +2640,34 @@ export default function Profile({ onProfileUpdate, onProjectsUpdate }) {
                       <div><span className={lbl}>Full Name *</span><input className={inp} placeholder="e.g. John Doe" value={newUser.name} onChange={(e) => setNewUser((p) => ({ ...p, name: e.target.value }))} required /></div>
                       <div><span className={lbl}>Email Address *</span><input type="email" className={inp} placeholder="john@example.com" value={newUser.email} onChange={(e) => setNewUser((p) => ({ ...p, email: e.target.value }))} required /></div>
                       <div><span className={lbl}>Phone Number</span><input className={inp} placeholder="+91 00000 00000" value={newUser.contact_no} onChange={(e) => setNewUser((p) => ({ ...p, contact_no: e.target.value }))} /></div>
-                      <div><span className={lbl}>Designation</span><input className={inp} placeholder="Product Manager" value={newUser.designation} onChange={(e) => setNewUser((p) => ({ ...p, designation: e.target.value }))} /></div>
+                      <div>
+                        <span className={lbl}>Designation</span>
+                        {designations.length > 0 ? (
+                          <select className={inp}
+                            value={designations.find(d => d.name === newUser.designation)?.id || ""}
+                            onChange={e => {
+                              if (e.target.value === "__custom__") {
+                                setNewUser(p => ({ ...p, designation: "" }));
+                              } else {
+                                applyDesignationToNewUser(e.target.value);
+                              }
+                            }}>
+                            <option value="">Select designation...</option>
+                            {designations.map(d => (
+                              <option key={d.id} value={d.id}>{d.name}</option>
+                            ))}
+                            <option value="__custom__">— Custom (no template) —</option>
+                          </select>
+                        ) : (
+                          <input className={inp} placeholder="Product Manager" value={newUser.designation}
+                            onChange={(e) => setNewUser((p) => ({ ...p, designation: e.target.value }))} />
+                        )}
+                        {designations.length > 0 && (
+                          <p className="text-[10px] text-slate-400 mt-1 ml-1">
+                            Selecting a designation auto-fills permissions. You can still customize below.
+                          </p>
+                        )}
+                      </div>
                       <div><span className={lbl}>Department</span><input className={inp} placeholder="Operations" value={newUser.department} onChange={(e) => setNewUser((p) => ({ ...p, department: e.target.value }))} /></div>
                       <div>
                         <span className={lbl}>Role Access</span>

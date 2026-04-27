@@ -18,7 +18,17 @@
       "Bash(curl -sv \"https://hm-production-7401.up.railway.app/\")",
       "Bash(cp \"d:/Next/BMS/frontend/src/pages/Procurement/OrderPDFTemplate.jsx\" \"d:/Next/BMS/frontend/src/pages/Procurement/SitcPDF.jsx\")",
       "Bash(cp \"d:/Next/BMS/frontend/src/pages/Procurement/OrderPDFTemplate.jsx\" \"d:/Next/BMS/frontend/src/pages/Procurement/SupplyPDF.jsx\")",
-      "Bash(curl -s \"http://localhost:3000/api/approvals/modules\")"
+      "Bash(curl -s \"http://localhost:3000/api/approvals/modules\")",
+      "Bash(node -e \"import\\('./src/pages/Profile.jsx'\\).catch\\(e=>{console.error\\(e.message\\);process.exit\\(1\\)}\\)\")",
+      "Bash(npx --no -- esbuild src/pages/Profile.jsx --bundle=false --loader=jsx --log-level=error)",
+      "Bash(npx --no -- esbuild --loader:.jsx=jsx --log-level=error src/pages/Profile.jsx)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(node -c src/routes/designations.js)",
+      "Bash(node -c server.js)",
+      "Bash(npx --no -- esbuild --loader:.jsx=jsx src/pages/Profile.jsx)",
+      "Bash(echo \"Profile=$?\")",
+      "Bash(npx --no -- esbuild --loader:.jsx=jsx src/components/Sidebar.jsx)",
+      "Bash(echo \"Sidebar=$?\")"
     ]
   }
 }

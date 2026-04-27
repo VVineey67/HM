@@ -32,7 +32,7 @@ export default function OrderRecord(props) {
   const [pdfPreviewNonce, setPdfPreviewNonce] = useState(0);
   const [pdfDownloading, setPdfDownloading] = useState(false);
 
-  const TABS = ["All", "Draft", "Review", "Pending Issue", "Issued", "Rejected", "Reverted", "Recalled", "Cancelled"];
+  const TABS = ["All", "Draft", "Review", "Pending Issue", "Amendment Request", "Amended", "Issued", "Rejected", "Reverted", "Recalled", "Cancelled"];
 
   // Persist viewOrderId so browser refresh stays on the same order
   useEffect(() => {
@@ -182,7 +182,7 @@ export default function OrderRecord(props) {
                     <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
                       className="appearance-none w-full pl-9 pr-9 py-2 border border-slate-200 rounded-xl text-[12px] font-bold text-slate-600 bg-white outline-none focus:border-sky-400 cursor-pointer hover:border-slate-300 transition-all">
                       <option value="">All Status</option>
-                      {["Draft", "Review", "Pending Issue", "Issued", "Rejected", "Cancelled"].map(s => (
+                      {["Draft", "Review", "Pending Issue", "Amendment Request", "Amended", "Issued", "Rejected", "Cancelled"].map(s => (
                         <option key={s} value={s}>{s}</option>
                       ))}
                     </select>
@@ -220,9 +220,9 @@ export default function OrderRecord(props) {
               <tbody className="bg-white">
                 {filtered.map(o => {
                   const snap = o.snapshot || {};
-                  const vName = snap.vendor?.vendorName || snap.vendor?.vendor_name || o.vendors?.vendor_name || "�";
-                  const sCode = snap.site?.siteCode || snap.site?.site_code || o.sites?.site_code || "�";
-                  const cCode = snap.company?.companyCode || snap.company?.company_code || o.companies?.company_code || "�";
+                  const vName = snap.vendor?.vendorName || snap.vendor?.vendor_name || o.vendors?.vendor_name || "";
+                  const sCode = snap.site?.siteCode || snap.site?.site_code || o.sites?.site_code || "";
+                  const cCode = snap.company?.companyCode || snap.company?.company_code || o.companies?.company_code || "";
                   
                   const typeCode = o.order_type === "Supply" ? "PO" : "WO";
                   const prefix = `${cCode}/${sCode}/${typeCode}/`;
@@ -236,9 +236,9 @@ export default function OrderRecord(props) {
                       <td className="px-3 py-3.5 border-b border-r border-slate-100 font-bold text-indigo-600 text-xs" style={{maxWidth:'65px', overflow:'hidden'}}>
                         <span style={{display:'block', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} title={sCode}>{sCode}</span>
                       </td>
-                      <td className="px-3 py-3.5 border-b border-r border-slate-200 font-mono font-bold text-xs" style={{maxWidth:'110px', overflow:'hidden'}} title={displayNo || '�'}>
+                      <td className="px-3 py-3.5 border-b border-r border-slate-200 font-mono font-bold text-xs" style={{maxWidth:'110px', overflow:'hidden'}} title={displayNo || ''}>
                         <span style={{display:'block', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} className={displayNo ? "text-slate-800" : "text-slate-300"}>
-                          {displayNo || "�"}
+                          {displayNo || ""}
                         </span>
                       </td>
                       <td className="px-3 py-3.5 border-b border-r border-slate-100">
@@ -251,7 +251,7 @@ export default function OrderRecord(props) {
                       </td>
                       <td className="px-3 py-3.5 border-b border-r border-slate-100 text-slate-500 text-[11px] font-medium" style={{whiteSpace:'nowrap'}}>{new Date(o.date_of_creation || o.created_at).toLocaleDateString("en-IN")}</td>
                       <td className="px-3 py-3.5 border-b border-r border-slate-100 text-slate-700 text-xs font-semibold" style={{overflow:'hidden'}}>
-                        <span style={{display:'block', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} title={o.subject}>{o.subject || "�"}</span>
+                        <span style={{display:'block', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} title={o.subject}>{o.subject || ""}</span>
                       </td>
                       <td className="px-3 py-3.5 border-b border-r border-slate-100 text-slate-700 text-xs font-medium" style={{overflow:'hidden'}}>
                         <span style={{display:'block', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} title={vName}>{vName}</span>
@@ -261,6 +261,8 @@ export default function OrderRecord(props) {
                           ${o.status === "Approved" ? "bg-emerald-50 text-emerald-600 border border-emerald-100" :
                             o.status === "Issued" ? "bg-emerald-100 text-emerald-800 border border-emerald-200" :
                             o.status === "Review" ? "bg-sky-50 text-sky-600 border border-sky-100" :
+                            o.status === "Amendment Request" ? "bg-amber-100 text-amber-700 border border-amber-200" :
+                            o.status === "Amended" ? "bg-slate-200 text-slate-700 border border-slate-300 italic" :
                             o.status === "Draft" ? "bg-slate-100 text-slate-600" :
                             o.status === "Rejected" ? "bg-red-50 text-red-600 border border-red-100" :
                             o.status === "Reverted" ? "bg-orange-50 text-orange-600 border border-orange-100" :

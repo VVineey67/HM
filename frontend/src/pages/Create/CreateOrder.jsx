@@ -2104,7 +2104,7 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
 
-  const TABS = ["All", "Draft", "Review", "Pending Issue", "Issued", "Rejected", "Reverted", "Recalled", "Cancelled"];
+  const TABS = ["All", "Draft", "Review", "Pending Issue", "Amendment Request", "Amended", "Issued", "Rejected", "Reverted", "Recalled", "Cancelled"];
 
   useEffect(() => { fetchOrders(); }, []);
 
@@ -2955,7 +2955,7 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
                  { val: filterCompany, set: setFilterCompany, placeholder: "Entity", opts: companyOptions, min: 110, icon: Building2 },
                  !project && { val: filterSite, set: setFilterSite, placeholder: "Sites", opts: siteOptions, min: 100, icon: MapPin },
                  { val: filterType, set: setFilterType, placeholder: "Type", opts: ["Supply", "SITC", "ITC"], min: 100, icon: Tag },
-                 activeTab === "All" && { val: filterStatus, set: setFilterStatus, placeholder: "Status", opts: ["Draft", "Review", "Pending Issue", "Issued", "Rejected", "Cancelled"], min: 110, icon: CheckCircle2 },
+                 activeTab === "All" && { val: filterStatus, set: setFilterStatus, placeholder: "Status", opts: ["Draft", "Review", "Pending Issue", "Amendment Request", "Amended", "Issued", "Rejected", "Cancelled"], min: 110, icon: CheckCircle2 },
                  { val: filterMadeBy, set: setFilterMadeBy, placeholder: "Users", opts: madeByOptions, min: 105, icon: User }
                ].filter(Boolean).map((f, i) => (
                  <div key={i} className="relative" style={{ minWidth: f.min }}>
@@ -3113,6 +3113,8 @@ function OrderList({ project, onCreateClick, onViewClick, onEditClick }) {
                         <span style={{whiteSpace:'nowrap', display:'inline-flex'}} className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-widest
                            ${o.status === "Draft" ? "bg-slate-100 text-slate-600 border border-slate-200" :
                              o.status === "Approved" || o.status === "Issued" ? "bg-emerald-50 text-emerald-600 border border-emerald-100" :
+                             o.status === "Amendment Request" ? "bg-amber-100 text-amber-700 border border-amber-200" :
+                             o.status === "Amended" ? "bg-slate-200 text-slate-700 border border-slate-300 italic" :
                              o.status === "Rejected" ? "bg-red-50 text-red-600 border border-red-100" :
                              o.status === "Review" ? "bg-sky-50 text-sky-600 border border-sky-100" :
                              o.status === "Reverted" ? "bg-orange-50 text-orange-600 border border-orange-100" :

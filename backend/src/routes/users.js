@@ -65,7 +65,7 @@ router.get("/", requireAuth, async (req, res) => {
 
 /* POST /api/users — invite */
 router.post("/", requireAuth, requireAdminOrAbove, async (req, res) => {
-  let { name, email, contact_no, designation, department, role, profile_permissions } = req.body;
+  let { name, email, contact_no, designation, designation_id, department, role, profile_permissions } = req.body;
   if (!name || !email) return res.status(400).json({ error: "Name aur email required hai" });
   email = email.toLowerCase().trim();
 
@@ -96,6 +96,7 @@ router.post("/", requireAuth, requireAdminOrAbove, async (req, res) => {
     email,
     contact_no:          contact_no          || "",
     designation:         designation         || "",
+    designation_id:      designation_id      || null,
     department:          department          || "",
     role:                role                || "user",
     profile_permissions: profile_permissions || null,
@@ -148,6 +149,12 @@ router.put("/:id", requireAuth, requireAdminOrAbove, async (req, res) => {
         can_bulk_upload:       updates.role === "super_admin",
         can_export:            updates.role === "super_admin",
         can_download_document: updates.role === "super_admin",
+        can_issue:             updates.role === "super_admin",
+        can_recall:            updates.role === "super_admin",
+        can_reject:            updates.role === "super_admin",
+        can_revert:            updates.role === "super_admin",
+        can_cancel:            updates.role === "super_admin",
+        can_manage_amend:      false, // Restricted: only global_admin grants this manually
       }));
       
       if (updates.role === "user") {
@@ -220,6 +227,12 @@ router.get("/:id/permissions", requireAuth, requireAdminOrAbove, async (req, res
       can_bulk_upload:       perm.can_bulk_upload       || false,
       can_export:            perm.can_export            || false,
       can_download_document: perm.can_download_document || false,
+      can_issue:             perm.can_issue             || false,
+      can_recall:            perm.can_recall            || false,
+      can_reject:            perm.can_reject            || false,
+      can_revert:            perm.can_revert            || false,
+      can_cancel:            perm.can_cancel            || false,
+      can_manage_amend:      perm.can_manage_amend      || false,
     };
   });
 
@@ -247,6 +260,12 @@ router.put("/:id/permissions", requireAuth, requireAdminOrAbove, async (req, res
       can_bulk_upload:       p.can_bulk_upload       || false,
       can_export:            p.can_export            || false,
       can_download_document: p.can_download_document || false,
+      can_issue:             p.can_issue             || false,
+      can_recall:            p.can_recall            || false,
+      can_reject:            p.can_reject            || false,
+      can_revert:            p.can_revert            || false,
+      can_cancel:            p.can_cancel            || false,
+      can_manage_amend:      p.can_manage_amend      || false,
     }));
     const { error: permError } = await admin.from("permissions").upsert(rows, { onConflict: "user_id,module_id" });
     if (permError) return res.status(500).json({ error: permError.message });
